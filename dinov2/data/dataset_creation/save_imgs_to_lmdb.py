@@ -71,32 +71,42 @@ def main(args):
     start_img_idx = args.start_img_idx
     end_img_idx = args.end_img_idx
 
-    selected_dataset_paths = glob.glob(os.path.join(args.dataset_path, "*"))
+    print(f"PROCESSING DATASET stored in {args.dataset_path}...")
+    print(f"With labels: {args.with_labels}, with metadata: {args.with_metadata}")
 
     base_lmdb_dir = BASE_DIR + args.lmdb_dir_name
     os.makedirs(base_lmdb_dir, exist_ok=True)
 
-    for dataset, path in selected_dataset_paths.items():
-        txn_imgs, txn_labels, txn_meta, env_imgs, env_labels, env_metadata = (
+    txn_imgs, txn_labels, txn_meta, env_imgs, env_labels, env_metadata = (
             None,
             None,
             None,
             None,
             None,
             None,
-        )
-        print(f"PROCESSING DATASET {dataset} stored in {path}...")
+    )
 
-        dataset_lmdb_dir = os.path.join(base_lmdb_dir, dataset)
-        imgs = glob.glob(path)[start_img_idx:end_img_idx]
-        imgs = [
-            img for img in imgs if img.endswith(IMG_SUFFIXES) and os.path.isfile(img)
-        ]
-        imgs = sorted(imgs)
+    dataset_name = args.dataset_path.split('/')[-1]
+    dataset_lmdb_dir = os.path.join(base_lmdb_dir, dataset_name)
+    imgs = glob.glob(os.path.join(args.dataset_path, "*"))[start_img_idx:end_img_idx]
+    imgs = [
+        img for img in imgs if img.endswith(IMG_SUFFIXES) and os.path.isfile(img)
+    ]
+    imgs = sorted(imgs)
 
-        print(f"TOTAL #imgs {len(imgs)} FOR DATASET {dataset}")
+    print(f"TOTAL #imgs {len(imgs)}")
 
-        env_imgs, txn_imgs = create_lmdb_txn(
+    env_imgs, txn_imgs = create_lmdb_txn(
+        dataset_lmdb_dir,
+        start_img_idx,
+        end_img_idx,
+        name=_DataType.LABELS,
+        split=_Split.TRAIN,
+        map_size=MAP_SIZE_IMG,
+    )
+
+    if args.with_labels:
+        txn_labels = create_lmdb_txn(
             dataset_lmdb_dir,
             start_img_idx,
             end_img_idx,
@@ -105,66 +115,54 @@ def main(args):
             map_size=MAP_SIZE_IMG,
         )
 
-        if args.with_labels:
-            txn_labels = create_lmdb_txn(
-                dataset_lmdb_dir,
-                start_img_idx,
-                end_img_idx,
-                name=_DataType.LABELS,
-                split=_Split.TRAIN,
-                map_size=MAP_SIZE_IMG,
-            )
+    if args.with_metadata:
+        txn_meta = create_lmdb_txn(
+            dataset_lmdb_dir,
+            start_img_idx,
+            end_img_idx,
+            name=_DataType.METADATA,
+            split=_Split.TRAIN,
+            map_size=MAP_SIZE_META,
+        )
+
+    for img_idx, img_path in tqdm(enumerate(sorted(imgs)), total=len(imgs)):
+        img_name_cleaned = "".join(
+            e for e in str(img_path.split('/')[-1]) if e.isalnum() or e == "_"
+        )
+        do_print = img_idx % 100000 == 0
+        if do_print:
+            print(f'idx: {img_idx}/{len(imgs)}, img: "{img_name_cleaned}"')
+
+        img_idx_str = f"{img_name_cleaned}_{img_idx}"
+        img_idx_bytes = img_idx_str.encode("utf-8")
 
         if args.with_metadata:
-            txn_meta = create_lmdb_txn(
-                dataset_lmdb_dir,
-                start_img_idx,
-                end_img_idx,
-                name=_DataType.METADATA,
-                split=_Split.TRAIN,
-                map_size=MAP_SIZE_META,
-            )
+            # get metadata
+            metadata_dict = {}
+            metadata_dict["img"] = img_name_cleaned
+            metadata_bytes = json.dumps(metadata_dict).encode("utf-8")
+            txn_meta.put(img_idx_bytes, metadata_bytes)
 
-        for img_idx, img_name in tqdm(enumerate(sorted(imgs)), total=len(imgs)):
-            img_name_cleaned = "".join(
-                e for e in str(img_name) if e.isalnum() or e == "_"
-            )
-            do_print = img_idx % 50 == 0
-            if do_print:
-                print(f'idx: {img_idx}/{len(imgs)}, img: "{img_name_cleaned}"')
+        # if args.with_labels:
+        # TODO: get labels_path
+        # get segmentation mask
+        # segmentation mask has to be uint16 because of values of to ~3000 segments
+        # Thus, cannot be jpeg compressed
+        # segmentation_mask = (
+        #    iio.imread(segmentation_path).squeeze().astype(np.uint16)
+        # )
+        # txn_labels.put(img_idx_bytes, segmentation_mask.tobytes())
 
-            img_idx_str = f"{dataset}_{img_name}_{img_idx}"
-            img_idx_bytes = img_idx_str.encode("utf-8")
+        uint8_img = load_img(img_path)
+        img_jpg_encoded = iio.imwrite("<bytes>", uint8_img, extension=".jpeg")
+        txn_imgs.put(img_idx_bytes, img_jpg_encoded)
 
-            img_path = os.path.join(path, img_name)
-
-            if args.with_metadata:
-                # get metadata
-                metadata_dict = {}
-                metadata_dict["img"] = img_name
-                metadata_bytes = json.dumps(metadata_dict).encode("utf-8")
-                txn_meta.put(img_idx_bytes, metadata_bytes)
-
-            # if args.with_labels:
-            # TODO: get labels_path
-            # get segmentation mask
-            # segmentation mask has to be uint16 because of values of to ~3000 segments
-            # Thus, cannot be jpeg compressed
-            # segmentation_mask = (
-            #    iio.imread(segmentation_path).squeeze().astype(np.uint16)
-            # )
-            # txn_labels.put(img_idx_bytes, segmentation_mask.tobytes())
-
-            uint8_img = load_img(img_path)
-            img_jpg_encoded = iio.imwrite("<bytes>", uint8_img, extension=".jpeg")
-            txn_imgs.put(img_idx_bytes, img_jpg_encoded)
-
-        env_imgs.close()
-        if env_metadata is not None:
-            env_metadata.close()
-        if env_labels is not None:
-            env_labels.close()
-        print(f"FINISHED DATASET {dataset}, SAVED AT: {dataset_lmdb_dir}")
+    env_imgs.close()
+    if env_metadata is not None:
+        env_metadata.close()
+    if env_labels is not None:
+        env_labels.close()
+    print(f"FINISHED DATASET SAVED AT: {dataset_lmdb_dir}")
 
 
 def get_args_parser():
