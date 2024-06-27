@@ -58,7 +58,7 @@ def create_lmdb_txn(
     split: _Split = _Split.TRAIN,
 ):
     lmdb_labels_path = os.path.join(
-        dataset_lmdb_dir, f"{start_img_idx}:{end_img_idx}-{split.upper()}_{name.value}"
+        dataset_lmdb_dir, f"{start_img_idx}:{end_img_idx}-{split.value}_{name.value}"
     )
     os.makedirs(lmdb_labels_path, exist_ok=True)
     env = lmdb.open(lmdb_labels_path, map_size=MAP_SIZE_IMG)
