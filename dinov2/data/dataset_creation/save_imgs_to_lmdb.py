@@ -49,13 +49,13 @@ def load_img(img_path):
 
 def create_lmdb_txn(
     dataset_lmdb_dir: Path,
-    start_fov_idx,
-    end_fov_idx,
+    start_img_idx,
+    end_img_idx,
     name: _DataType,
     split: _Split = _Split.TRAIN,
 ):
     lmdb_labels_path = os.path.join(
-        dataset_lmdb_dir, f"{start_fov_idx}:{end_fov_idx}-{split.upper()}_{name.value}"
+        dataset_lmdb_dir, f"{start_img_idx}:{end_img_idx}-{split.upper()}_{name.value}"
     )
     os.makedirs(lmdb_labels_path, exist_ok=True)
     env = lmdb.open(lmdb_labels_path, map_size=MAP_SIZE_IMG)
@@ -64,8 +64,8 @@ def create_lmdb_txn(
 
 
 def main(args):
-    start_fov_idx = args.start_fov_idx
-    end_fov_idx = args.end_fov_idx
+    start_img_idx = args.start_img_idx
+    end_img_idx = args.end_img_idx
 
     selected_dataset_paths = glob.glob(os.path.join(args.dataset_path, "*"))
 
@@ -84,14 +84,14 @@ def main(args):
         print(f"PROCESSING DATASET {dataset} stored in {path}...")
 
         dataset_lmdb_dir = os.path.join(base_lmdb_dir, dataset)
-        fovs = sorted(glob.glob(path))[start_fov_idx:end_fov_idx]
+        imgs = sorted(glob.glob(path))[start_img_idx:end_img_idx]
 
-        print(f"TOTAL #FOVS {len(fovs)} FOR DATASET {dataset}")
+        print(f"TOTAL #imgs {len(imgs)} FOR DATASET {dataset}")
 
         env_imgs, txn_imgs = create_lmdb_txn(
             dataset_lmdb_dir,
-            start_fov_idx,
-            end_fov_idx,
+            start_img_idx,
+            end_img_idx,
             name=_DataType.LABELS,
             split=_Split.TRAIN,
         )
@@ -99,8 +99,8 @@ def main(args):
         if args.with_labels:
             txn_labels = create_lmdb_txn(
                 dataset_lmdb_dir,
-                start_fov_idx,
-                end_fov_idx,
+                start_img_idx,
+                end_img_idx,
                 name=_DataType.LABELS,
                 split=_Split.TRAIN,
             )
@@ -108,27 +108,29 @@ def main(args):
         if args.with_metadata:
             txn_meta = create_lmdb_txn(
                 dataset_lmdb_dir,
-                start_fov_idx,
-                end_fov_idx,
+                start_img_idx,
+                end_img_idx,
                 name=_DataType.METADATA,
                 split=_Split.TRAIN,
             )
 
-        for img_idx, fov in tqdm(enumerate(sorted(fovs)), total=len(fovs)):
-            fov_name_cleaned = "".join(e for e in str(fov) if e.isalnum() or e == "_")
+        for img_idx, img_name in tqdm(enumerate(sorted(imgs)), total=len(imgs)):
+            img_name_cleaned = "".join(
+                e for e in str(img_name) if e.isalnum() or e == "_"
+            )
             do_print = img_idx % 50 == 0
             if do_print:
-                print(f'idx: {img_idx}/{len(fovs)}, fov: "{fov_name_cleaned}"')
+                print(f'idx: {img_idx}/{len(imgs)}, img: "{img_name_cleaned}"')
 
             img_idx_str = f"{dataset}_{img_idx}"
             img_idx_bytes = img_idx_str.encode("utf-8")
 
-            fov_path = os.path.join(path, fov)
+            img_path = os.path.join(path, img_name)
 
             if args.with_metadata:
                 # get metadata
                 metadata_dict = {}
-                metadata_dict["fov"] = fov
+                metadata_dict["img"] = img_name
                 metadata_bytes = json.dumps(metadata_dict).encode("utf-8")
                 txn_meta.put(img_idx_bytes, metadata_bytes)
 
@@ -142,7 +144,7 @@ def main(args):
             # )
             # txn_labels.put(img_idx_bytes, segmentation_mask.tobytes())
 
-            uint8_img = load_img(fov_path)
+            uint8_img = load_img(img_path)
             img_jpg_encoded = iio.imwrite("<bytes>", uint8_img, extension=".jpeg")
             txn_imgs.put(img_idx_bytes, img_jpg_encoded)
 
@@ -162,15 +164,15 @@ def get_args_parser():
         help="""Name of dataset to process.""",
     )
     parser.add_argument(
-        "--start_fov_idx",
+        "--start_img_idx",
         type=int,
-        help="Start index of FOVs to process",
+        help="Start index of imgs to process",
         default=0,
     )
     parser.add_argument(
-        "--end_fov_idx",
+        "--end_img_idx",
         type=int,
-        help="End index of FOVs to process",
+        help="End index of imgs to process",
         default=-1,
     )
     parser.add_argument(
