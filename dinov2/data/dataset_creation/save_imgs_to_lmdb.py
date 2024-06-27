@@ -29,6 +29,9 @@ class _Split(Enum):
     ALL = "all"
 
 
+IMG_SUFFIXES = (".jpg", ".JPG", ".jpeg", ".JPEG", ".png", ".PNG")
+
+
 def normalize(x):
     return (x - x.min()) / (x.max() - x.min() + 1e-5)
 
@@ -84,7 +87,11 @@ def main(args):
         print(f"PROCESSING DATASET {dataset} stored in {path}...")
 
         dataset_lmdb_dir = os.path.join(base_lmdb_dir, dataset)
-        imgs = sorted(glob.glob(path))[start_img_idx:end_img_idx]
+        imgs = glob.glob(path)[start_img_idx:end_img_idx]
+        imgs = [
+            img for img in imgs if img.endswith(IMG_SUFFIXES) and os.path.isfile(img)
+        ]
+        imgs = sorted(imgs)
 
         print(f"TOTAL #imgs {len(imgs)} FOR DATASET {dataset}")
 
@@ -122,7 +129,7 @@ def main(args):
             if do_print:
                 print(f'idx: {img_idx}/{len(imgs)}, img: "{img_name_cleaned}"')
 
-            img_idx_str = f"{dataset}_{img_idx}"
+            img_idx_str = f"{dataset}_{img_name}_{img_idx}"
             img_idx_bytes = img_idx_str.encode("utf-8")
 
             img_path = os.path.join(path, img_name)
