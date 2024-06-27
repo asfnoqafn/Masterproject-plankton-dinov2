@@ -147,7 +147,7 @@ def select_collate_fn(cfg, n_tokens, mask_generator, inputs_dtype):
             n_tokens=n_tokens,
             mask_generator=mask_generator,
             dtype=inputs_dtype,
-            free_shapes=none_or_str(cfg.crops.free_shapes),
+            do_free_shapes=none_or_str(cfg.crops.free_shapes),
             use_ch_patch_embed=cfg.train.use_ch_patch_embed,
         )
         collate_fn_gpu = None
@@ -160,7 +160,7 @@ def select_collate_fn(cfg, n_tokens, mask_generator, inputs_dtype):
             n_tokens=n_tokens,
             mask_generator=mask_generator,
             dtype=inputs_dtype,
-            free_shapes=none_or_str(cfg.crops.free_shapes),
+            do_free_shapes=none_or_str(cfg.crops.free_shapes),
             use_ch_patch_embed=cfg.train.use_ch_patch_embed,
         )
     return collate_fn_cpu, collate_fn_gpu
