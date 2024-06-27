@@ -11,10 +11,6 @@ import lmdb
 import numpy as np
 from tqdm import tqdm
 
-BASE_DIR = "/fast/AG_Kainmueller/data/pan_m"  # max cluster path
-MAP_SIZE_IMG = int(1e12)  # 1TB
-MAP_SIZE_META = int(1e8)  # 100MB
-
 
 class _DataType(Enum):
     IMAGES = "images"
@@ -56,17 +52,22 @@ def create_lmdb_txn(
     end_img_idx,
     name: _DataType,
     split: _Split = _Split.TRAIN,
+    map_size=1e10,
 ):
     lmdb_labels_path = os.path.join(
         dataset_lmdb_dir, f"{start_img_idx}:{end_img_idx}-{split.value}_{name.value}"
     )
     os.makedirs(lmdb_labels_path, exist_ok=True)
-    env = lmdb.open(lmdb_labels_path, map_size=MAP_SIZE_IMG)
+    env = lmdb.open(lmdb_labels_path, map_size=map_size)
     txn = env.begin(write=True)
     return env, txn
 
 
 def main(args):
+    BASE_DIR = args.base_dir
+    MAP_SIZE_IMG = int(args.map_size_img)
+    MAP_SIZE_META = int(args.map_size_meta)
+
     start_img_idx = args.start_img_idx
     end_img_idx = args.end_img_idx
 
@@ -101,6 +102,7 @@ def main(args):
             end_img_idx,
             name=_DataType.LABELS,
             split=_Split.TRAIN,
+            map_size=MAP_SIZE_IMG,
         )
 
         if args.with_labels:
@@ -110,6 +112,7 @@ def main(args):
                 end_img_idx,
                 name=_DataType.LABELS,
                 split=_Split.TRAIN,
+                map_size=MAP_SIZE_IMG,
             )
 
         if args.with_metadata:
@@ -119,6 +122,7 @@ def main(args):
                 end_img_idx,
                 name=_DataType.METADATA,
                 split=_Split.TRAIN,
+                map_size=MAP_SIZE_META,
             )
 
         for img_idx, img_name in tqdm(enumerate(sorted(imgs)), total=len(imgs)):
@@ -166,6 +170,12 @@ def main(args):
 def get_args_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--base_dir",
+        type=str,
+        help="""Name of dataset to process.""",
+        default="/fast/AG_Kainmueller/data/pan_m",
+    )
+    parser.add_argument(
         "--dataset_path",
         type=str,
         help="""Name of dataset to process.""",
@@ -196,6 +206,18 @@ def get_args_parser():
         action=argparse.BooleanOptionalAction,
         help="Toggle saving metadata",
         default=False,
+    )
+    parser.add_argument(
+        "--map_size_img",
+        type=int,
+        help="Space to allocate for lmdb file for images",
+        default=1e10,
+    )
+    parser.add_argument(
+        "--map_size_meta",
+        type=int,
+        help="Space to allocate for lmdb file for images",
+        default=1e8,
     )
 
     return parser
