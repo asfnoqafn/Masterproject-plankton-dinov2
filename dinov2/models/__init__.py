@@ -59,6 +59,6 @@ def build_model_from_cfg(cfg, only_teacher=False):
         img_size=cfg.crops.global_crops_size,
         free_shapes=none_or_str(cfg.crops.free_shapes),
         num_loc_crops=cfg.crops.local_crops_number,
-        use_ch_patch_embed=cfg.train.use_ch_patch_embed,
+        use_ch_patch_embed=cfg.crops.use_ch_patch_embed,
         in_chans=cfg.train.in_chans,
     )
