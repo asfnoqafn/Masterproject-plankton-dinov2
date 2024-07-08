@@ -36,7 +36,9 @@ class _Split(Enum):
         return self.value if class_id is None else os.path.join(self.value, class_id)
 
     def get_image_relpath(
-        self, actual_index: int, class_id: Optional[str] = None
+        self,
+        actual_index: int,
+        class_id: Optional[str] = None,
     ) -> str:
         dirname = self.get_dirname(class_id)
         if self == _Split.TRAIN:
@@ -155,7 +157,10 @@ class ImageNet(ExtendedVisionDataset):
         return image_data
 
     def get_target(self, index: int) -> Optional[Target]:
-        if not self.with_targets or self.split in [_Split.TEST, _Split.ALL]:
+        if not self.with_targets or self.split in [
+            _Split.TEST,
+            _Split.ALL,
+        ]:
             return None
         else:
             entries = self._get_entries()
@@ -164,11 +169,7 @@ class ImageNet(ExtendedVisionDataset):
 
     def get_targets(self) -> Optional[np.ndarray]:
         entries = self._get_entries()
-        return (
-            None
-            if self.split == _Split.TEST
-            else np.array([el["class_id"] for el in entries])
-        )
+        return None if self.split == _Split.TEST else np.array([el["class_id"] for el in entries])
 
     def get_class_id(self, index: int) -> Optional[str]:
         entries = self._get_entries()
@@ -205,7 +206,10 @@ class ImageNet(ExtendedVisionDataset):
         if split == ImageNet.Split.TEST:
             dataset = None
             sample_count = split.length
-            max_class_id_length, max_class_name_length = 0, 0
+            max_class_id_length, max_class_name_length = (
+                0,
+                0,
+            )
         else:
             labels_path = "labels.txt"
             logger.info(f'loading labels from "{labels_path}"')
@@ -217,7 +221,10 @@ class ImageNet(ExtendedVisionDataset):
             dataset_root = os.path.join(self.root, split.get_dirname())
             dataset = ImageFolder(dataset_root)
             sample_count = len(dataset)
-            max_class_id_length, max_class_name_length = -1, -1
+            max_class_id_length, max_class_name_length = (
+                -1,
+                -1,
+            )
             for sample in dataset.samples:
                 _, class_index = sample
                 class_id, class_name = labels[class_index]
@@ -245,7 +252,12 @@ class ImageNet(ExtendedVisionDataset):
                 actual_index = index + 1
                 class_index = np.uint32(-1)
                 class_id, class_name = "", ""
-                entries_array[index] = (actual_index, class_index, class_id, class_name)
+                entries_array[index] = (
+                    actual_index,
+                    class_index,
+                    class_id,
+                    class_name,
+                )
         else:
             class_names = {class_id: class_name for class_id, class_name in labels}
 
@@ -261,7 +273,12 @@ class ImageNet(ExtendedVisionDataset):
                 image_relpath = os.path.relpath(image_full_path, self.root)
                 class_id, actual_index = split.parse_image_relpath(image_relpath)
                 class_name = class_names[class_id]
-                entries_array[index] = (actual_index, class_index, class_id, class_name)
+                entries_array[index] = (
+                    actual_index,
+                    class_index,
+                    class_id,
+                    class_name,
+                )
 
         logger.info(f'saving entries to "{self._entries_path}"')
         self._save_extra(entries_array, self._entries_path)
@@ -273,7 +290,11 @@ class ImageNet(ExtendedVisionDataset):
 
         entries_array = self._load_extra(self._entries_path)
 
-        max_class_id_length, max_class_name_length, max_class_index = -1, -1, -1
+        (
+            max_class_id_length,
+            max_class_name_length,
+            max_class_index,
+        ) = (-1, -1, -1)
         for entry in entries_array:
             class_index, class_id, class_name = (
                 entry["class_index"],

@@ -10,4 +10,8 @@ from .cross_entropy_loss import (
     mask_cross_entropy,
 )
 from .dice_loss import DiceLoss
-from .match_costs import ClassificationCost, CrossEntropyLossCost, DiceCost
+from .match_costs import (
+    ClassificationCost,
+    CrossEntropyLossCost,
+    DiceCost,
+)

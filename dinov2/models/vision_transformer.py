@@ -16,6 +16,7 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 from torch.nn.init import trunc_normal_
+from torch.nn.utils.rnn import pad_sequence
 
 from dinov2.layers import (
     MemEffAttention,
@@ -374,6 +375,7 @@ class DinoVisionTransformer(nn.Module):
         local_patch_pos: Optional[List[List[int]]] = None,
         local_crop_dims: Optional[List[List[int]]] = None,
         local_crop_len: List[torch.Tensor] = None,
+        num_ch_list: List[int] = None,
     ) -> torch.Tensor:
         """Prepare tokens with positional embeddings and masks.
 
@@ -397,10 +399,17 @@ class DinoVisionTransformer(nn.Module):
         # newly created pos embed vect also needs padding
         # b c w h OR b c p (n p)
         b, c, w, h = x.size()
-        if isinstance(self.patch_embed, dict):
+        if isinstance(
+            self.patch_embed, dict
+        ):  # here we have one tokenizer for each nb channels
             x = self.patch_embed[c](x)
         else:
             x = self.patch_embed(x)  # b n d (=384)
+            if num_ch_list is not None:  # means that x = (b c) n d
+                x_list = torch.split(x, num_ch_list, dim=0)  # b [c n d]
+                x = pad_sequence(x_list, batch_first=True)  # b c_max n d
+                x = x.reshape(b, -1, x.shape[-1])  # b (c_max n) d
+
         x_dim = x.shape[-1]
 
         if masks is not None:
@@ -424,7 +433,8 @@ class DinoVisionTransformer(nn.Module):
                 single_x_list = []
                 for j in range(1, len(local_crop_len[i])):
                     # print(
-                    #    f"i {i} j {j} {int(local_crop_len[i][:j].sum())} {int(local_crop_len[i][:j + 1].sum())} {local_crop_len[i][:j+1]} {len(local_crop_len[i])}"
+                    #    f"""i {i} j {j} {int(local_crop_len[i][:j].sum())}
+                    #     {int(local_crop_len[i][:j + 1].sum())} {local_crop_len[i][:j+1]} {len(local_crop_len[i])}"""
                     # add padding here to even up x, or make x a nested tensor
                     single_x_list.append(
                         torch.cat(
@@ -577,6 +587,7 @@ class DinoVisionTransformer(nn.Module):
         local_crop_len=None,
         local_patch_pos=None,
         local_crop_dims=None,
+        num_ch_list=None,
     ):
         if isinstance(x, list):
             return self.forward_features_list(
@@ -586,6 +597,7 @@ class DinoVisionTransformer(nn.Module):
                 local_crop_len=local_crop_len,
                 local_patch_pos=local_patch_pos,
                 local_crop_dims=local_crop_dims,
+                num_ch_list=num_ch_list,
             )
 
         # if not list, we only have gc, hence no local_patch_pos or local_crop_dims

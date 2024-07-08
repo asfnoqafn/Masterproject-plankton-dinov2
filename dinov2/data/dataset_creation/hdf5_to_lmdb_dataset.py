@@ -22,12 +22,8 @@ def main(args):
     for data_file in data_files:
         train_data_path = f"/home/jluesch/Documents/data/plankton/{data_file}"
 
-        lmdb_imgs_path = (
-            f"/home/jluesch/Documents/data/plankton/lmdb/{data_file[:-5]}_imgs"
-        )
-        lmdb_labels_path = (
-            f"/home/jluesch/Documents/data/plankton/lmdb/{data_file[:-5]}_labels"
-        )
+        lmdb_imgs_path = f"/home/jluesch/Documents/data/plankton/lmdb/{data_file[:-5]}_imgs"
+        lmdb_labels_path = f"/home/jluesch/Documents/data/plankton/lmdb/{data_file[:-5]}_labels"
         print(lmdb_imgs_path, lmdb_labels_path)
 
         env_imgs = lmdb.open(lmdb_imgs_path, map_size=map_size)
@@ -52,7 +48,10 @@ def main(args):
                         )
 
                     img_bytes = file[entry["path"]][()]
-                    txn_imgs.put(str(entry["index"]).encode("utf-8"), img_bytes)
+                    txn_imgs.put(
+                        str(entry["index"]).encode("utf-8"),
+                        img_bytes,
+                    )
                     txn_labels.put(
                         str(entry["index"]).encode("utf-8"),
                         str(entry["class_id"]).encode("utf-8"),

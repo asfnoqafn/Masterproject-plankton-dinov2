@@ -50,9 +50,7 @@ class DepthEncoderDecoder(BaseDepther):
     ):
         super(DepthEncoderDecoder, self).__init__(init_cfg)
         if pretrained is not None:
-            assert (
-                backbone.get("pretrained") is None
-            ), "both backbone and depther set pretrained weight"
+            assert backbone.get("pretrained") is None, "both backbone and depther set pretrained weight"
             backbone.pretrained = pretrained
         self.backbone = builder.build_backbone(backbone)
         self._init_decode_head(decode_head)
@@ -84,7 +82,9 @@ class DepthEncoderDecoder(BaseDepther):
         out = self._decode_head_forward_test(x, img_metas)
         # crop the pred depth to the certain range.
         out = torch.clamp(
-            out, min=self.decode_head.min_depth, max=self.decode_head.max_depth
+            out,
+            min=self.decode_head.min_depth,
+            max=self.decode_head.max_depth,
         )
         if rescale:
             if size is None:
@@ -93,7 +93,10 @@ class DepthEncoderDecoder(BaseDepther):
                 else:
                     size = img.shape[2:]
             out = resize(
-                input=out, size=size, mode="bilinear", align_corners=self.align_corners
+                input=out,
+                size=size,
+                mode="bilinear",
+                align_corners=self.align_corners,
             )
         return out
 
@@ -102,7 +105,12 @@ class DepthEncoderDecoder(BaseDepther):
         training."""
         losses = dict()
         loss_decode = self.decode_head.forward_train(
-            img, x, img_metas, depth_gt, self.train_cfg, **kwargs
+            img,
+            x,
+            img_metas,
+            depth_gt,
+            self.train_cfg,
+            **kwargs,
         )
         losses.update(add_prefix(loss_decode, "decode"))
         return losses
@@ -141,9 +149,7 @@ class DepthEncoderDecoder(BaseDepther):
         losses = dict()
 
         # the last of x saves the info from neck
-        loss_decode = self._decode_head_forward_train(
-            img, x, img_metas, depth_gt, **kwargs
-        )
+        loss_decode = self._decode_head_forward_train(img, x, img_metas, depth_gt, **kwargs)
 
         losses.update(loss_decode)
 
@@ -193,9 +199,7 @@ class DepthEncoderDecoder(BaseDepther):
         assert (count_mat == 0).sum() == 0
         if torch.onnx.is_in_onnx_export():
             # cast count_mat to constant while exporting to ONNX
-            count_mat = torch.from_numpy(count_mat.cpu().detach().numpy()).to(
-                device=img.device
-            )
+            count_mat = torch.from_numpy(count_mat.cpu().detach().numpy()).to(device=img.device)
         preds = preds / count_mat
         return preds
 
@@ -226,7 +230,10 @@ class DepthEncoderDecoder(BaseDepther):
         flip = img_meta[0]["flip"]
         if flip:
             flip_direction = img_meta[0]["flip_direction"]
-            assert flip_direction in ["horizontal", "vertical"]
+            assert flip_direction in [
+                "horizontal",
+                "vertical",
+            ]
             if flip_direction == "horizontal":
                 output = output.flip(dims=(3,))
             elif flip_direction == "vertical":
@@ -257,7 +264,10 @@ class DepthEncoderDecoder(BaseDepther):
         depth_pred = self.inference(imgs[0], img_metas[0], rescale)
         for i in range(1, len(imgs)):
             cur_depth_pred = self.inference(
-                imgs[i], img_metas[i], rescale, size=depth_pred.shape[-2:]
+                imgs[i],
+                img_metas[i],
+                rescale,
+                size=depth_pred.shape[-2:],
             )
             depth_pred += cur_depth_pred
         depth_pred /= len(imgs)

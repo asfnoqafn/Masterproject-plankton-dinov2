@@ -19,10 +19,17 @@ from torch.utils.data import TensorDataset
 from torchmetrics import MetricTracker
 
 from dinov2.data import make_dataset
-from dinov2.data.transforms import make_classification_eval_transform
-from dinov2.distributed import get_global_rank, get_global_size
+from dinov2.data.transforms import (
+    make_classification_eval_transform,
+)
+from dinov2.distributed import (
+    get_global_rank,
+    get_global_size,
+)
 from dinov2.eval.metrics import MetricType, build_metric
-from dinov2.eval.setup import get_args_parser as get_setup_args_parser
+from dinov2.eval.setup import (
+    get_args_parser as get_setup_args_parser,
+)
 from dinov2.eval.setup import setup_and_build_model
 from dinov2.eval.utils import evaluate, extract_features
 from dinov2.utils.dtype import as_torch_dtype
@@ -131,7 +138,10 @@ class LogRegModule(nn.Module):
         if self.device == _CPU_DEVICE:
             samples = samples.numpy()
         probas = self.estimator.predict_proba(samples)
-        return {"preds": torch.from_numpy(probas).to(samples_device), "target": targets}
+        return {
+            "preds": torch.from_numpy(probas).to(samples_device),
+            "target": targets,
+        }
 
     def fit(self, train_features, train_labels):
         train_features = train_features.to(dtype=self.dtype, device=self.device)
@@ -146,7 +156,13 @@ class LogRegModule(nn.Module):
 def evaluate_model(*, logreg_model, logreg_metric, test_data_loader, device):
     postprocessors = {"metrics": logreg_model}
     metrics = {"metrics": logreg_metric}
-    return evaluate(nn.Identity(), test_data_loader, postprocessors, metrics, device)
+    return evaluate(
+        nn.Identity(),
+        test_data_loader,
+        postprocessors,
+        metrics,
+        device,
+    )
 
 
 def train_for_C(
@@ -305,11 +321,17 @@ def eval_log_regression(
 
     if finetune_dataset is None and finetune_on_val:
         logger.info("Choosing hyperparameters on the val dataset")
-        finetune_features, finetune_labels = val_features, val_labels
+        finetune_features, finetune_labels = (
+            val_features,
+            val_labels,
+        )
     elif finetune_dataset is None and not finetune_on_val:
         logger.info("Choosing hyperparameters on 10% of the train dataset")
         torch.manual_seed(0)
-        indices = torch.randperm(len(train_features), device=train_features.device)
+        indices = torch.randperm(
+            len(train_features),
+            device=train_features.device,
+        )
         finetune_index = indices[: len(train_features) // 10]
         train_index = indices[len(train_features) // 10 :]
         finetune_features, finetune_labels = (
@@ -437,8 +459,7 @@ def eval_log_regression_with_model(
 
     results_dict = {
         "top-1": results_dict_logreg["top-1"].cpu().numpy() * 100.0,
-        "top-5": results_dict_logreg.get("top-5", torch.tensor(0.0)).cpu().numpy()
-        * 100.0,
+        "top-5": results_dict_logreg.get("top-5", torch.tensor(0.0)).cpu().numpy() * 100.0,
         "best_C": results_dict_logreg["best_C"],
     }
     logger.info(

@@ -39,9 +39,7 @@ class PatchEmbedPerChannel(nn.Module):
             stride=(1, patch_size, patch_size),
         )  # CHANGED
 
-        self.channel_embed = nn.parameter.Parameter(
-            torch.zeros(1, embed_dim, in_chans, 1, 1)
-        )
+        self.channel_embed = nn.parameter.Parameter(torch.zeros(1, embed_dim, in_chans, 1, 1))
         trunc_normal_(self.channel_embed, std=0.02)
 
     def forward(self, x, extra_tokens={}):

@@ -47,9 +47,11 @@ def main(args):
             with env_imgs.begin(write=True) as txn_imgs:
                 for i in range(tot_nb_samples):
                     if i % 1000 == 0:
-                        print(f"""progress {i}/{tot_nb_samples}
+                        print(
+                            f"""progress {i}/{tot_nb_samples}
                               masks shape: {masks[i].shape}
-                              images shape: {images[i].shape}""")
+                              images shape: {images[i].shape}"""
+                        )
 
                     img_bytes = images[i].tobytes()
                     mask_bytes = masks[i].tobytes()

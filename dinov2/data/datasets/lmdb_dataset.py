@@ -31,7 +31,10 @@ class LMDBDataset(ImageNet):
         return image_data
 
     def get_target(self, index: int) -> Optional[Target]:
-        if self.split in [_SplitLMDBDataset.TEST, _SplitLMDBDataset.ALL]:
+        if self.split in [
+            _SplitLMDBDataset.TEST,
+            _SplitLMDBDataset.ALL,
+        ]:
             return None
         else:
             entries = self._get_entries()
@@ -47,14 +50,15 @@ class LMDBDataset(ImageNet):
 
     @property
     def _entries_path(self) -> str:
-        if self.root.endswith("TRAIN") or self.root.endswith(
-            "VAL"
-        ):  # if we have a single file
+        if self.root.endswith("TRAIN") or self.root.endswith("VAL"):  # if we have a single file
             return self.root + "_*"
         elif self._split.value.upper() == "ALL":
             return os.path.join(self.root, "*")
         else:
-            return os.path.join(self.root, f"*-{self._split.value.upper()}_*")
+            return os.path.join(
+                self.root,
+                f"*-{self._split.value.upper()}_*",
+            )
 
     def _get_extra_full_path(self, extra_path: str) -> str:
         if not os.path.isdir(self.root):
@@ -76,9 +80,7 @@ class LMDBDataset(ImageNet):
         file_list_labels = sorted([el for el in file_list if el.endswith("labels")])
         print("Datasets labels file list: ", file_list_labels)
 
-        file_list_imgs = sorted(
-            [el for el in file_list if el.endswith("imgs") or el.endswith("images")]
-        )
+        file_list_imgs = sorted([el for el in file_list if el.endswith("imgs") or el.endswith("images")])
         print("Datasets imgs file list: ", file_list_imgs)
 
         accumulated = []
@@ -116,7 +118,11 @@ class LMDBDataset(ImageNet):
                 meminit=False,
             )
             # ex: "/home/jluesch/Documents/data/plankton/lmdb/2007-TRAIN")
-            print(lmdb_path_imgs, "lmdb_env_imgs.stat()", lmdb_env_imgs.stat())
+            print(
+                lmdb_path_imgs,
+                "lmdb_env_imgs.stat()",
+                lmdb_env_imgs.stat(),
+            )
 
             lmdb_txn_imgs = lmdb_env_imgs.begin()
             # save img tcxn from which to get labels later

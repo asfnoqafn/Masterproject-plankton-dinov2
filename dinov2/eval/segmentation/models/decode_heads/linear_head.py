@@ -8,7 +8,9 @@ import torch
 import torch.nn as nn
 from mmcv.transforms import Resize
 from mmseg.models.builder import HEADS
-from mmseg.models.decode_heads.decode_head import BaseDecodeHead
+from mmseg.models.decode_heads.decode_head import (
+    BaseDecodeHead,
+)
 
 
 @HEADS.register_module()
@@ -73,14 +75,16 @@ class BNHead(BaseDecodeHead):
                     mmcv.imresize(
                         input=x,
                         scale_factor=f,
-                        interpolation="bilinear" if f >= 1 else "area",
+                        interpolation=("bilinear" if f >= 1 else "area"),
                     )
                     for x, f in zip(inputs, self.resize_factors)
                 ]
                 # print("after", *(x.shape for x in inputs))
             upsampled_inputs = [
                 mmcv.imresize(
-                    input=x, size=inputs[0].shape[2:], interpolation="bilinear"
+                    input=x,
+                    size=inputs[0].shape[2:],
+                    interpolation="bilinear",
                 )  # , align_corners=self.align_corners)
                 for x in inputs
             ]

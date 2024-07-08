@@ -23,7 +23,10 @@ logger = logging.getLogger("dinov2")
 XFORMERS_ENABLED = os.environ.get("XFORMERS_DISABLED") is None
 try:
     if XFORMERS_ENABLED:
-        from xformers.ops import memory_efficient_attention, unbind
+        from xformers.ops import (
+            memory_efficient_attention,
+            unbind,
+        )
 
         XFORMERS_AVAILABLE = True
         warnings.warn("xFormers is available (Attention)")
@@ -60,16 +63,10 @@ class Attention(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         B, N, D = x.shape
-        qkv = (
-            self.qkv(x)
-            .reshape(B, N, 3, self.num_heads, D // self.num_heads)
-            .permute(2, 0, 3, 1, 4)
-        )  # 3 b h n d
+        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, D // self.num_heads).permute(2, 0, 3, 1, 4)  # 3 b h n d
         q, k, v = qkv[0] * self.scale, qkv[1], qkv[2]
 
-        if (
-            self.use_pytorch_attn
-        ):  # TODO: implement attn mask AND args to use pytorch attn
+        if self.use_pytorch_attn:  # TODO: implement attn mask AND args to use pytorch attn
             x = torch.nn.functional.scaled_dot_product_attention(
                 q,
                 k,
@@ -94,7 +91,13 @@ class Attention(nn.Module):
 
 class MemEffAttention(Attention):
     def masked_mem_eff_attn(
-        self, query, key, value, attn_bias=None, attn_mask=None, mask=None
+        self,
+        query,
+        key,
+        value,
+        attn_bias=None,
+        attn_mask=None,
+        mask=None,
     ):
         scale = 1 / query.shape[-1] ** 0.5
         query = query * scale
@@ -109,9 +112,7 @@ class MemEffAttention(Attention):
             attn = attn.masked_fill(~attn_mask, -torch.finfo(attn.dtype).max)
 
         if attn_bias is not None:
-            attn = (
-                attn + attn_bias
-            )  # invalid types for +: 'Tensor' and 'BlockDiagonalMask'
+            attn = attn + attn_bias  # invalid types for +: 'Tensor' and 'BlockDiagonalMask'
 
         attn = attn.softmax(-1)
         # attn = F.dropout(attn, p) # p = 0.0 per default
@@ -129,10 +130,19 @@ class MemEffAttention(Attention):
         q, k, v = unbind(qkv, 2)
 
         if exists(attn_mask):
-            q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
+            q, k, v = (
+                q.transpose(1, 2),
+                k.transpose(1, 2),
+                v.transpose(1, 2),
+            )
             # b n h d -> b h n d, h=self.heads, for our own impl of masked attention
             x = self.masked_mem_eff_attn(
-                q, k, v, attn_bias=attn_bias, attn_mask=attn_mask, mask=None
+                q,
+                k,
+                v,
+                attn_bias=attn_bias,
+                attn_mask=attn_mask,
+                mask=None,
             )
         else:
             x = memory_efficient_attention(q, k, v, attn_bias=attn_bias)

@@ -15,7 +15,10 @@ from urllib.parse import urlparse
 import numpy as np
 import torch
 from torch import nn
-from torchvision.transforms.functional import InterpolationMode, resize
+from torchvision.transforms.functional import (
+    InterpolationMode,
+    resize,
+)
 
 logger = logging.getLogger("dinov2")
 
@@ -55,9 +58,7 @@ def resize_pos_embed(pos_embed, input_shape, pos_shape, mode):
     cls_token_weight = pos_embed[:, 0:1]
     pos_embed_weight = pos_embed[:, (-1 * pos_h * pos_w) :]
     # pos_embed_weight = pos_embed[:, 1:] # not compatible w registers
-    pos_embed_weight = pos_embed_weight.reshape(
-        1, pos_h, pos_w, pos_embed.shape[2]
-    ).permute(0, 3, 1, 2)
+    pos_embed_weight = pos_embed_weight.reshape(1, pos_h, pos_w, pos_embed.shape[2]).permute(0, 3, 1, 2)
     pos_embed_weight = resize(
         pos_embed_weight,
         size=input_shape,
@@ -103,11 +104,7 @@ def match_state_dict_keys(state_dict, keys_load, keys_model):
     if nb_double_ptn / len(keys_load) > 0.2:
         # replace doubly numbered blocks in loaded dict by single block number
         new_state_dict = {
-            (
-                ("blocks." + re.search(double_nb_ptn, k).group(1))
-                if re.search(double_nb_ptn, k)
-                else k
-            ): v
+            (("blocks." + re.search(double_nb_ptn, k).group(1)) if re.search(double_nb_ptn, k) else k): v
             for k, v in state_dict.items()
         }
     else:  # inverse, replace single in load by double pttn
@@ -123,14 +120,18 @@ def match_state_dict_keys(state_dict, keys_load, keys_model):
 
 
 def load_pretrained_weights(
-    model, pretrained_weights, checkpoint_key, teacher_student_key="teacher"
+    model,
+    pretrained_weights,
+    checkpoint_key,
+    teacher_student_key="teacher",
 ):
     if urlparse(pretrained_weights).scheme:  # If it looks like an URL
-        state_dict = torch.hub.load_state_dict_from_url(
-            pretrained_weights, map_location="cpu"
-        )
+        state_dict = torch.hub.load_state_dict_from_url(pretrained_weights, map_location="cpu")
     else:
-        chkpt = torch.load(pretrained_weights, map_location=torch.device("cpu"))
+        chkpt = torch.load(
+            pretrained_weights,
+            map_location=torch.device("cpu"),
+        )
         if "model" in chkpt.keys():
             state_dict = chkpt["model"]
         else:
@@ -145,16 +146,12 @@ def load_pretrained_weights(
     state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
     if teacher_student_key == "teacher":
         state_dict = {k: v for k, v in state_dict.items() if "student" not in k}
-        state_dict = {
-            k.replace("teacher.", ""): v for k, v in state_dict.items()
-        }  # we take teacher for eval
+        state_dict = {k.replace("teacher.", ""): v for k, v in state_dict.items()}  # we take teacher for eval
     elif teacher_student_key == "student":
         state_dict = {k: v for k, v in state_dict.items() if "teacher" not in k}
         state_dict = {k.replace("student.", ""): v for k, v in state_dict.items()}
     else:
-        print(
-            f"Error: Key {teacher_student_key} not recognized, options are: 'student', 'teacher'"
-        )
+        print(f"Error: Key {teacher_student_key} not recognized, options are: 'student', 'teacher'")
         sys.exit(1)
     if model.use_ch_patch_embed:
         state_dict = {k: v for k, v in state_dict.items() if "patch_embed" not in k}
@@ -188,21 +185,19 @@ def load_pretrained_weights(
     state_dict = {
         k_c: (
             reshape_with_except(
-                v_c, k_c, model, reshape_patch_embeds=not model.use_ch_patch_embed
+                v_c,
+                k_c,
+                model,
+                reshape_patch_embeds=not model.use_ch_patch_embed,
             )
-            if k_c in model.state_dict().keys()
-            and v_c.shape != model.state_dict()[k_c].shape
+            if k_c in model.state_dict().keys() and v_c.shape != model.state_dict()[k_c].shape
             else v_c
         )
         for k_c, v_c in state_dict.items()
     }
 
     msg = model.load_state_dict(state_dict, strict=False)
-    logger.info(
-        "Pretrained weights found at {} and loaded with msg: {}".format(
-            pretrained_weights, msg
-        )
-    )
+    logger.info("Pretrained weights found at {} and loaded with msg: {}".format(pretrained_weights, msg))
 
 
 def fix_random_seeds(seed=31):
@@ -255,9 +250,7 @@ class CosineScheduler(object):
         warmup_schedule = np.linspace(start_warmup_value, base_value, warmup_iters)
 
         iters = np.arange(total_iters - warmup_iters - freeze_iters)
-        schedule = final_value + 0.5 * (base_value - final_value) * (
-            1 + np.cos(np.pi * iters / len(iters))
-        )
+        schedule = final_value + 0.5 * (base_value - final_value) * (1 + np.cos(np.pi * iters / len(iters)))
         self.schedule = np.concatenate((freeze_schedule, warmup_schedule, schedule))
 
         assert len(self.schedule) == self.total_iters
@@ -270,7 +263,12 @@ class CosineScheduler(object):
 
 
 def has_batchnorms(model):
-    bn_types = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d, nn.SyncBatchNorm)
+    bn_types = (
+        nn.BatchNorm1d,
+        nn.BatchNorm2d,
+        nn.BatchNorm3d,
+        nn.SyncBatchNorm,
+    )
     for name, module in model.named_modules():
         if isinstance(module, bn_types):
             return True
@@ -281,3 +279,11 @@ def none_or_str(value):
     if isinstance(value, str) and value.strip().lower() == "none":
         return None
     return value
+
+
+def data_to_cuda(data):
+    data = {
+        k: (v.to(device=f"cuda:{torch.cuda.current_device()}") if torch.is_tensor(v) and not v.is_cuda else v)
+        for k, v in data.items()
+    }
+    return data

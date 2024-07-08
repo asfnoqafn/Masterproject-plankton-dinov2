@@ -10,7 +10,9 @@ import torch
 import torch.backends.cudnn as cudnn
 
 import dinov2.utils.utils as dinov2_utils
-from dinov2.distributed import _restrict_print_to_main_process
+from dinov2.distributed import (
+    _restrict_print_to_main_process,
+)
 from dinov2.models import build_model_from_cfg
 from dinov2.utils.config import setup
 
@@ -56,9 +58,7 @@ def get_args_parser(
 
 
 def get_autocast_dtype(config):
-    teacher_dtype_str = (
-        config.compute_precision.teacher.backbone.mixed_precision.param_dtype
-    )
+    teacher_dtype_str = config.compute_precision.teacher.backbone.mixed_precision.param_dtype
     if teacher_dtype_str == "fp16":
         return torch.half
     elif teacher_dtype_str == "bf16":

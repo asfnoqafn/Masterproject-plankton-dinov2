@@ -26,7 +26,9 @@ except FileNotFoundError:
     long_description = DESCRIPTION
 
 
-def get_requirements(path: str = HERE / "requirements.txt") -> Tuple[List[str], List[str]]:
+def get_requirements(
+    path: str = HERE / "requirements.txt",
+) -> Tuple[List[str], List[str]]:
     requirements = []
     extra_indices = []
     with open(path) as f:
@@ -41,7 +43,11 @@ def get_requirements(path: str = HERE / "requirements.txt") -> Tuple[List[str], 
 
 def get_package_version() -> str:
     with open(HERE / "dinov2/__init__.py") as f:
-        result = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", f.read(), re.M)
+        result = re.search(
+            r"^__version__ = ['\"]([^'\"]*)['\"]",
+            f.read(),
+            re.M,
+        )
         if result:
             return result.group(1)
     raise RuntimeError("Can't get package version")

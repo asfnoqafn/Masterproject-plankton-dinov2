@@ -35,9 +35,7 @@ class MetricLogger(object):
             return self.meters[attr]
         if attr in self.__dict__:
             return self.__dict__[attr]
-        raise AttributeError(
-            "'{}' object has no attribute '{}'".format(type(self).__name__, attr)
-        )
+        raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, attr))
 
     def __str__(self):
         loss_str = []
@@ -77,7 +75,12 @@ class MetricLogger(object):
         pass
 
     def log_every(
-        self, iterable, print_freq, header=None, n_iterations=None, start_iteration=0
+        self,
+        iterable,
+        print_freq,
+        header=None,
+        n_iterations=None,
+        start_iteration=0,
     ):
         i = start_iteration
         if not header:
@@ -112,7 +115,9 @@ class MetricLogger(object):
             if i % print_freq == 0 or i == n_iterations - 1:
                 if self.verbose:
                     self.dump_in_output_file(
-                        iteration=i, iter_time=iter_time.avg, data_time=data_time.avg
+                        iteration=i,
+                        iter_time=iter_time.avg,
+                        data_time=data_time.avg,
                     )
                 eta_seconds = iter_time.global_avg * (n_iterations - i)
                 eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
@@ -150,11 +155,7 @@ class MetricLogger(object):
                 time_per_it = 0
             else:
                 time_per_it = total_time / n_iterations
-            logger.info(
-                "{} Total time: {} ({:.6f} s / it)".format(
-                    header, total_time_str, time_per_it
-                )
-            )
+            logger.info("{} Total time: {} ({:.6f} s / it)".format(header, total_time_str, time_per_it))
 
 
 class SmoothedValue:
@@ -182,7 +183,11 @@ class SmoothedValue:
         """
         if not distributed.is_enabled():
             return
-        t = torch.tensor([self.count, self.total], dtype=torch.float64, device="cuda")
+        t = torch.tensor(
+            [self.count, self.total],
+            dtype=torch.float64,
+            device="cuda",
+        )
         torch.distributed.barrier()
         torch.distributed.all_reduce(t)
         t = t.tolist()

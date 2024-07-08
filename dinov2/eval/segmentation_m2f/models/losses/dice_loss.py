@@ -9,7 +9,14 @@ from mmseg.models.builder import LOSSES
 from mmseg.models.losses.utils import weight_reduce_loss
 
 
-def dice_loss(pred, target, weight=None, eps=1e-3, reduction="mean", avg_factor=None):
+def dice_loss(
+    pred,
+    target,
+    weight=None,
+    eps=1e-3,
+    reduction="mean",
+    avg_factor=None,
+):
     """Calculate dice loss, which is proposed in
     `V-Net: Fully Convolutional Neural Networks for Volumetric
     Medical Image Segmentation <https://arxiv.org/abs/1606.04797>`_.
@@ -44,7 +51,12 @@ def dice_loss(pred, target, weight=None, eps=1e-3, reduction="mean", avg_factor=
 
 
 def naive_dice_loss(
-    pred, target, weight=None, eps=1e-3, reduction="mean", avg_factor=None
+    pred,
+    target,
+    weight=None,
+    eps=1e-3,
+    reduction="mean",
+    avg_factor=None,
 ):
     """Calculate naive dice loss, the coefficient in the denominator is the
     first power instead of the second power.
@@ -124,7 +136,12 @@ class DiceLoss(nn.Module):
         self.activate = activate
 
     def forward(
-        self, pred, target, weight=None, reduction_override=None, avg_factor=None
+        self,
+        pred,
+        target,
+        weight=None,
+        reduction_override=None,
+        avg_factor=None,
     ):
         """Forward function.
 
@@ -144,7 +161,12 @@ class DiceLoss(nn.Module):
             torch.Tensor: The calculated loss
         """
 
-        assert reduction_override in (None, "none", "mean", "sum")
+        assert reduction_override in (
+            None,
+            "none",
+            "mean",
+            "sum",
+        )
         reduction = reduction_override if reduction_override else self.reduction
 
         if self.activate:

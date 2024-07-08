@@ -29,14 +29,19 @@ from dinov2.data import (
 )
 from dinov2.fsdp import FSDPCheckpointer, get_fsdp_modules
 from dinov2.logging import MetricLogger
-from dinov2.models.vision_transformer import count_parameters
-from dinov2.train.ssl_meta_arch import SSLMetaArch
-from dinov2.utils.config import setup
-from dinov2.utils.utils import CosineScheduler, exists, none_or_str
-
-torch.backends.cuda.matmul.allow_tf32 = (
-    True  # PyTorch 1.12 sets this to False by default
+from dinov2.models.vision_transformer import (
+    count_parameters,
 )
+from dinov2.train.ssl_meta_arch import SSLMetaArch
+from dinov2.utils import utils
+from dinov2.utils.config import setup
+from dinov2.utils.utils import (
+    CosineScheduler,
+    exists,
+    none_or_str,
+)
+
+torch.backends.cuda.matmul.allow_tf32 = True  # PyTorch 1.12 sets this to False by default
 logger = logging.getLogger("dinov2")
 
 
@@ -50,7 +55,10 @@ class AugmentationType(Enum):
 def get_args_parser(add_help: bool = True):
     parser = argparse.ArgumentParser("DINOv2 training", add_help=add_help)
     parser.add_argument(
-        "--config-file", default="", metavar="FILE", help="path to config file"
+        "--config-file",
+        default="",
+        metavar="FILE",
+        help="path to config file",
     )
     parser.add_argument(
         "--no-resume",
@@ -58,9 +66,16 @@ def get_args_parser(add_help: bool = True):
         help="Whether to not attempt to resume from the checkpoint directory. ",
     )
     parser.add_argument(
-        "--eval-only", action="store_true", help="perform evaluation only"
+        "--eval-only",
+        action="store_true",
+        help="perform evaluation only",
     )
-    parser.add_argument("--eval", type=str, default="", help="Eval type to perform")
+    parser.add_argument(
+        "--eval",
+        type=str,
+        default="",
+        help="Eval type to perform",
+    )
     parser.add_argument(
         "opts",
         help="""
@@ -72,10 +87,16 @@ def get_args_parser(add_help: bool = True):
         nargs=argparse.REMAINDER,
     )
     parser.add_argument(
-        "--run_name", type=str, help="Name for the wandb log", default="run_"
+        "--run_name",
+        type=str,
+        help="Name for the wandb log",
+        default="run_",
     )
     parser.add_argument(
-        "--num_nodes", type=int, default=1, help="Set number of nodes used."
+        "--num_nodes",
+        type=int,
+        default=1,
+        help="Set number of nodes used.",
     )
 
     return parser
@@ -83,7 +104,11 @@ def get_args_parser(add_help: bool = True):
 
 def build_optimizer(cfg, params_groups):
     return torch.optim.AdamW(
-        params_groups, betas=(cfg.optim.adamw_beta1, cfg.optim.adamw_beta2)
+        params_groups,
+        betas=(
+            cfg.optim.adamw_beta1,
+            cfg.optim.adamw_beta2,
+        ),
     )
 
 
@@ -120,9 +145,9 @@ def build_schedulers(cfg):
     teacher_temp_schedule = CosineScheduler(**teacher_temp)
     last_layer_lr_schedule = CosineScheduler(**lr)
 
-    last_layer_lr_schedule.schedule[
-        : cfg.optim["freeze_last_layer_epochs"] * OFFICIAL_EPOCH_LENGTH
-    ] = 0  # mimicking the original schedules
+    last_layer_lr_schedule.schedule[: cfg.optim["freeze_last_layer_epochs"] * OFFICIAL_EPOCH_LENGTH] = (
+        0  # mimicking the original schedules
+    )
 
     logger.info("Schedulers ready.")
 
@@ -148,7 +173,8 @@ def select_collate_fn(cfg, n_tokens, mask_generator, inputs_dtype):
             mask_generator=mask_generator,
             dtype=inputs_dtype,
             do_free_shapes=none_or_str(cfg.crops.free_shapes),
-            use_ch_patch_embed=cfg.train.use_ch_patch_embed,
+            use_ch_patch_embed=cfg.crops.use_ch_patch_embed,
+            use_variable_channels=cfg.crops.use_variable_channels,
         )
         collate_fn_gpu = None
     else:
@@ -161,7 +187,7 @@ def select_collate_fn(cfg, n_tokens, mask_generator, inputs_dtype):
             mask_generator=mask_generator,
             dtype=inputs_dtype,
             do_free_shapes=none_or_str(cfg.crops.free_shapes),
-            use_ch_patch_embed=cfg.train.use_ch_patch_embed,
+            use_ch_patch_embed=cfg.crops.use_ch_patch_embed,
         )
     return collate_fn_cpu, collate_fn_gpu
 
@@ -195,9 +221,7 @@ def select_augmentations(cfg, do_multi_channel=False):
         data_transform_cpu = DataAugmentationDINO(use_kornia=True, **aug_kwargs)
         data_transform_gpu = None
     else:
-        print(
-            f"ERROR: type augmentation type {cfg.train.augmentations} is not supported"
-        )
+        print(f"ERROR: type augmentation type {cfg.train.augmentations} is not supported")
         print(
             f"Supported types are: {AugmentationType.TORCHV_CPU.value}, {AugmentationType.TORCHV_GPU.value}, {AugmentationType.KORNIA_GPU.value}"
         )
@@ -249,17 +273,20 @@ def do_train(cfg, model, resume=False):
 
     # checkpointer
     checkpointer = FSDPCheckpointer(
-        model, cfg.train.output_dir, optimizer=optimizer, save_to_disk=True
+        model,
+        cfg.train.output_dir,
+        optimizer=optimizer,
+        save_to_disk=True,
     )
 
-    print("cfg.MODEL.WEIGHTS", cfg.MODEL.WEIGHTS, "resume", resume)
+    print(
+        "cfg.MODEL.WEIGHTS",
+        cfg.MODEL.WEIGHTS,
+        "resume",
+        resume,
+    )
     if os.path.isfile(cfg.MODEL.WEIGHTS):
-        start_iter = (
-            checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=resume).get(
-                "iteration", -1
-            )
-            + 1
-        )
+        start_iter = checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=resume).get("iteration", -1) + 1
     else:
         start_iter = 0
 
@@ -279,19 +306,16 @@ def do_train(cfg, model, resume=False):
     n_tokens = (img_size // patch_size) ** 2
 
     mask_generator = MaskingGenerator(
-        input_size=(img_size // patch_size, img_size // patch_size),
+        input_size=(
+            img_size // patch_size,
+            img_size // patch_size,
+        ),
         max_num_patches=0.5 * img_size // patch_size * img_size // patch_size,
     )
     do_multi_channel = model.student.backbone.in_chans > 3
-    data_transform_cpu, data_transform_gpu = select_augmentations(
-        cfg, do_multi_channel=do_multi_channel
-    )
-    collate_fn_cpu, collate_fn_gpu = select_collate_fn(
-        cfg, n_tokens, mask_generator, inputs_dtype
-    )
-    if (
-        cfg.train.use_ch_patch_embed
-    ):  # use normal num tokens for mask, and multiply by in_chans for the rest
+    data_transform_cpu, data_transform_gpu = select_augmentations(cfg, do_multi_channel=do_multi_channel)
+    collate_fn_cpu, collate_fn_gpu = select_collate_fn(cfg, n_tokens, mask_generator, inputs_dtype)
+    if cfg.crops.use_ch_patch_embed:  # use normal num tokens for mask, and multiply by in_chans for the rest
         n_tokens *= model.student.backbone.in_chans
     print(f"Number of tokens {n_tokens}")
 
@@ -325,13 +349,18 @@ def do_train(cfg, model, resume=False):
     logger.info("Starting training from iteration {}".format(start_iter))
     metrics_file = os.path.join(cfg.train.output_dir, "training_metrics.json")
     metric_logger = MetricLogger(
-        delimiter="  ", output_file=metrics_file, verbose=distributed.is_main_process()
+        delimiter="  ",
+        output_file=metrics_file,
+        verbose=distributed.is_main_process(),
     )
     header = "Training"
 
     if cfg.train.do_profiling:
         print("------- STARTING PROFILER -------")
-        activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
+        activities = [
+            ProfilerActivity.CPU,
+            ProfilerActivity.CUDA,
+        ]
         profiler_dir = os.path.join(cfg.train.output_dir, "profiler")
         os.makedirs(profiler_dir, exist_ok=True)
         profiler = torch.profiler.profile(
@@ -350,10 +379,7 @@ def do_train(cfg, model, resume=False):
     ):
         if cfg.train.do_profiling:
             profiler.step()
-        if (
-            data_transform_gpu is not None
-            or cfg.train.augmentations == AugmentationType.KORNIA_CPU.value
-        ):
+        if data_transform_gpu is not None or cfg.train.augmentations == AugmentationType.KORNIA_CPU.value:
             # current_device_nb = model.student.backbone.device
             if isinstance(data, list):
                 data = data[0]
@@ -363,19 +389,10 @@ def do_train(cfg, model, resume=False):
                 # collate_fn collates crops and computes masks tensors
                 data = collate_fn_gpu(data)
 
-            data = {
-                k: (
-                    v.to(device=f"cuda:{torch.cuda.current_device()}")
-                    if torch.is_tensor(v) and not v.is_cuda
-                    else v
-                )
-                for k, v in data.items()
-            }
+            data = utils.data_to_cuda(data)
 
         current_batch_size = data["collated_global_crops"].shape[0] / 2
-        tot_nb_seen_samples += (
-            current_batch_size * distributed.get_global_size()
-        )  # to get effective batch size
+        tot_nb_seen_samples += current_batch_size * distributed.get_global_size()  # to get effective batch size
         if iteration > max_iter:
             return
 
@@ -412,9 +429,7 @@ def do_train(cfg, model, resume=False):
         if distributed.get_global_size() > 1:
             for v in loss_dict.values():
                 torch.distributed.all_reduce(v)
-        loss_dict_reduced = {
-            k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()
-        }
+        loss_dict_reduced = {k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()}
 
         if math.isnan(sum(loss_dict_reduced.values())):
             logger.info("NaN detected")
@@ -446,10 +461,7 @@ def do_train(cfg, model, resume=False):
 
         # checkpointing and testing
 
-        if (
-            cfg.evaluation.eval_period_iterations > 0
-            and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
-        ):
+        if cfg.evaluation.eval_period_iterations > 0 and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0:
             do_test(cfg, model, f"training_{iteration}")
             torch.cuda.synchronize()
 

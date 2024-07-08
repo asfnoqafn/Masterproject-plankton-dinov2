@@ -19,7 +19,9 @@ def mibi_breast_naming_conv(fov_path):
     fov_name = os.path.basename(fov_path)
     deepcell_output_dir = os.path.join(base_dir_, "segmentation_data")
     return os.path.join(
-        deepcell_output_dir, "deepcell_output", fov_name + "_feature_0.tif"
+        deepcell_output_dir,
+        "deepcell_output",
+        fov_name + "_feature_0.tif",
     )
 
 
@@ -27,18 +29,27 @@ def mibi_decidua_naming_conv(fov_path):
     base_dir_ = os.path.join(BASE_DIR, "mibi_decidua")
     fov_name = os.path.basename(fov_path)
     deepcell_output_dir = os.path.join(base_dir_, "segmentation_data")
-    return os.path.join(deepcell_output_dir, fov_name + "_segmentation_labels.tiff")
+    return os.path.join(
+        deepcell_output_dir,
+        fov_name + "_segmentation_labels.tiff",
+    )
 
 
 def vectra_colon_naming_conv(fname):
     return os.path.join(
-        BASE_DIR, "vectra_colon", "segmentation", fname + "feature_0.ome.tif"
+        BASE_DIR,
+        "vectra_colon",
+        "segmentation",
+        fname + "feature_0.ome.tif",
     )
 
 
 def vectra_pancreas_naming_conv(fname):
     return os.path.join(
-        BASE_DIR, "vectra_pancreas", "segmentation", fname + "feature_0.ome.tif"
+        BASE_DIR,
+        "vectra_pancreas",
+        "segmentation",
+        fname + "feature_0.ome.tif",
     )
 
 
@@ -228,7 +239,11 @@ def normalize(x):
 
 
 def change_lmdb_envs(
-    dataset_lmdb_dir, file_idx, env_imgs=None, env_labels=None, env_metadata=None
+    dataset_lmdb_dir,
+    file_idx,
+    env_imgs=None,
+    env_labels=None,
+    env_metadata=None,
 ):
     if env_imgs is not None:
         env_imgs.close()
@@ -237,9 +252,7 @@ def change_lmdb_envs(
 
     lmdb_imgs_path = os.path.join(dataset_lmdb_dir, str(file_idx) + "-TRAIN_images")
     lmdb_labels_path = os.path.join(dataset_lmdb_dir, str(file_idx) + "-TRAIN_labels")
-    lmdb_metadata_path = os.path.join(
-        dataset_lmdb_dir, str(file_idx) + "-TRAIN_metadata"
-    )
+    lmdb_metadata_path = os.path.join(dataset_lmdb_dir, str(file_idx) + "-TRAIN_metadata")
     os.makedirs(lmdb_imgs_path, exist_ok=True)
     os.makedirs(lmdb_labels_path, exist_ok=True)
     os.makedirs(lmdb_metadata_path, exist_ok=True)
@@ -277,17 +290,26 @@ def main(args):
         print(f"PROCESSING DATASET {dataset} stored in {path}...")
         dataset_lmdb_dir = os.path.join(base_lmdb_dir, dataset)
         file_idx = 0
-        env_imgs, env_labels, env_metadata = None, None, None
+        env_imgs, env_labels, env_metadata = (
+            None,
+            None,
+            None,
+        )
 
         fovs = os.listdir(path)[start_fov_idx:end_fov_idx]
         print(f"TOTAL #FOVS {len(fovs)} FOR DATASET {dataset}")
 
-        lmdb_imgs_path = os.path.join(dataset_lmdb_dir, str(file_idx) + "-TRAIN_images")
+        lmdb_imgs_path = os.path.join(
+            dataset_lmdb_dir,
+            str(file_idx) + "-TRAIN_images",
+        )
         lmdb_labels_path = os.path.join(
-            dataset_lmdb_dir, str(file_idx) + "-TRAIN_labels"
+            dataset_lmdb_dir,
+            str(file_idx) + "-TRAIN_labels",
         )
         lmdb_metadata_path = os.path.join(
-            dataset_lmdb_dir, str(file_idx) + "-TRAIN_metadata"
+            dataset_lmdb_dir,
+            str(file_idx) + "-TRAIN_metadata",
         )
         os.makedirs(lmdb_imgs_path, exist_ok=True)
         os.makedirs(lmdb_labels_path, exist_ok=True)
@@ -315,9 +337,7 @@ def main(args):
                 fov_path = os.path.join(path, fov)
                 channels = selected_channels[dataset]
                 channel_names = [channel.split(".")[0] for channel in channels]
-                channel_paths = [
-                    os.path.join(fov_path, channel) for channel in channels
-                ]
+                channel_paths = [os.path.join(fov_path, channel) for channel in channels]
 
                 # get metadata
                 metadata_dict["fov"] = fov
@@ -328,19 +348,14 @@ def main(args):
                 segmentation_path = naming_convention(fov)
                 # segmentation mask has to be uint16 because of values of to ~3000 segments
                 # Thus, cannot be jpeg compressed
-                segmentation_mask = (
-                    iio.imread(segmentation_path).squeeze().astype(np.uint16)
-                )
+                segmentation_mask = iio.imread(segmentation_path).squeeze().astype(np.uint16)
 
                 for ch_idx, channel_path in enumerate(channel_paths):
                     channel_img = load_channel_img(channel_path)
                     # do crops
                     x_crop_idx = y_crop_idx = 0
                     x_reached_end = y_reached_end = False
-                    while (
-                        patch_size * x_crop_idx < channel_img.shape[0]
-                        and not x_reached_end
-                    ):
+                    while patch_size * x_crop_idx < channel_img.shape[0] and not x_reached_end:
                         x_0 = patch_size * x_crop_idx
                         x_1 = patch_size * (x_crop_idx + 1)
                         if channel_img.shape[0] - x_1 < patch_size / 2:
@@ -348,10 +363,7 @@ def main(args):
                             x_1 = -1
                             x_reached_end = True
 
-                        while (
-                            patch_size * y_crop_idx < channel_img.shape[1]
-                            and not y_reached_end
-                        ):
+                        while patch_size * y_crop_idx < channel_img.shape[1] and not y_reached_end:
                             y_0 = patch_size * y_crop_idx
                             y_1 = patch_size * (y_crop_idx + 1)
                             if channel_img.shape[1] - y_1 < patch_size / 2:
@@ -361,17 +373,26 @@ def main(args):
                             crop = channel_img[x_0:x_1, y_0:y_1]
                             crop_mask = segmentation_mask[x_0:x_1, y_0:y_1]
                             crop_jpg_encoded = iio.imwrite(
-                                "<bytes>", crop, extension=".jpeg"
+                                "<bytes>",
+                                crop,
+                                extension=".jpeg",
                             )
                             patch_idx = f"{img_idx}_p{x_crop_idx + y_crop_idx}"
-                            crop_ch_idx_bytes = f"{patch_idx}_ch{ch_idx}".encode(
-                                "utf-8"
+                            crop_ch_idx_bytes = f"{patch_idx}_ch{ch_idx}".encode("utf-8")
+                            txn_imgs.put(
+                                crop_ch_idx_bytes,
+                                crop_jpg_encoded,
                             )
-                            txn_imgs.put(crop_ch_idx_bytes, crop_jpg_encoded)
 
                             patch_idx_bytes = patch_idx.encode("utf-8")
-                            txn_labels.put(patch_idx_bytes, crop_mask.tobytes())
-                            txn_meta.put(patch_idx_bytes, metadata_bytes)
+                            txn_labels.put(
+                                patch_idx_bytes,
+                                crop_mask.tobytes(),
+                            )
+                            txn_meta.put(
+                                patch_idx_bytes,
+                                metadata_bytes,
+                            )
 
                             y_crop_idx += 1
                         x_crop_idx += 1
@@ -440,7 +461,10 @@ def get_args_parser():
         default=False,
     )
     parser.add_argument(
-        "--base_lmdb_dir_name", type=str, help="Base lmdb dir name", default="_lmdb"
+        "--base_lmdb_dir_name",
+        type=str,
+        help="Base lmdb dir name",
+        default="_lmdb",
     )
 
     return parser

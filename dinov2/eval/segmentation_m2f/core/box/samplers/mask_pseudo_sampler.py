@@ -38,18 +38,15 @@ class MaskPseudoSampler(BaseSampler):
         Returns:
             :obj:`SamplingResult`: sampler results
         """
-        pos_inds = (
-            torch.nonzero(assign_result.gt_inds > 0, as_tuple=False)
-            .squeeze(-1)
-            .unique()
-        )
-        neg_inds = (
-            torch.nonzero(assign_result.gt_inds == 0, as_tuple=False)
-            .squeeze(-1)
-            .unique()
-        )
+        pos_inds = torch.nonzero(assign_result.gt_inds > 0, as_tuple=False).squeeze(-1).unique()
+        neg_inds = torch.nonzero(assign_result.gt_inds == 0, as_tuple=False).squeeze(-1).unique()
         gt_flags = masks.new_zeros(masks.shape[0], dtype=torch.uint8)
         sampling_result = MaskSamplingResult(
-            pos_inds, neg_inds, masks, gt_masks, assign_result, gt_flags
+            pos_inds,
+            neg_inds,
+            masks,
+            gt_masks,
+            assign_result,
+            gt_flags,
         )
         return sampling_result

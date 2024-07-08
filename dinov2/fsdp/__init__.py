@@ -9,10 +9,18 @@ from typing import Any
 
 import torch
 from fvcore.common.checkpoint import Checkpointer
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp import MixedPrecision, ShardingStrategy, StateDictType
+from torch.distributed.fsdp import (
+    FullyShardedDataParallel as FSDP,
+)
+from torch.distributed.fsdp import (
+    MixedPrecision,
+    ShardingStrategy,
+    StateDictType,
+)
 from torch.distributed.fsdp._runtime_utils import _reshard
-from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
+from torch.distributed.fsdp.sharded_grad_scaler import (
+    ShardedGradScaler,
+)
 from torch.distributed.fsdp.wrap import ModuleWrapPolicy
 
 import dinov2.distributed as distributed
@@ -101,22 +109,10 @@ class FSDPCheckpointer(Checkpointer):
         # check if all BlockChunks are FSDP and Sharded
         if (
             distributed.get_global_size() > 1
-            and all(
-                [
-                    is_sharded_fsdp(self.model.student[k])
-                    for k in self.model.student.keys()
-                ]
-            )
-            and all(
-                [
-                    is_sharded_fsdp(self.model.teacher[k])
-                    for k in self.model.teacher.keys()
-                ]
-            )
+            and all([is_sharded_fsdp(self.model.student[k]) for k in self.model.student.keys()])
+            and all([is_sharded_fsdp(self.model.teacher[k]) for k in self.model.teacher.keys()])
         ):
-            fsdp_cfg = torch.distributed.fsdp.FullStateDictConfig(
-                offload_to_cpu=True, rank0_only=True
-            )
+            fsdp_cfg = torch.distributed.fsdp.FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
         else:
             fsdp_cfg = None
 
@@ -133,7 +129,11 @@ class FSDPCheckpointer(Checkpointer):
         assert os.path.basename(save_file) == basename, basename
         self.logger.info("Saving checkpoint to {}".format(save_file))
         with self.path_manager.open(save_file, "wb") as f:
-            print("Saving data with keys: ", data.keys(), flush=True)
+            print(
+                "Saving data with keys: ",
+                data.keys(),
+                flush=True,
+            )
             torch.save(data, f)
         self.tag_last_checkpoint(basename)
 

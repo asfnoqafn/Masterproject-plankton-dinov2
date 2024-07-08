@@ -53,9 +53,7 @@ def _make_dinov2_model(
     model = vits.__dict__[arch_name](**vit_kwargs)
 
     if pretrained:
-        model_full_name = _make_dinov2_model_name(
-            arch_name, patch_size, num_register_tokens
-        )
+        model_full_name = _make_dinov2_model_name(arch_name, patch_size, num_register_tokens)
         url = _DINOV2_BASE_URL + f"/{model_base_name}/{model_full_name}_pretrain.pth"
         state_dict = torch.hub.load_state_dict_from_url(url, map_location="cpu")
         if "use_ch_patch_embed" in kwargs.keys() and kwargs["use_ch_patch_embed"]:
@@ -66,40 +64,61 @@ def _make_dinov2_model(
 
 
 def dinov2_vits14(
-    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.LVD142M, **kwargs
+    *,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.LVD142M,
+    **kwargs,
 ):
     """
     DINOv2 ViT-S/14 model (optionally) pretrained on the LVD-142M dataset.
     """
     return _make_dinov2_model(
-        arch_name="vit_small", pretrained=pretrained, weights=weights, **kwargs
+        arch_name="vit_small",
+        pretrained=pretrained,
+        weights=weights,
+        **kwargs,
     )
 
 
 def dinov2_vitb14(
-    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.LVD142M, **kwargs
+    *,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.LVD142M,
+    **kwargs,
 ):
     """
     DINOv2 ViT-B/14 model (optionally) pretrained on the LVD-142M dataset.
     """
     return _make_dinov2_model(
-        arch_name="vit_base", pretrained=pretrained, weights=weights, **kwargs
+        arch_name="vit_base",
+        pretrained=pretrained,
+        weights=weights,
+        **kwargs,
     )
 
 
 def dinov2_vitl14(
-    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.LVD142M, **kwargs
+    *,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.LVD142M,
+    **kwargs,
 ):
     """
     DINOv2 ViT-L/14 model (optionally) pretrained on the LVD-142M dataset.
     """
     return _make_dinov2_model(
-        arch_name="vit_large", pretrained=pretrained, weights=weights, **kwargs
+        arch_name="vit_large",
+        pretrained=pretrained,
+        weights=weights,
+        **kwargs,
     )
 
 
 def dinov2_vitg14(
-    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.LVD142M, **kwargs
+    *,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.LVD142M,
+    **kwargs,
 ):
     """
     DINOv2 ViT-g/14 model (optionally) pretrained on the LVD-142M dataset.
@@ -114,7 +133,10 @@ def dinov2_vitg14(
 
 
 def dinov2_vits14_reg(
-    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.LVD142M, **kwargs
+    *,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.LVD142M,
+    **kwargs,
 ):
     """
     DINOv2 ViT-S/14 model with registers (optionally) pretrained on the LVD-142M dataset.
@@ -131,7 +153,10 @@ def dinov2_vits14_reg(
 
 
 def dinov2_vitb14_reg(
-    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.LVD142M, **kwargs
+    *,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.LVD142M,
+    **kwargs,
 ):
     """
     DINOv2 ViT-B/14 model with registers (optionally) pretrained on the LVD-142M dataset.
@@ -148,7 +173,10 @@ def dinov2_vitb14_reg(
 
 
 def dinov2_vitl14_reg(
-    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.LVD142M, **kwargs
+    *,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.LVD142M,
+    **kwargs,
 ):
     """
     DINOv2 ViT-L/14 model with registers (optionally) pretrained on the LVD-142M dataset.
@@ -165,7 +193,10 @@ def dinov2_vitl14_reg(
 
 
 def dinov2_vitg14_reg(
-    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.LVD142M, **kwargs
+    *,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.LVD142M,
+    **kwargs,
 ):
     """
     DINOv2 ViT-g/14 model with registers (optionally) pretrained on the LVD-142M dataset.

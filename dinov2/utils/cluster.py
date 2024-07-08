@@ -37,7 +37,9 @@ def get_cluster_type(
     return cluster_type
 
 
-def get_checkpoint_path(cluster_type: Optional[ClusterType] = None) -> Optional[Path]:
+def get_checkpoint_path(
+    cluster_type: Optional[ClusterType] = None,
+) -> Optional[Path]:
     cluster_type = get_cluster_type(cluster_type)
     if cluster_type is None:
         return None
@@ -62,7 +64,9 @@ def get_user_checkpoint_path(
     return checkpoint_path / username
 
 
-def get_slurm_partition(cluster_type: Optional[ClusterType] = None) -> Optional[str]:
+def get_slurm_partition(
+    cluster_type: Optional[ClusterType] = None,
+) -> Optional[str]:
     cluster_type = get_cluster_type(cluster_type)
     if cluster_type is None:
         return None

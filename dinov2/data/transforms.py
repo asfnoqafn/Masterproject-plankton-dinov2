@@ -16,7 +16,11 @@ class KorniaGaussianBlur(augmentation.RandomGaussianBlur):
     """
 
     def __init__(
-        self, *, p: float = 0.5, radius_min: float = 0.1, radius_max: float = 2.0
+        self,
+        *,
+        p: float = 0.5,
+        radius_min: float = 0.1,
+        radius_max: float = 2.0,
     ):
         super().__init__(
             kernel_size=9,
@@ -32,7 +36,11 @@ class GaussianBlur(v2.RandomApply):
     """
 
     def __init__(
-        self, *, p: float = 0.5, radius_min: float = 0.1, radius_max: float = 2.0
+        self,
+        *,
+        p: float = 0.5,
+        radius_min: float = 0.1,
+        radius_max: float = 2.0,
     ):
         # NOTE: torchvision is applying 1 - probability to return the original image
         keep_p = 1 - p
@@ -85,7 +93,11 @@ def make_classification_train_transform(
     std: Sequence[float] = WHOI_DEFAULT_STD,
 ):
     transforms_list = [
-        v2.RandomResizedCrop(crop_size, interpolation=interpolation, antialias=True)
+        v2.RandomResizedCrop(
+            crop_size,
+            interpolation=interpolation,
+            antialias=True,
+        )
     ]
     if hflip_prob > 0.0:
         transforms_list.append(v2.RandomHorizontalFlip(hflip_prob))
@@ -109,7 +121,11 @@ def make_classification_eval_transform(
     std: Sequence[float] = WHOI_DEFAULT_STD,
 ) -> v2.Compose:
     transforms_list = [
-        v2.Resize(resize_size, interpolation=interpolation, antialias=True),
+        v2.Resize(
+            resize_size,
+            interpolation=interpolation,
+            antialias=True,
+        ),
         v2.CenterCrop(crop_size),
         MaybeToTensor(),
         make_normalize_transform(mean=mean, std=std),

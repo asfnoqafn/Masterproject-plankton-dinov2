@@ -28,7 +28,10 @@ class NPYDataset(ImageNet):
         return self._entries[index]["image"]
 
     def get_target(self, index: int) -> Optional[Target]:
-        if self.split in [_SplitLMDBDataset.TEST, _SplitLMDBDataset.ALL]:
+        if self.split in [
+            _SplitLMDBDataset.TEST,
+            _SplitLMDBDataset.ALL,
+        ]:
             return None
         else:
             if self.with_targets:
@@ -38,14 +41,15 @@ class NPYDataset(ImageNet):
 
     @property
     def _entries_path(self) -> str:
-        if self.root.endswith("TRAIN") or self.root.endswith(
-            "VAL"
-        ):  # if we have a single file
+        if self.root.endswith("TRAIN") or self.root.endswith("VAL"):  # if we have a single file
             return self.root
         elif self._split.value.upper() == "ALL":
             return self.root
         else:
-            return os.path.join(self.root, f"*-{self._split.value.upper()}_*")
+            return os.path.join(
+                self.root,
+                f"*-{self._split.value.upper()}_*",
+            )
 
     def _get_extra_full_path(self, extra_path: str) -> str:
         if not os.path.isdir(self.root):
@@ -65,10 +69,22 @@ class NPYDataset(ImageNet):
         # fold1/masks/fold1/masks.npy
         # fold1/images/fold1/images.npy
 
-        mask_path = os.path.join(extra_path, "fold*", "masks", "fold*", "masks.npy")
+        mask_path = os.path.join(
+            extra_path,
+            "fold*",
+            "masks",
+            "fold*",
+            "masks.npy",
+        )
         file_list_labels = sorted(glob.glob(mask_path))
 
-        image_path = os.path.join(extra_path, "fold*", "images", "fold*", "images.npy")
+        image_path = os.path.join(
+            extra_path,
+            "fold*",
+            "images",
+            "fold*",
+            "images.npy",
+        )
         file_list_imgs = sorted(glob.glob(image_path))
 
         print(f"Datasets labels file list: {file_list_labels}")

@@ -25,7 +25,14 @@ class _Split(Enum):
     ALL = "all"
 
 
-IMG_SUFFIXES = (".jpg", ".JPG", ".jpeg", ".JPEG", ".png", ".PNG")
+IMG_SUFFIXES = (
+    ".jpg",
+    ".JPG",
+    ".jpeg",
+    ".JPEG",
+    ".png",
+    ".PNG",
+)
 
 
 def normalize(x):
@@ -55,7 +62,8 @@ def create_lmdb_txn(
     map_size=1e10,
 ):
     lmdb_path = os.path.join(
-        dataset_lmdb_dir, f"{start_img_idx}:{end_img_idx}-{split.value}_{name.value}"
+        dataset_lmdb_dir,
+        f"{start_img_idx}:{end_img_idx}-{split.value}_{name.value}",
     )
     os.makedirs(lmdb_path, exist_ok=True)
     env = lmdb.open(lmdb_path, map_size=map_size)
@@ -77,21 +85,26 @@ def main(args):
     base_lmdb_dir = BASE_DIR + args.lmdb_dir_name
     os.makedirs(base_lmdb_dir, exist_ok=True)
 
-    txn_imgs, txn_labels, txn_meta, env_imgs, env_labels, env_metadata = (
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
+    (
+        txn_imgs,
+        txn_labels,
+        txn_meta,
+        env_imgs,
+        env_labels,
+        env_metadata,
+    ) = (
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
     )
 
-    dataset_name = args.dataset_path.split('/')[-1]
+    dataset_name = args.dataset_path.split("/")[-1]
     dataset_lmdb_dir = os.path.join(base_lmdb_dir, dataset_name)
     imgs = glob.glob(os.path.join(args.dataset_path, "*"))[start_img_idx:end_img_idx]
-    imgs = [
-        img for img in imgs if img.endswith(IMG_SUFFIXES) and os.path.isfile(img)
-    ]
+    imgs = [img for img in imgs if img.endswith(IMG_SUFFIXES) and os.path.isfile(img)]
     imgs = sorted(imgs)
 
     print(f"TOTAL #imgs {len(imgs)}")
@@ -126,9 +139,7 @@ def main(args):
         )
 
     for img_idx, img_path in tqdm(enumerate(sorted(imgs)), total=len(imgs)):
-        img_name_cleaned = "".join(
-            e for e in str(img_path.split('/')[-1]) if e.isalnum() or e == "_"
-        )
+        img_name_cleaned = "".join(e for e in str(img_path.split("/")[-1]) if e.isalnum() or e == "_")
         do_print = img_idx % 100000 == 0
         if do_print:
             print(f'idx: {img_idx}/{len(imgs)}, img: "{img_name_cleaned}"')
@@ -191,7 +202,10 @@ def get_args_parser():
         default=-1,
     )
     parser.add_argument(
-        "--lmdb_dir_name", type=str, help="Base lmdb dir name", default="_lmdb"
+        "--lmdb_dir_name",
+        type=str,
+        help="Base lmdb dir name",
+        default="_lmdb",
     )
     parser.add_argument(
         "--with_labels",

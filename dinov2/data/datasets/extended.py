@@ -26,16 +26,11 @@ class ExtendedVisionDataset(VisionDataset):
     def get_target(self, index: int) -> Any:
         raise NotImplementedError
 
-    def __getitem__(
-        self, index: int
-    ) -> Union[Tuple[Any, Any], torch.Tensor, Image.Image]:
+    def __getitem__(self, index: int) -> Union[Tuple[Any, Any], torch.Tensor, Image.Image]:
         num_channels = 3  # base number
         img_bytes = self.get_image_data(index)
         if isinstance(img_bytes, list):  # image
-            image = [
-                torch.from_numpy(iio.imread(ch_bytes, index=None))
-                for ch_bytes in img_bytes
-            ]
+            image = [torch.from_numpy(iio.imread(ch_bytes, index=None)) for ch_bytes in img_bytes]
             image = torch.stack(image, dim=0)
             image = (image / 255.0).to(torch.float32)
         else:
@@ -51,7 +46,10 @@ class ExtendedVisionDataset(VisionDataset):
                 image = (image / 255.0).to(torch.float32)
             except Exception as e:
                 print(e)
-                print("Error: torch.frombuffer failed, trying PIL...", file=sys.stderr)
+                print(
+                    "Error: torch.frombuffer failed, trying PIL...",
+                    file=sys.stderr,
+                )
                 try:
                     image = ImageDataDecoder(img_bytes).decode()
                 except Exception as e:

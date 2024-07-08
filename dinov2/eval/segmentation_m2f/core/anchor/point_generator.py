@@ -48,7 +48,11 @@ class MlvlPointGenerator:
             return yy.reshape(-1), xx.reshape(-1)
 
     def grid_priors(
-        self, featmap_sizes, dtype=torch.float32, device="cuda", with_stride=False
+        self,
+        featmap_sizes,
+        dtype=torch.float32,
+        device="cuda",
+        with_stride=False,
     ):
         """Generate grid points of multiple feature levels.
 
@@ -136,7 +140,10 @@ class MlvlPointGenerator:
             # use `shape[0]` instead of `len(shift_xx)` for ONNX export
             stride_w = shift_xx.new_full((shift_xx.shape[0],), stride_w).to(dtype)
             stride_h = shift_xx.new_full((shift_yy.shape[0],), stride_h).to(dtype)
-            shifts = torch.stack([shift_xx, shift_yy, stride_w, stride_h], dim=-1)
+            shifts = torch.stack(
+                [shift_xx, shift_yy, stride_w, stride_h],
+                dim=-1,
+            )
         all_points = shifts.to(device)
         return all_points
 
@@ -163,7 +170,9 @@ class MlvlPointGenerator:
             valid_feat_h = min(int(np.ceil(h / point_stride[1])), feat_h)
             valid_feat_w = min(int(np.ceil(w / point_stride[0])), feat_w)
             flags = self.single_level_valid_flags(
-                (feat_h, feat_w), (valid_feat_h, valid_feat_w), device=device
+                (feat_h, feat_w),
+                (valid_feat_h, valid_feat_w),
+                device=device,
             )
             multi_level_flags.append(flags)
         return multi_level_flags
@@ -195,7 +204,12 @@ class MlvlPointGenerator:
         return valid
 
     def sparse_priors(
-        self, prior_idxs, featmap_size, level_idx, dtype=torch.float32, device="cuda"
+        self,
+        prior_idxs,
+        featmap_size,
+        level_idx,
+        dtype=torch.float32,
+        device="cuda",
     ):
         """Generate sparse points according to the ``prior_idxs``.
 

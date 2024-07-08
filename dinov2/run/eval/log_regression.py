@@ -7,7 +7,9 @@ import logging
 import os
 import sys
 
-from dinov2.eval.log_regression import get_args_parser as get_log_regression_args_parser
+from dinov2.eval.log_regression import (
+    get_args_parser as get_log_regression_args_parser,
+)
 from dinov2.logging import setup_logging
 from dinov2.run.submit import get_args_parser, submit_jobs
 
@@ -19,7 +21,9 @@ class Evaluator:
         self.args = args
 
     def __call__(self):
-        from dinov2.eval.log_regression import main as log_regression_main
+        from dinov2.eval.log_regression import (
+            main as log_regression_main,
+        )
 
         self._setup_args()
         log_regression_main(self.args)
@@ -36,9 +40,7 @@ class Evaluator:
 
         job_env = submitit.JobEnvironment()
         self.args.output_dir = self.args.output_dir.replace("%j", str(job_env.job_id))
-        logger.info(
-            f"Process group: {job_env.num_tasks} tasks, rank: {job_env.global_rank}"
-        )
+        logger.info(f"Process group: {job_env.num_tasks} tasks, rank: {job_env.global_rank}")
         logger.info(f"Args: {self.args}")
 
 

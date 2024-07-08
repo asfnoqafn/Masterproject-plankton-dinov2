@@ -37,7 +37,13 @@ class BaseAssigner(metaclass=ABCMeta):
     """Base assigner that assigns boxes to ground truth boxes."""
 
     @abstractmethod
-    def assign(self, masks, gt_masks, gt_masks_ignore=None, gt_labels=None):
+    def assign(
+        self,
+        masks,
+        gt_masks,
+        gt_masks_ignore=None,
+        gt_labels=None,
+    ):
         """Assign boxes to either a ground truth boxes or a negative boxes."""
         pass
 
@@ -114,10 +120,11 @@ class MaskHungarianAssigner(BaseAssigner):
         Returns:
             :obj:`AssignResult`: The assigned result.
         """
-        assert (
-            gt_masks_ignore is None
-        ), "Only case when gt_masks_ignore is None is supported."
-        num_gts, num_queries = gt_labels.shape[0], cls_pred.shape[0]
+        assert gt_masks_ignore is None, "Only case when gt_masks_ignore is None is supported."
+        num_gts, num_queries = (
+            gt_labels.shape[0],
+            cls_pred.shape[0],
+        )
 
         # 1. assign -1 by default
         assigned_gt_inds = cls_pred.new_full((num_queries,), -1, dtype=torch.long)
@@ -127,7 +134,11 @@ class MaskHungarianAssigner(BaseAssigner):
             if num_gts == 0:
                 # No ground truth, assign all to background
                 assigned_gt_inds[:] = 0
-            return AssignResult(num_gts, assigned_gt_inds, labels=assigned_labels)
+            return AssignResult(
+                num_gts,
+                assigned_gt_inds,
+                labels=assigned_labels,
+            )
 
         # 2. compute the weighted costs
         # classification and maskcost.
@@ -153,9 +164,7 @@ class MaskHungarianAssigner(BaseAssigner):
         # 3. do Hungarian matching on CPU using linear_sum_assignment
         cost = cost.detach().cpu()
         if linear_sum_assignment is None:
-            raise ImportError(
-                'Please run "pip install scipy" ' "to install scipy first."
-            )
+            raise ImportError('Please run "pip install scipy" ' "to install scipy first.")
 
         matched_row_inds, matched_col_inds = linear_sum_assignment(cost)
         matched_row_inds = torch.from_numpy(matched_row_inds).to(cls_pred.device)
@@ -167,4 +176,8 @@ class MaskHungarianAssigner(BaseAssigner):
         # assign foregrounds based on matching results
         assigned_gt_inds[matched_row_inds] = matched_col_inds + 1
         assigned_labels[matched_row_inds] = gt_labels[matched_col_inds]
-        return AssignResult(num_gts, assigned_gt_inds, labels=assigned_labels)
+        return AssignResult(
+            num_gts,
+            assigned_gt_inds,
+            labels=assigned_labels,
+        )

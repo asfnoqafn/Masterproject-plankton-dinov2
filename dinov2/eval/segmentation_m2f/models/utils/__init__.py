@@ -4,8 +4,13 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 from .assigner import MaskHungarianAssigner
-from .point_sample import get_uncertain_point_coords_with_randomness
-from .positional_encoding import LearnedPositionalEncoding, SinePositionalEncoding
+from .point_sample import (
+    get_uncertain_point_coords_with_randomness,
+)
+from .positional_encoding import (
+    LearnedPositionalEncoding,
+    SinePositionalEncoding,
+)
 from .transformer import (
     DetrTransformerDecoder,
     DetrTransformerDecoderLayer,

@@ -8,7 +8,9 @@ import lmdb
 import numpy as np
 
 from dinov2.data.datasets import ImageNet
-from dinov2.data.datasets.extended import ExtendedVisionDataset
+from dinov2.data.datasets.extended import (
+    ExtendedVisionDataset,
+)
 
 _TargetLMDBDataset = int
 
@@ -35,7 +37,10 @@ class PanMDataset(ImageNet):
         return ast.literal_eval(image_data)  # return dict of channel image bytes
 
     def get_target(self, index: int) -> Optional[Target]:
-        if self.split in [_SplitLMDBDataset.TEST, _SplitLMDBDataset.ALL]:
+        if self.split in [
+            _SplitLMDBDataset.TEST,
+            _SplitLMDBDataset.ALL,
+        ]:
             return None
         else:
             entries = self._get_entries()
@@ -51,14 +56,15 @@ class PanMDataset(ImageNet):
 
     @property
     def _entries_path(self) -> str:
-        if self.root.endswith("TRAIN") or self.root.endswith(
-            "VAL"
-        ):  # if we have a single file
+        if self.root.endswith("TRAIN") or self.root.endswith("VAL"):  # if we have a single file
             return self.root + "_*"
         elif self._split.value.upper() == "ALL":
             return os.path.join(self.root, "*")
         else:
-            return os.path.join(self.root, f"*-{self._split.value.upper()}_*")
+            return os.path.join(
+                self.root,
+                f"*-{self._split.value.upper()}_*",
+            )
 
     def _get_extra_full_path(self, extra_path: str) -> str:
         if not os.path.isdir(self.root):
@@ -78,12 +84,8 @@ class PanMDataset(ImageNet):
         file_list = glob.glob(extra_path)
 
         file_list_labels = sorted([el for el in file_list if el.endswith("labels")])
-        file_list_imgs = sorted(
-            [el for el in file_list if el.endswith("imgs") or el.endswith("images")]
-        )
-        file_list_meta = sorted(
-            [el for el in file_list if el.endswith("metadata") or el.endswith("meta")]
-        )
+        file_list_imgs = sorted([el for el in file_list if el.endswith("imgs") or el.endswith("images")])
+        file_list_meta = sorted([el for el in file_list if el.endswith("metadata") or el.endswith("meta")])
         print("Datasets imgs file list: ", file_list_imgs)
         print("Datasets labels file list: ", file_list_labels)
         print("Datasets metadata file list: ", file_list_meta)
@@ -97,9 +99,11 @@ class PanMDataset(ImageNet):
             file_list_labels = file_list_labels[:1]
             file_list_imgs = file_list_imgs[:1]
             file_list_meta = file_list_meta[:1]
-        for lmdb_path_labels, lmdb_path_imgs, lmdb_path_meta in zip(
-            file_list_labels, file_list_imgs, file_list_meta
-        ):
+        for (
+            lmdb_path_labels,
+            lmdb_path_imgs,
+            lmdb_path_meta,
+        ) in zip(file_list_labels, file_list_imgs, file_list_meta):
             lmdb_env_labels = lmdb.open(
                 lmdb_path_labels,
                 readonly=True,
@@ -121,7 +125,11 @@ class PanMDataset(ImageNet):
                 readahead=False,
                 meminit=False,
             )
-            print(lmdb_path_imgs, "lmdb_env_imgs.stat()", lmdb_env_imgs.stat())
+            print(
+                lmdb_path_imgs,
+                "lmdb_env_imgs.stat()",
+                lmdb_env_imgs.stat(),
+            )
 
             lmdb_txn_labels = lmdb_env_labels.begin()
             lmdb_txn_imgs = lmdb_env_imgs.begin()
@@ -131,9 +139,10 @@ class PanMDataset(ImageNet):
 
             label_cursor = lmdb_txn_labels.cursor()
             meta_cursor = lmdb_txn_meta.cursor()
-            for (key_label, value_label), (key_meta, value_meta) in zip(
-                label_cursor, meta_cursor
-            ):
+            for (key_label, value_label), (
+                key_meta,
+                value_meta,
+            ) in zip(label_cursor, meta_cursor):
                 entry = dict()
                 entry["index"] = key_label.decode()
                 value_meta = ast.literal_eval(value_meta.decode())

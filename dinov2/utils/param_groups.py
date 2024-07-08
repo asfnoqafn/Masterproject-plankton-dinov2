@@ -108,7 +108,12 @@ def get_params_groups_with_decay(model, lr_decay_rate=1.0, patch_embed_lr_mult=1
 
 
 def fuse_params_groups(
-    all_params_groups, keys=("lr_multiplier", "wd_multiplier", "is_last_layer")
+    all_params_groups,
+    keys=(
+        "lr_multiplier",
+        "wd_multiplier",
+        "is_last_layer",
+    ),
 ):
     fused_params_groups = defaultdict(lambda: {"params": []})
     for d in all_params_groups:

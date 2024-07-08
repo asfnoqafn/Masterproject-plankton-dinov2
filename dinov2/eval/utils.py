@@ -11,7 +11,11 @@ from torch import nn
 from torchmetrics import MetricCollection
 
 import dinov2.distributed as distributed
-from dinov2.data import DatasetWithEnumeratedTargets, SamplerType, make_data_loader
+from dinov2.data import (
+    DatasetWithEnumeratedTargets,
+    SamplerType,
+    make_data_loader,
+)
 from dinov2.logging import MetricLogger
 
 logger = logging.getLogger("dinov2")
@@ -38,7 +42,9 @@ class ModelWithIntermediateLayers(nn.Module):
         with torch.inference_mode():
             with self.autocast_ctx():
                 features = self.feature_model.get_intermediate_layers(
-                    images, self.n_last_blocks, return_class_token=True
+                    images,
+                    self.n_last_blocks,
+                    return_class_token=True,
                 )
         return features
 
@@ -59,7 +65,10 @@ def evaluate(
     for metric in metrics.values():
         metric = metric.to(device)
 
-    metric_logger = MetricLogger(delimiter="  ", verbose=distributed.is_main_process())
+    metric_logger = MetricLogger(
+        delimiter="  ",
+        verbose=distributed.is_main_process(),
+    )
     header = "Test:"
 
     for samples, targets, *_ in metric_logger.log_every(data_loader, 10, header):
@@ -78,9 +87,7 @@ def evaluate(
     logger.info(f"Averaged stats: {metric_logger}")
 
     stats = {k: metric.compute() for k, metric in metrics.items()}
-    metric_logger_stats = {
-        k: meter.global_avg for k, meter in metric_logger.meters.items()
-    }
+    metric_logger_stats = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
     return metric_logger_stats, stats
 
 
@@ -96,7 +103,13 @@ def all_gather_and_flatten(tensor_rank):
     return tensor_all_ranks.flatten(end_dim=1)
 
 
-def extract_features(model, dataset, batch_size, num_workers, gather_on_cpu=False):
+def extract_features(
+    model,
+    dataset,
+    batch_size,
+    num_workers,
+    gather_on_cpu=False,
+):
     dataset_with_enumerated_targets = DatasetWithEnumeratedTargets(dataset)
     sample_count = len(dataset_with_enumerated_targets)
     data_loader = make_data_loader(
@@ -108,19 +121,21 @@ def extract_features(model, dataset, batch_size, num_workers, gather_on_cpu=Fals
         shuffle=False,
         persistent_workers=True,
     )
-    return extract_features_with_dataloader(
-        model, data_loader, sample_count, gather_on_cpu
-    )
+    return extract_features_with_dataloader(model, data_loader, sample_count, gather_on_cpu)
 
 
 @torch.inference_mode()
-def extract_features_with_dataloader(
-    model, data_loader, sample_count, gather_on_cpu=False
-):
+def extract_features_with_dataloader(model, data_loader, sample_count, gather_on_cpu=False):
     gather_device = torch.device("cpu") if gather_on_cpu else torch.device("cuda")
-    metric_logger = MetricLogger(delimiter="  ", verbose=distributed.is_main_process())
+    metric_logger = MetricLogger(
+        delimiter="  ",
+        verbose=distributed.is_main_process(),
+    )
     features, all_labels = None, None
-    for samples, (index, labels_rank) in metric_logger.log_every(data_loader, 10):
+    for samples, (
+        index,
+        labels_rank,
+    ) in metric_logger.log_every(data_loader, 10):
         samples = samples.cuda(non_blocking=True)
         labels_rank = labels_rank.cuda(non_blocking=True)
         index = index.cuda(non_blocking=True)
@@ -129,11 +144,17 @@ def extract_features_with_dataloader(
         # init storage feature matrix
         if features is None:
             features = torch.zeros(
-                sample_count, features_rank.shape[-1], device=gather_device
+                sample_count,
+                features_rank.shape[-1],
+                device=gather_device,
             )
             labels_shape = list(labels_rank.shape)
             labels_shape[0] = sample_count
-            all_labels = torch.full(labels_shape, fill_value=-1, device=gather_device)
+            all_labels = torch.full(
+                labels_shape,
+                fill_value=-1,
+                device=gather_device,
+            )
             logger.info(f"Storing features into tensor of shape {features.shape}")
 
         # share indexes, features and labels between processes

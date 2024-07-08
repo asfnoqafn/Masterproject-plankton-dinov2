@@ -22,9 +22,7 @@ def apply_scaling_rules_to_cfg(cfg):  # to fix
     if cfg.optim.scaling_rule == "sqrt_wrt_1024":
         base_lr = cfg.optim.base_lr
         cfg.optim.lr = base_lr
-        cfg.optim.lr *= math.sqrt(
-            cfg.train.batch_size_per_gpu * distributed.get_global_size() / 1024.0
-        )
+        cfg.optim.lr *= math.sqrt(cfg.train.batch_size_per_gpu * distributed.get_global_size() / 1024.0)
         logger.info(f"sqrt scaling learning rate; base: {base_lr}, new: {cfg.optim.lr}")
     else:
         raise NotImplementedError
@@ -55,15 +53,18 @@ def default_setup(args, output_dir, do_eval: bool = False):
     global logger
 
     if distributed.is_main_process():
-        setup_logging(args=args, output=output_dir, level=logging.INFO, do_eval=do_eval)
+        setup_logging(
+            args=args,
+            output=output_dir,
+            level=logging.INFO,
+            do_eval=do_eval,
+        )
 
     logger = logging.getLogger("dinov2")
 
     utils.fix_random_seeds(seed + rank)
     logger.info("git:\n  {}\n".format(utils.get_sha()))
-    logger.info(
-        "\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items()))
-    )
+    logger.info("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
 
 
 def setup(args, do_eval: bool = False):
@@ -82,7 +83,11 @@ def setup(args, do_eval: bool = False):
         cfg.train.output_dir = os.path.join(args.output_dir, args.run_name)
 
     os.makedirs(cfg.train.output_dir, exist_ok=True)
-    default_setup(args, output_dir=cfg.train.output_dir, do_eval=do_eval)
+    default_setup(
+        args,
+        output_dir=cfg.train.output_dir,
+        do_eval=do_eval,
+    )
     apply_scaling_rules_to_cfg(cfg)
     if distributed.is_main_process():
         write_config(cfg, cfg.train.output_dir)
