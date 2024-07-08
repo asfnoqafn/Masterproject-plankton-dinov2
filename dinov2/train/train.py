@@ -41,7 +41,9 @@ from dinov2.utils.utils import (
     none_or_str,
 )
 
-torch.backends.cuda.matmul.allow_tf32 = True  # PyTorch 1.12 sets this to False by default
+torch.backends.cuda.matmul.allow_tf32 = (
+    True  # PyTorch 1.12 sets this to False by default
+)
 logger = logging.getLogger("dinov2")
 
 
@@ -145,9 +147,9 @@ def build_schedulers(cfg):
     teacher_temp_schedule = CosineScheduler(**teacher_temp)
     last_layer_lr_schedule = CosineScheduler(**lr)
 
-    last_layer_lr_schedule.schedule[: cfg.optim["freeze_last_layer_epochs"] * OFFICIAL_EPOCH_LENGTH] = (
-        0  # mimicking the original schedules
-    )
+    last_layer_lr_schedule.schedule[
+        : cfg.optim["freeze_last_layer_epochs"] * OFFICIAL_EPOCH_LENGTH
+    ] = 0  # mimicking the original schedules
 
     logger.info("Schedulers ready.")
 
@@ -221,7 +223,9 @@ def select_augmentations(cfg, do_multi_channel=False):
         data_transform_cpu = DataAugmentationDINO(use_kornia=True, **aug_kwargs)
         data_transform_gpu = None
     else:
-        print(f"ERROR: type augmentation type {cfg.train.augmentations} is not supported")
+        print(
+            f"ERROR: type augmentation type {cfg.train.augmentations} is not supported"
+        )
         print(
             f"Supported types are: {AugmentationType.TORCHV_CPU.value}, {AugmentationType.TORCHV_GPU.value}, {AugmentationType.KORNIA_GPU.value}"
         )
@@ -286,7 +290,12 @@ def do_train(cfg, model, resume=False):
         resume,
     )
     if os.path.isfile(cfg.MODEL.WEIGHTS):
-        start_iter = checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=resume).get("iteration", -1) + 1
+        start_iter = (
+            checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=resume).get(
+                "iteration", -1
+            )
+            + 1
+        )
     else:
         start_iter = 0
 
@@ -312,10 +321,16 @@ def do_train(cfg, model, resume=False):
         ),
         max_num_patches=0.5 * img_size // patch_size * img_size // patch_size,
     )
-    do_multi_channel = model.student.backbone.in_chans > 3
-    data_transform_cpu, data_transform_gpu = select_augmentations(cfg, do_multi_channel=do_multi_channel)
-    collate_fn_cpu, collate_fn_gpu = select_collate_fn(cfg, n_tokens, mask_generator, inputs_dtype)
-    if cfg.crops.use_ch_patch_embed:  # use normal num tokens for mask, and multiply by in_chans for the rest
+    do_multi_channel = cfg.crops.use_variable_channels
+    data_transform_cpu, data_transform_gpu = select_augmentations(
+        cfg, do_multi_channel=do_multi_channel
+    )
+    collate_fn_cpu, collate_fn_gpu = select_collate_fn(
+        cfg, n_tokens, mask_generator, inputs_dtype
+    )
+    if (
+        cfg.crops.use_ch_patch_embed
+    ):  # use normal num tokens for mask, and multiply by in_chans for the rest
         n_tokens *= model.student.backbone.in_chans
     print(f"Number of tokens {n_tokens}")
 
@@ -379,7 +394,10 @@ def do_train(cfg, model, resume=False):
     ):
         if cfg.train.do_profiling:
             profiler.step()
-        if data_transform_gpu is not None or cfg.train.augmentations == AugmentationType.KORNIA_CPU.value:
+        if (
+            data_transform_gpu is not None
+            or cfg.train.augmentations == AugmentationType.KORNIA_CPU.value
+        ):
             # current_device_nb = model.student.backbone.device
             if isinstance(data, list):
                 data = data[0]
@@ -392,7 +410,9 @@ def do_train(cfg, model, resume=False):
             data = utils.data_to_cuda(data)
 
         current_batch_size = data["collated_global_crops"].shape[0] / 2
-        tot_nb_seen_samples += current_batch_size * distributed.get_global_size()  # to get effective batch size
+        tot_nb_seen_samples += (
+            current_batch_size * distributed.get_global_size()
+        )  # to get effective batch size
         if iteration > max_iter:
             return
 
@@ -429,7 +449,9 @@ def do_train(cfg, model, resume=False):
         if distributed.get_global_size() > 1:
             for v in loss_dict.values():
                 torch.distributed.all_reduce(v)
-        loss_dict_reduced = {k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()}
+        loss_dict_reduced = {
+            k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()
+        }
 
         if math.isnan(sum(loss_dict_reduced.values())):
             logger.info("NaN detected")
@@ -461,7 +483,10 @@ def do_train(cfg, model, resume=False):
 
         # checkpointing and testing
 
-        if cfg.evaluation.eval_period_iterations > 0 and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0:
+        if (
+            cfg.evaluation.eval_period_iterations > 0
+            and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
+        ):
             do_test(cfg, model, f"training_{iteration}")
             torch.cuda.synchronize()
 
