@@ -92,6 +92,7 @@ def collate_cpu(
         local_patch_pos,
         local_crop_dims,
         num_ch_list,
+        c,
     )
 
 
@@ -195,6 +196,7 @@ def collate_data_and_cast(
             local_patch_pos,
             local_crop_dims,
             num_ch_list,
+            c,
         ) = collate_cpu(
             samples,
             do_free_shapes=do_free_shapes,

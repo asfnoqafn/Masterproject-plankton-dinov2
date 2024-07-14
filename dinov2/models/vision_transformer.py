@@ -395,9 +395,16 @@ class DinoVisionTransformer(nn.Module):
         Returns:
             torch.Tensor: tokens with positional embeddings, shape = (b, n, d)
         """
+        print(
+            "prepare_tokens_with_masks x.shape local_patch_pos local_crop_dims local_crop_len num_ch_list"
+        )
+        print(
+            f"prepare_tokens_with_masks {x.shape} {local_patch_pos} {local_crop_dims} {local_crop_len} {num_ch_list}"
+        )
 
         # newly created pos embed vect also needs padding
         # b c w h OR b c p (n p)
+        # TODO: Problem: is using np p as w h --> aspect ratio severly distorted....
         b, c, w, h = x.size()
         if isinstance(
             self.patch_embed, dict
@@ -406,9 +413,11 @@ class DinoVisionTransformer(nn.Module):
         else:
             x = self.patch_embed(x)  # b n d (=384)
             if num_ch_list is not None:  # means that x = (b c) n d
+                b = len(num_ch_list)
                 x_list = torch.split(x, num_ch_list, dim=0)  # b [c n d]
                 x = pad_sequence(x_list, batch_first=True)  # b c_max n d
                 x = x.reshape(b, -1, x.shape[-1])  # b (c_max n) d
+                print("x.shape", x.shape)
 
         x_dim = x.shape[-1]
 
@@ -471,6 +480,36 @@ class DinoVisionTransformer(nn.Module):
         else:
             x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
             interpolated_pos_embeds = self.interpolate_pos_encoding(x, w, h)
+            if interpolated_pos_embeds.shape != x.shape:
+                c_max = max(num_ch_list)
+                # int((x.shape[1] - 1) / (interpolated_pos_embeds.shape[1] - 1))
+                # -1 to account for cls token
+                # allch_pos_embeds = interpolated_pos_embeds[:, 1:, :].tile(1, c_max, 1)
+                pos_embeds = []
+                for ch_nb in num_ch_list:
+                    allch_pos_embeds = interpolated_pos_embeds[:, 1:, :].tile(
+                        1, ch_nb, 1
+                    )
+                    pos_embed_padding = torch.zeros(
+                        (
+                            1,
+                            (c_max - ch_nb) * (interpolated_pos_embeds.shape[1] - 1),
+                            interpolated_pos_embeds.shape[-1],
+                        ),
+                        device=interpolated_pos_embeds.device,
+                        dtype=interpolated_pos_embeds.dtype,
+                    )
+                    allch_pos_embeds = torch.cat(
+                        (
+                            interpolated_pos_embeds[:, :1, :],
+                            allch_pos_embeds,
+                            pos_embed_padding,
+                        ),
+                        dim=1,
+                    )
+                    pos_embeds.append(allch_pos_embeds)
+
+                interpolated_pos_embeds = torch.cat(pos_embeds, dim=0)
 
         x = x + interpolated_pos_embeds
         if self.register_tokens is not None:
@@ -493,6 +532,7 @@ class DinoVisionTransformer(nn.Module):
         local_crop_len=None,
         local_patch_pos=None,
         local_crop_dims=None,
+        num_ch_list=None,
     ):
         """
         Forward pass for a list of input features with masks.
@@ -517,8 +557,17 @@ class DinoVisionTransformer(nn.Module):
                     local_crop_len=crop_len,
                 )
                 for x, masks, patch_pos, crop_dims, crop_len in zip(
-                    x_list, masks_list, local_patch_pos, local_crop_dims, local_crop_len
+                    x_list,
+                    masks_list,
+                    local_patch_pos,
+                    local_crop_dims,
+                    local_crop_len,
                 )
+            ]
+        elif exists(num_ch_list):
+            x = [
+                self.prepare_tokens_with_masks(x, masks, num_ch_list=ch_list)
+                for x, masks, ch_list in zip(x_list, masks_list, num_ch_list)
             ]
         else:
             x = [
@@ -601,7 +650,7 @@ class DinoVisionTransformer(nn.Module):
             )
 
         # if not list, we only have gc, hence no local_patch_pos or local_crop_dims
-        x = self.prepare_tokens_with_masks(x, masks)
+        x = self.prepare_tokens_with_masks(x, masks, num_ch_list=num_ch_list)
 
         """ # Already done in collate
         if x.shape[1] < self.num_tokens:

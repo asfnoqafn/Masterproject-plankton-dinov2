@@ -50,7 +50,9 @@ class LMDBDataset(ImageNet):
 
     @property
     def _entries_path(self) -> str:
-        if self.root.endswith("TRAIN") or self.root.endswith("VAL"):  # if we have a single file
+        if self.root.endswith("TRAIN") or self.root.endswith(
+            "VAL"
+        ):  # if we have a single file
             return self.root + "_*"
         elif self._split.value.upper() == "ALL":
             return os.path.join(self.root, "*")
@@ -80,7 +82,9 @@ class LMDBDataset(ImageNet):
         file_list_labels = sorted([el for el in file_list if el.endswith("labels")])
         print("Datasets labels file list: ", file_list_labels)
 
-        file_list_imgs = sorted([el for el in file_list if el.endswith("imgs") or el.endswith("images")])
+        file_list_imgs = sorted(
+            [el for el in file_list if el.endswith("imgs") or el.endswith("images")]
+        )
         print("Datasets imgs file list: ", file_list_imgs)
 
         accumulated = []
@@ -147,7 +151,8 @@ class LMDBDataset(ImageNet):
                 accumulated = [el for el in accumulated if el["class_id"] < 5]
             # free up resources
             lmdb_cursor.close()
-            lmdb_env_labels.close()
+            if lmdb_env_labels is not None:
+                lmdb_env_labels.close()
 
         if self.with_targets:
             class_ids = [el["class_id"] for el in accumulated]
