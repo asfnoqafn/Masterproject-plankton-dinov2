@@ -47,6 +47,7 @@ dino:
   head_nlayers: 3
   head_hidden_dim: 2048
   koleo_loss_weight: 0.1
+  head_use_bn: false
 ibot:
   loss_weight: 1.0
   mask_sample_probability: 0.5
@@ -77,7 +78,7 @@ student:
   drop_path_rate: 0
   layerscale: 1.0e-05
   drop_path_uniform: true
-  pretrained_weights: '/fast/AG_Kainmueller/plankton/checkpoints/dinov2_vits14_pretrain.pth'
+  pretrained_weights: ''
   ffn_layer: "mlp"
   block_chunks: 2
   qkv_bias: true
