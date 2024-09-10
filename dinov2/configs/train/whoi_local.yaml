@@ -74,6 +74,7 @@ train:
   do_profiling: false
   use_ch_patch_embed: false
   in_chans: 3
+  do_debug: false
 student:
   arch: vit_small
   patch_size: 14

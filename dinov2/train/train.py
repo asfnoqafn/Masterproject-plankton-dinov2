@@ -409,7 +409,10 @@ def do_train(cfg, model, resume=False):
 
             data = utils.data_to_cuda(data)
 
-        current_batch_size = data["collated_global_crops"].shape[0] / 2
+        if not isinstance(data["collated_global_crops"], torch.Tensor):
+            current_batch_size = data["collated_global_crops"][0].shape[0] / 2
+        else:
+            current_batch_size = data["collated_global_crops"].shape[0] / 2
         tot_nb_seen_samples += (
             current_batch_size * distributed.get_global_size()
         )  # to get effective batch size
@@ -426,7 +429,55 @@ def do_train(cfg, model, resume=False):
 
         # compute losses
         optimizer.zero_grad(set_to_none=True)
-        loss_dict = model.forward_backward(data, teacher_temp=teacher_temp)
+        # TODO iter for each el if data['collated_global_crops'] is a list in forward backward
+        if isinstance(data["collated_global_crops"], torch.Tensor):
+            loss_dict = model.forward_backward(data, teacher_temp=teacher_temp)
+        else:
+            loss_dict = dict()
+            collated_global_crops_list = data["collated_global_crops"]
+            collated_local_crops_list = data["collated_local_crops"]
+            collated_masks = data["collated_masks"]
+            mask_indices_list = data["mask_indices_list"]
+            masks_weight = data["masks_weight"]
+            upperbound = data["upperbound"]
+            n_masked_patches = data["n_masked_patches"]
+            for i in range(len(collated_global_crops_list)):
+                data["collated_global_crops"] = collated_global_crops_list[i]
+                data["collated_local_crops"] = collated_local_crops_list[i]
+                data["collated_masks"] = collated_masks[i]
+                data["mask_indices_list"] = mask_indices_list[i]
+                data["masks_weight"] = masks_weight[i]
+                data["upperbound"] = upperbound[i]
+                data["n_masked_patches"] = n_masked_patches[i]
+                if cfg.train.do_debug:
+                    print(
+                        "data['collated_global_crops'].shape",
+                        data["collated_global_crops"].shape,
+                        "data['collated_local_crops'].shape",
+                        data["collated_local_crops"].shape,
+                        "data['collated_masks'].shape",
+                        data["collated_masks"].shape,
+                        "data['mask_indices_list'].shape",
+                        data["mask_indices_list"].shape,
+                        "data['masks_weight'].shape",
+                        data["masks_weight"].shape,
+                        "data['upperbound'].shape",
+                        data["upperbound"],
+                        "data['n_masked_patches'].shape",
+                        data["n_masked_patches"].shape,
+                    )
+                partial_loss_dict = model.forward_backward(
+                    data,
+                    teacher_temp=teacher_temp,
+                )
+                loss_dict = {
+                    k: v1 + v2
+                    for k, v1, v2 in zip(
+                        loss_dict.keys(),
+                        loss_dict.values(),
+                        partial_loss_dict.values(),
+                    )
+                }
 
         # clip gradients
         if fp16_scaler is not None:
