@@ -285,12 +285,12 @@ def collate_data_and_cast(
             do_free_shapes=do_free_shapes,
         )
 
-    if not do_free_shapes and not use_ch_patch_embed:
+    if not do_free_shapes and not use_variable_channels:
         random.shuffle(
             masks_list
         )  # not possible if global crops of diff sizes in batch
 
-    if not use_ch_patch_embed:
+    if not use_variable_channels:
         # masks are dim: (gc_size // patch_size) ** 2, usually: (16 16)
         collated_masks = torch.stack(masks_list).flatten(
             1
