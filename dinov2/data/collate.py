@@ -295,9 +295,9 @@ def collate_data_and_cast(
         collated_masks = torch.stack(masks_list).flatten(
             1
         )  # ((b nc) 16 16) -> ((b nc) 256)
-    if use_ch_patch_embed and exists(c):
+    if use_ch_patch_embed and not use_variable_channels:
         collated_masks = collated_masks.tile((1, c))  # ((b nc) 256) -> ((b nc) (c 256))
-    elif use_ch_patch_embed:
+    elif use_variable_channels:
         collated_masks = [
             coll_mask_b.tile((1, c)) for c, coll_mask_b in zip(num_ch_list, masks_list)
         ]
