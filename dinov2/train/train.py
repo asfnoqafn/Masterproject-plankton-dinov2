@@ -265,7 +265,6 @@ def do_train(cfg, model, resume=False):
     fp16_scaler = model.fp16_scaler  # for mixed precision training
 
     # setup optimizer
-
     optimizer = build_optimizer(cfg, model.get_params_groups())
     (
         lr_schedule,
@@ -331,9 +330,14 @@ def do_train(cfg, model, resume=False):
     if (
         cfg.crops.use_ch_patch_embed
     ):  # use normal num tokens for mask, and multiply by in_chans for the rest
+        print(
+            f"Number of tokens {n_tokens} * {model.student.backbone.in_chans} = {n_tokens * model.student.backbone.in_chans}"
+        )
         n_tokens *= model.student.backbone.in_chans
-    print(f"Number of tokens {n_tokens}")
-
+    else:
+        print(
+            f"Number of tokens {n_tokens}, in_chans {model.student.backbone.in_chans}"
+        )
     # setup data loader
     dataset = make_dataset(
         dataset_str=cfg.train.dataset_path,
@@ -470,14 +474,17 @@ def do_train(cfg, model, resume=False):
                     data,
                     teacher_temp=teacher_temp,
                 )
-                loss_dict = {
-                    k: v1 + v2
-                    for k, v1, v2 in zip(
-                        loss_dict.keys(),
-                        loss_dict.values(),
-                        partial_loss_dict.values(),
-                    )
-                }
+                if i == 0:
+                    loss_dict = partial_loss_dict
+                else:
+                    loss_dict = {
+                        k: v1 + v2
+                        for k, v1, v2 in zip(
+                            partial_loss_dict.keys(),
+                            loss_dict.values(),
+                            partial_loss_dict.values(),
+                        )
+                    }
 
         # clip gradients
         if fp16_scaler is not None:

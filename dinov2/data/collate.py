@@ -248,7 +248,7 @@ def collate_data_and_cast(
 
             B = len(coll_global_crops)
     N = n_tokens
-    if use_ch_patch_embed and not exists(c):
+    if use_ch_patch_embed and use_variable_channels:
         upperbound_list = []
         masks_list = []
 
@@ -295,9 +295,8 @@ def collate_data_and_cast(
         collated_masks = torch.stack(masks_list).flatten(
             1
         )  # ((b nc) 16 16) -> ((b nc) 256)
-    if use_ch_patch_embed and not use_variable_channels:
-        collated_masks = collated_masks.tile((1, c))  # ((b nc) 256) -> ((b nc) (c 256))
-    elif use_variable_channels:
+
+    if use_variable_channels:
         collated_masks = [
             coll_mask_b.tile((1, c)) for c, coll_mask_b in zip(num_ch_list, masks_list)
         ]
@@ -323,8 +322,10 @@ def collate_data_and_cast(
             )
             for m_idx in mask_indices_list
         ]
+    elif use_ch_patch_embed:
+        collated_masks = collated_masks.tile((1, c))  # ((b nc) 256) -> ((b nc) (c 256))
 
-    else:  # single tensors
+    if not use_variable_channels:  # single tensors
         mask_indices_list = collated_masks.flatten().nonzero().flatten()
 
         masks_weight = (
