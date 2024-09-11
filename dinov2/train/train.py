@@ -453,23 +453,7 @@ def do_train(cfg, model, resume=False):
                 data["masks_weight"] = masks_weight[i]
                 data["upperbound"] = upperbound[i]
                 data["n_masked_patches"] = n_masked_patches[i]
-                if cfg.train.do_debug:
-                    print(
-                        "data['collated_global_crops'].shape",
-                        data["collated_global_crops"].shape,
-                        "data['collated_local_crops'].shape",
-                        data["collated_local_crops"].shape,
-                        "data['collated_masks'].shape",
-                        data["collated_masks"].shape,
-                        "data['mask_indices_list'].shape",
-                        data["mask_indices_list"].shape,
-                        "data['masks_weight'].shape",
-                        data["masks_weight"].shape,
-                        "data['upperbound'].shape",
-                        data["upperbound"],
-                        "data['n_masked_patches'].shape",
-                        data["n_masked_patches"].shape,
-                    )
+
                 partial_loss_dict = model.forward_backward(
                     data,
                     teacher_temp=teacher_temp,
@@ -485,6 +469,9 @@ def do_train(cfg, model, resume=False):
                             partial_loss_dict.values(),
                         )
                     }
+            loss_dict = {
+                k: v / len(collated_global_crops_list) for k, v in loss_dict.items()
+            }
 
         # clip gradients
         if fp16_scaler is not None:
