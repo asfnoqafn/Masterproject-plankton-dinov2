@@ -176,7 +176,7 @@ class SSLMetaArch(nn.Module):
         else:
             loss.backward()
 
-    def forward_backward(self, images, teacher_temp):
+    def forward_teacher_student(self, images, teacher_temp):
         n_global_crops = 2
         n_local_crops = self.cfg.crops.local_crops_number
         do_free_shapes = none_or_str(self.cfg.crops.free_shapes)
@@ -558,11 +558,12 @@ class SSLMetaArch(nn.Module):
             # accumulate loss
             loss_accumulator += self.ibot_loss_weight * ibot_patch_loss
 
+        return loss_accumulator, loss_dict
+
+    def backward(self, loss_accumulator):
         self.backprop_loss(loss_accumulator)
-
+        # TODO: Hangs here with > 1 GPUS, To FIX
         self.fsdp_synchronize_streams()
-
-        return loss_dict
 
     def fsdp_synchronize_streams(self):
         if self.need_to_synchronize_fsdp_streams:

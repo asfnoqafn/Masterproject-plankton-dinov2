@@ -352,10 +352,20 @@ def collate_data_and_cast(
     if use_variable_channels:
         coll_global_crops = [c_gc.to(dtype) for c_gc in coll_global_crops]
         coll_local_crops = [c_lc.to(dtype) for c_lc in coll_local_crops]
+        list_names = [
+            "collated_global_crops",
+            "collated_local_crops",
+            "collated_masks",
+            "mask_indices_list",
+            "masks_weight",
+            "upperbound",
+            "n_masked_patches",
+        ]
     else:
         coll_global_crops = coll_global_crops.to(dtype)
         coll_local_crops = coll_local_crops.to(dtype)
-    return {
+
+    return_dict = {
         "collated_global_crops": coll_global_crops,
         "collated_local_crops": coll_local_crops,
         "collated_masks": collated_masks,
@@ -370,6 +380,14 @@ def collate_data_and_cast(
         "local_crop_dims": local_crop_dims,
         "num_ch_list": num_ch_list,
     }
+
+    if use_variable_channels:  # we have multiple channel nbs
+        for list_name in list_names:
+            for i in range(len(return_dict[list_name])):
+                return_dict[list_name + str(i)] = return_dict[list_name][i]
+            del return_dict[list_name]
+
+    return return_dict
 
 
 """
@@ -400,4 +418,4 @@ def collate_data_and_cast(
         '''
     else:
         attn_mask_lc = attn_mask_gc = None
-    """
+"""

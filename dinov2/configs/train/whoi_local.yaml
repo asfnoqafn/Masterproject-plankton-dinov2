@@ -124,5 +124,6 @@ crops:
   - 0.32
   global_crops_size: 224
   local_crops_size: 98
+  use_variable_channels: false
 evaluation:
   eval_period_iterations: 1250
