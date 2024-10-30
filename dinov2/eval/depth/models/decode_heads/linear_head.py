@@ -29,11 +29,19 @@ class BNHead(DepthBaseDecodeHead):
         # self.bn = nn.SyncBatchNorm(self.in_channels)
         if self.classify:
             self.conv_depth = nn.Conv2d(
-                self.channels, self.n_bins, kernel_size=1, padding=0, stride=1
+                self.channels,
+                self.n_bins,
+                kernel_size=1,
+                padding=0,
+                stride=1,
             )
         else:
             self.conv_depth = nn.Conv2d(
-                self.channels, 1, kernel_size=1, padding=0, stride=1
+                self.channels,
+                1,
+                kernel_size=1,
+                padding=0,
+                stride=1,
             )
 
     def _transform_inputs(self, inputs):

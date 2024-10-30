@@ -14,7 +14,9 @@ _DINOV2_BASE_URL = "https://dl.fbaipublicfiles.com/dinov2"
 
 
 def _make_dinov2_model_name(
-    arch_name: str, patch_size: int, num_register_tokens: int = 0
+    arch_name: str,
+    patch_size: int,
+    num_register_tokens: int = 0,
 ) -> str:
     compact_arch_name = arch_name.replace("_", "")[:4]
     registers_suffix = f"_reg{num_register_tokens}" if num_register_tokens else ""
@@ -35,8 +37,6 @@ class CenterPadding(nn.Module):
 
     @torch.inference_mode()
     def forward(self, x):
-        pads = list(
-            itertools.chain.from_iterable(self._get_pad(m) for m in x.shape[:1:-1])
-        )
+        pads = list(itertools.chain.from_iterable(self._get_pad(m) for m in x.shape[:1:-1]))
         output = F.pad(x, pads)
         return output

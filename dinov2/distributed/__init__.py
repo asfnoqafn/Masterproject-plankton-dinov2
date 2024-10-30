@@ -115,7 +115,10 @@ def _parse_slurm_node_list(s: str) -> List[str]:
     # Extract "hostname", "hostname[1-2,3,4-5]," substrings
     p = re.compile(r"(([^\[]+)(?:\[([^\]]+)\])?),?")
     for m in p.finditer(s):
-        prefix, suffixes = s[m.start(2) : m.end(2)], s[m.start(3) : m.end(3)]
+        prefix, suffixes = (
+            s[m.start(2) : m.end(2)],
+            s[m.start(3) : m.end(3)],
+        )
         for suffix in suffixes.split(","):
             span = suffix.split("-")
             if len(span) == 1:
@@ -131,9 +134,7 @@ def _parse_slurm_node_list(s: str) -> List[str]:
 def _check_env_variable(key: str, new_value: str):
     # Only check for difference with preset environment variables
     if key in os.environ and os.environ[key] != new_value:
-        raise RuntimeError(
-            f"Cannot export environment variables as {key} is already set"
-        )
+        raise RuntimeError(f"Cannot export environment variables as {key} is already set")
 
 
 class _TorchDistributedEnvironment:

@@ -116,16 +116,18 @@ class InfiniteSampler(Sampler):
         generator = torch.Generator().manual_seed(self._seed)
 
         while True:
-            iterable = _generate_randperm_indices(
-                size=self._sample_count, generator=generator
-            )
+            iterable = _generate_randperm_indices(size=self._sample_count, generator=generator)
             yield from itertools.islice(iterable, self._start, None, self._step)
 
 
 # The following function is somewhat equivalent to _new_shuffle_tensor_slice below,
 # but avoids a full in-place random permutation generation.
 def _shuffle_tensor_slice(
-    *, tensor: torch.Tensor, start: int = 0, step: int = 1, generator: torch.Generator
+    *,
+    tensor: torch.Tensor,
+    start: int = 0,
+    step: int = 1,
+    generator: torch.Generator,
 ) -> np.ndarray:
     stop = len(tensor)
     count = stop // step
@@ -137,11 +139,7 @@ def _shuffle_tensor_slice(
     result = np.empty(count, dtype=dtype)
 
     for i in range(count):
-        j = (
-            torch.randint(0, i + 1, size=(1,), generator=generator).item()
-            if i > 0
-            else 0
-        )
+        j = torch.randint(0, i + 1, size=(1,), generator=generator).item() if i > 0 else 0
 
         result[i] = result[j]
         result[j] = tensor[start + i * step].item()
@@ -150,7 +148,11 @@ def _shuffle_tensor_slice(
 
 
 def _new_shuffle_tensor_slice(
-    *, tensor: torch.Tensor, start: int = 0, step: int = 1, generator: torch.Generator
+    *,
+    tensor: torch.Tensor,
+    start: int = 0,
+    step: int = 1,
+    generator: torch.Generator,
 ) -> np.ndarray:
     stop = len(tensor)
     count = stop // step
@@ -188,9 +190,7 @@ class ShardedInfiniteSampler(Sampler):
         self._advance = advance
         self._iter_count = 0
         self._shuffle_tensor_slice_fn = (
-            _new_shuffle_tensor_slice
-            if use_new_shuffle_tensor_slice
-            else _shuffle_tensor_slice
+            _new_shuffle_tensor_slice if use_new_shuffle_tensor_slice else _shuffle_tensor_slice
         )
 
     def __iter__(self):
@@ -223,7 +223,11 @@ class ShardedInfiniteSampler(Sampler):
         # Always shuffle everything first
         generator.manual_seed(self._seed)
         dtype = _get_torch_dtype(self._sample_count)
-        perm = torch.randperm(self._sample_count, dtype=dtype, generator=generator)
+        perm = torch.randperm(
+            self._sample_count,
+            dtype=dtype,
+            generator=generator,
+        )
 
         while True:
             # Re-seed on each iteration to allow skipping whole permutations
@@ -231,7 +235,10 @@ class ShardedInfiniteSampler(Sampler):
             generator.manual_seed(seed)
 
             iterable = self._shuffle_tensor_slice_fn(
-                tensor=perm, start=self._start, step=self._step, generator=generator
+                tensor=perm,
+                start=self._start,
+                step=self._step,
+                generator=generator,
             )
             yield from iterable
             self._iter_count += 1

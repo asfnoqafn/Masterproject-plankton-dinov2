@@ -5,6 +5,7 @@
 
 from .attention import MemEffAttention
 from .block import NestedTensorBlock
+from .channel_patch_embed import PatchEmbedPerChannel
 from .dino_head import DINOHead
 from .mlp import Mlp
 from .patch_embed import PatchEmbed

@@ -13,7 +13,13 @@ from torch.utils.data import Sampler
 from .datasets import ImageNet, ImageNet22k
 from .datasets.hdf5_dataset import HDF5Dataset
 from .datasets.lmdb_dataset import LMDBDataset
-from .samplers import EpochSampler, InfiniteSampler, ShardedInfiniteSampler
+from .datasets.npy_dataset import NPYDataset
+from .datasets.pan_m import PanMDataset
+from .samplers import (
+    EpochSampler,
+    InfiniteSampler,
+    ShardedInfiniteSampler,
+)
 
 logger = logging.getLogger("dinov2")
 
@@ -53,7 +59,12 @@ def _parse_dataset_str(dataset_str: str):
 
     for token in tokens[1:]:
         key, value = token.split("=")
-        assert key in ("root", "extra", "split", "do_short_run")
+        assert key in (
+            "root",
+            "extra",
+            "split",
+            "do_short_run",
+        )
         kwargs[key] = value
 
     if "split" in kwargs:
@@ -70,6 +81,10 @@ def _parse_dataset_str(dataset_str: str):
         class_ = HDF5Dataset
     elif name == "LMDBDataset":
         class_ = LMDBDataset
+    elif name == "NPYDataset":
+        class_ = NPYDataset
+    elif name == "PanMDataset":
+        class_ = PanMDataset
 
     else:
         raise ValueError(f'Unsupported dataset "{name}"')
@@ -140,7 +155,10 @@ def _make_sampler(
             seed=seed,
             advance=advance,
         )
-    elif type in (SamplerType.SHARDED_INFINITE, SamplerType.SHARDED_INFINITE_NEW):
+    elif type in (
+        SamplerType.SHARDED_INFINITE,
+        SamplerType.SHARDED_INFINITE_NEW,
+    ):
         logger.info("sampler: sharded infinite")
         if size > 0:
             raise ValueError("sampler size > 0 is invalid")

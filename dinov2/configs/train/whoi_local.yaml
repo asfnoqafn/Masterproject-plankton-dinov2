@@ -60,18 +60,20 @@ ibot:
   head_nlayers: 3
   head_hidden_dim: 2048
 train:
-  batch_size_per_gpu: 32
+  batch_size_per_gpu: 16
   dataset_path: HDF5Dataset:split=TRAIN:root=/home/jluesch/Documents/data/plankton/2007-TRAIN.hdf5:extra=*
   output_dir: 'home/jluesch/Documents/output_dir'
   saveckp_freq: 1
   seed: 0
   num_workers: 4
   OFFICIAL_EPOCH_LENGTH: 1250
-  cache_dataset: true
+  cache_dataset: false
   centering: "sinkhorn_knopp" # or "centering"
   augmentations: "kornia_gpu"
-  use_torch_compile: true
-  do_profiling: true
+  use_torch_compile: false
+  do_profiling: false
+  use_ch_patch_embed: false
+  in_chans: 3
 student:
   arch: vit_small
   patch_size: 14
@@ -110,6 +112,8 @@ optim:
   adamw_beta1: 0.9
   adamw_beta2: 0.999
 crops:
+  use_native_res: true
+  free_shapes: false
   global_crops_scale:
   - 0.32
   - 1.0

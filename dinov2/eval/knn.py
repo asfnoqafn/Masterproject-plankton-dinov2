@@ -17,12 +17,27 @@ import torch
 from torch.nn.functional import one_hot, softmax
 
 import dinov2.distributed as distributed
-from dinov2.data import SamplerType, make_data_loader, make_dataset
-from dinov2.data.transforms import make_classification_eval_transform
-from dinov2.eval.metrics import AccuracyAveraging, build_topk_accuracy_metric
-from dinov2.eval.setup import get_args_parser as get_setup_args_parser
+from dinov2.data import (
+    SamplerType,
+    make_data_loader,
+    make_dataset,
+)
+from dinov2.data.transforms import (
+    make_classification_eval_transform,
+)
+from dinov2.eval.metrics import (
+    AccuracyAveraging,
+    build_topk_accuracy_metric,
+)
+from dinov2.eval.setup import (
+    get_args_parser as get_setup_args_parser,
+)
 from dinov2.eval.setup import setup_and_build_model
-from dinov2.eval.utils import ModelWithNormalize, evaluate, extract_features
+from dinov2.eval.utils import (
+    ModelWithNormalize,
+    evaluate,
+    extract_features,
+)
 
 logger = logging.getLogger("dinov2")
 
@@ -98,7 +113,10 @@ def get_args_parser(
         default="knn_run",
     )
     parser.add_argument(
-        "--num_nodes", type=int, default=1, help="Set number of nodes used."
+        "--num_nodes",
+        type=int,
+        default=1,
+        help="Set number of nodes used.",
     )
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
@@ -123,7 +141,13 @@ class KnnModule(torch.nn.Module):
     """
 
     def __init__(
-        self, train_features, train_labels, nb_knn, T, device, num_classes=1000
+        self,
+        train_features,
+        train_labels,
+        nb_knn,
+        T,
+        device,
+        num_classes=1000,
     ):
         super().__init__()
 
@@ -131,14 +155,8 @@ class KnnModule(torch.nn.Module):
         self.global_size = distributed.get_global_size()
 
         self.device = device
-        self.train_features_rank_T = train_features.chunk(self.global_size)[
-            self.global_rank
-        ].T.to(self.device)
-        self.candidates = (
-            train_labels.chunk(self.global_size)[self.global_rank]
-            .view(1, -1)
-            .to(self.device)
-        )
+        self.train_features_rank_T = train_features.chunk(self.global_size)[self.global_rank].T.to(self.device)
+        self.candidates = train_labels.chunk(self.global_size)[self.global_rank].view(1, -1).to(self.device)
 
         self.nb_knn = nb_knn
         self.max_k = max(self.nb_knn)
@@ -158,7 +176,9 @@ class KnnModule(torch.nn.Module):
         broadcasted = features_rank
         if self.global_rank != source_rank:
             broadcasted = torch.zeros(
-                *broadcast_shape, dtype=features_rank.dtype, device=self.device
+                *broadcast_shape,
+                dtype=features_rank.dtype,
+                device=self.device,
             )
         torch.distributed.broadcast(broadcasted, source_rank)
 
@@ -171,15 +191,15 @@ class KnnModule(torch.nn.Module):
         # Gather all neighbors for `target_rank`
         topk_sims_rank = retrieved_rank = None
         if self.global_rank == target_rank:
-            topk_sims_rank = [
-                torch.zeros_like(topk_sims) for _ in range(self.global_size)
-            ]
-            retrieved_rank = [
-                torch.zeros_like(neighbors_labels) for _ in range(self.global_size)
-            ]
+            topk_sims_rank = [torch.zeros_like(topk_sims) for _ in range(self.global_size)]
+            retrieved_rank = [torch.zeros_like(neighbors_labels) for _ in range(self.global_size)]
 
         torch.distributed.gather(topk_sims, topk_sims_rank, dst=target_rank)
-        torch.distributed.gather(neighbors_labels, retrieved_rank, dst=target_rank)
+        torch.distributed.gather(
+            neighbors_labels,
+            retrieved_rank,
+            dst=target_rank,
+        )
 
         if self.global_rank == target_rank:
             # Perform a second top-k on the k * global_size retrieved neighbors
@@ -207,7 +227,10 @@ class KnnModule(torch.nn.Module):
         batch_size = neighbors_labels.shape[0]
         topk_sims_transform = softmax(topk_sims / self.T, 1)
         matmul = torch.mul(
-            one_hot(neighbors_labels, num_classes=self.num_classes),
+            one_hot(
+                neighbors_labels,
+                num_classes=self.num_classes,
+            ),
             topk_sims_transform.view(batch_size, -1, 1),
         )
         probas_for_k = {k: torch.sum(matmul[:, :k, :], 1) for k in self.nb_knn}
@@ -226,7 +249,13 @@ class DictKeysModule(torch.nn.Module):
 
 
 def create_module_dict(
-    *, module, n_per_class_list, n_tries, nb_knn, train_features, train_labels
+    *,
+    module,
+    n_per_class_list,
+    n_tries,
+    nb_knn,
+    train_features,
+    train_labels,
 ):
     modules = {}
     mapping = create_class_indices_mapping(train_labels)
@@ -265,9 +294,7 @@ def filter_train(mapping, n_per_class, seed):
 
 def create_class_indices_mapping(labels):
     unique_labels, inverse = torch.unique(labels, return_inverse=True)
-    mapping = {
-        unique_labels[i]: (inverse == i).nonzero() for i in range(len(unique_labels))
-    }
+    mapping = {unique_labels[i]: (inverse == i).nonzero() for i in range(len(unique_labels))}
     return mapping
 
 
@@ -293,7 +320,11 @@ def eval_knn(
 
     logger.info("Extracting features for train set...")
     train_features, train_labels = extract_features(
-        model, train_dataset, batch_size, num_workers, gather_on_cpu=gather_on_cpu
+        model,
+        train_dataset,
+        batch_size,
+        num_workers,
+        gather_on_cpu=gather_on_cpu,
     )
     logger.info(f"Train features created, shape {train_features.shape}.")
 
@@ -308,13 +339,14 @@ def eval_knn(
     )
     num_classes = int(train_labels.max() + 1)
     print("Train num_classes", num_classes)
-    metric_collection = build_topk_accuracy_metric(
-        accuracy_averaging, num_classes=num_classes
-    )
+    metric_collection = build_topk_accuracy_metric(accuracy_averaging, num_classes=num_classes)
 
     device = torch.cuda.current_device()
     partial_module = partial(
-        KnnModule, T=temperature, device=device, num_classes=num_classes
+        KnnModule,
+        T=temperature,
+        device=device,
+        num_classes=num_classes,
     )
     knn_module_dict = create_module_dict(
         module=partial_module,
@@ -329,15 +361,16 @@ def eval_knn(
         for t, knn_try in knn_module.items():
             postprocessors = {
                 **postprocessors,
-                **{
-                    (n_per_class, t, k): DictKeysModule([n_per_class, t, k])
-                    for k in knn_try.nb_knn
-                },
+                **{(n_per_class, t, k): DictKeysModule([n_per_class, t, k]) for k in knn_try.nb_knn},
             }
             metrics = {
                 **metrics,
                 **{
-                    (n_per_class, t, k): metric_collection.clone()
+                    (
+                        n_per_class,
+                        t,
+                        k,
+                    ): metric_collection.clone()
                     for k in knn_try.nb_knn
                 },
             }
@@ -358,29 +391,15 @@ def eval_knn(
         first_try = list(knn_module.keys())[0]
         k_list = knn_module[first_try].nb_knn
         for k in k_list:
-            keys = results_dict[
-                (n_per_class, first_try, k)
-            ].keys()  # keys are e.g. `top-1` and `top-5`
+            keys = results_dict[(n_per_class, first_try, k)].keys()  # keys are e.g. `top-1` and `top-5`
             results_dict[(n_per_class, k)] = {
-                key: torch.mean(
-                    torch.stack(
-                        [
-                            results_dict[(n_per_class, t, k)][key]
-                            for t in knn_module.keys()
-                        ]
-                    )
-                )
+                key: torch.mean(torch.stack([results_dict[(n_per_class, t, k)][key] for t in knn_module.keys()]))
                 for key in keys
                 if "confmat" not in key
             }
             if "confmat" in keys:
                 results_dict[(n_per_class, k)]["confmat"] = torch.sum(
-                    torch.stack(
-                        [
-                            results_dict[(n_per_class, t, k)]["confmat"]
-                            for t in knn_module.keys()
-                        ]
-                    ),
+                    torch.stack([results_dict[(n_per_class, t, k)]["confmat"] for t in knn_module.keys()]),
                     dim=0,
                 )
 
@@ -463,7 +482,10 @@ def eval_knn_with_model(
             knn_nb = knn_nb.group(0)
         else:
             knn_nb = k
-        np.save(os.path.join(confmat_file_path, f"knn_{knn_nb}"), v)
+        np.save(
+            os.path.join(confmat_file_path, f"knn_{knn_nb}"),
+            v,
+        )
 
     if distributed.is_enabled():
         torch.distributed.barrier()

@@ -50,9 +50,7 @@ class SinePositionalEncoding(BaseModule):
         super(SinePositionalEncoding, self).__init__(init_cfg)
         if normalize:
             assert isinstance(scale, (float, int)), (
-                "when normalize is set,"
-                "scale should be provided and in float or int type, "
-                f"found {type(scale)}"
+                "when normalize is set," "scale should be provided and in float or int type, " f"found {type(scale)}"
             )
         self.num_feats = num_feats
         self.temperature = temperature
@@ -80,23 +78,31 @@ class SinePositionalEncoding(BaseModule):
         y_embed = not_mask.cumsum(1, dtype=torch.float32)
         x_embed = not_mask.cumsum(2, dtype=torch.float32)
         if self.normalize:
-            y_embed = (
-                (y_embed + self.offset) / (y_embed[:, -1:, :] + self.eps) * self.scale
-            )
-            x_embed = (
-                (x_embed + self.offset) / (x_embed[:, :, -1:] + self.eps) * self.scale
-            )
-        dim_t = torch.arange(self.num_feats, dtype=torch.float32, device=mask.device)
+            y_embed = (y_embed + self.offset) / (y_embed[:, -1:, :] + self.eps) * self.scale
+            x_embed = (x_embed + self.offset) / (x_embed[:, :, -1:] + self.eps) * self.scale
+        dim_t = torch.arange(
+            self.num_feats,
+            dtype=torch.float32,
+            device=mask.device,
+        )
         dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_feats)
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
         # use `view` instead of `flatten` for dynamically exporting to ONNX
         B, H, W = mask.size()
         pos_x = torch.stack(
-            (pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4
+            (
+                pos_x[:, :, :, 0::2].sin(),
+                pos_x[:, :, :, 1::2].cos(),
+            ),
+            dim=4,
         ).view(B, H, W, -1)
         pos_y = torch.stack(
-            (pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4
+            (
+                pos_y[:, :, :, 0::2].sin(),
+                pos_y[:, :, :, 1::2].cos(),
+            ),
+            dim=4,
         ).view(B, H, W, -1)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos

@@ -61,7 +61,11 @@ def _make_mmap_tarball(tarballs_root: str, mmap_cache_size: int):
         tarball_path = _get_tarball_path(class_id)
         tarball_full_path = os.path.join(tarballs_root, tarball_path)
         with open(tarball_full_path) as f:
-            return mmap(fileno=f.fileno(), length=0, access=ACCESS_READ)
+            return mmap(
+                fileno=f.fileno(),
+                length=0,
+                access=ACCESS_READ,
+            )
 
     return _mmap_tarball
 
@@ -137,9 +141,7 @@ class ImageNet22k(ExtendedVisionDataset):
 
         return sorted(class_ids)
 
-    def _load_entries_class_ids(
-        self, root: Optional[str] = None
-    ) -> Tuple[List[_Entry], List[str]]:
+    def _load_entries_class_ids(self, root: Optional[str] = None) -> Tuple[List[_Entry], List[str]]:
         root = self.get_root(root)
         entries: List[_Entry] = []
         class_ids = self._find_class_ids(root)
@@ -175,7 +177,12 @@ class ImageNet22k(ExtendedVisionDataset):
                 end_offset = 512 * class_entry2.block_offset
                 assert class_entry1.maybe_filename is not None
                 filename = class_entry1.maybe_filename
-                entry = _Entry(class_index, start_offset, end_offset, filename)
+                entry = _Entry(
+                    class_index,
+                    start_offset,
+                    end_offset,
+                    filename,
+                )
                 # Skip invalid image files (PIL throws UnidentifiedImageError)
                 if filename == "n06470073_47249.JPEG":
                     continue
@@ -206,22 +213,23 @@ class ImageNet22k(ExtendedVisionDataset):
         class_id = entry["class_id"]
         class_mmap = self._mmap_tarball(class_id)
 
-        start_offset, end_offset = entry["start_offset"], entry["end_offset"]
+        start_offset, end_offset = (
+            entry["start_offset"],
+            entry["end_offset"],
+        )
         try:
             mapped_data = class_mmap[start_offset:end_offset]
             data = mapped_data[512:]  # Skip entry header block
 
-            if len(data) >= 2 and tuple(data[:2]) == (0x1F, 0x8B):
-                assert (
-                    index in self._gzipped_indices
-                ), f"unexpected gzip header for sample {index}"
+            if len(data) >= 2 and tuple(data[:2]) == (
+                0x1F,
+                0x8B,
+            ):
+                assert index in self._gzipped_indices, f"unexpected gzip header for sample {index}"
                 with GzipFile(fileobj=BytesIO(data)) as g:
                     data = g.read()
         except Exception as e:
-            raise RuntimeError(
-                f"can not retrieve image data for sample {index} "
-                f'from "{class_id}" tarball'
-            ) from e
+            raise RuntimeError(f"can not retrieve image data for sample {index} " f'from "{class_id}" tarball') from e
 
         return data
 
@@ -248,7 +256,11 @@ class ImageNet22k(ExtendedVisionDataset):
     def _dump_entries(self, *args, **kwargs) -> None:
         entries, class_ids = self._load_entries_class_ids(*args, **kwargs)
 
-        max_class_id_length, max_filename_length, max_class_index = -1, -1, -1
+        (
+            max_class_id_length,
+            max_filename_length,
+            max_class_index,
+        ) = (-1, -1, -1)
         for entry in entries:
             class_id = class_ids[entry.class_index]
             max_class_index = max(entry.class_index, max_class_index)
@@ -289,13 +301,22 @@ class ImageNet22k(ExtendedVisionDataset):
 
         max_class_id_length, max_class_index = -1, -1
         for entry in entries_array:
-            class_index, class_id = entry["class_index"], entry["class_id"]
+            class_index, class_id = (
+                entry["class_index"],
+                entry["class_id"],
+            )
             max_class_index = max(int(class_index), max_class_index)
             max_class_id_length = max(len(str(class_id)), max_class_id_length)
 
-        class_ids_array = np.empty(max_class_index + 1, dtype=f"U{max_class_id_length}")
+        class_ids_array = np.empty(
+            max_class_index + 1,
+            dtype=f"U{max_class_id_length}",
+        )
         for entry in entries_array:
-            class_index, class_id = entry["class_index"], entry["class_id"]
+            class_index, class_id = (
+                entry["class_index"],
+                entry["class_id"],
+            )
             class_ids_array[class_index] = class_id
         class_ids_path = self._get_class_ids_path(*args, **kwargs)
         self._save_extra(class_ids_array, class_ids_path)

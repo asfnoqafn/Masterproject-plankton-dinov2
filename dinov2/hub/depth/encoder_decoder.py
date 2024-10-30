@@ -55,7 +55,9 @@ class DepthEncoderDecoder(nn.Module):
         out = self._decode_head_forward_test(x, img_metas)
         # crop the pred depth to the certain range.
         out = torch.clamp(
-            out, min=self.decode_head.min_depth, max=self.decode_head.max_depth
+            out,
+            min=self.decode_head.min_depth,
+            max=self.decode_head.max_depth,
         )
         if rescale:
             if size is None:
@@ -64,7 +66,10 @@ class DepthEncoderDecoder(nn.Module):
                 else:
                     size = img.shape[2:]
             out = resize(
-                input=out, size=size, mode="bilinear", align_corners=self.align_corners
+                input=out,
+                size=size,
+                mode="bilinear",
+                align_corners=self.align_corners,
             )
         return out
 
@@ -72,9 +77,7 @@ class DepthEncoderDecoder(nn.Module):
         """Run forward function and calculate loss for decode head in
         training."""
         losses = dict()
-        loss_decode = self.decode_head.forward_train(
-            img, x, img_metas, depth_gt, **kwargs
-        )
+        loss_decode = self.decode_head.forward_train(img, x, img_metas, depth_gt, **kwargs)
         losses.update(add_prefix(loss_decode, "decode"))
         return losses
 
@@ -112,9 +115,7 @@ class DepthEncoderDecoder(nn.Module):
         losses = dict()
 
         # the last of x saves the info from neck
-        loss_decode = self._decode_head_forward_train(
-            img, x, img_metas, depth_gt, **kwargs
-        )
+        loss_decode = self._decode_head_forward_train(img, x, img_metas, depth_gt, **kwargs)
 
         losses.update(loss_decode)
 
@@ -162,13 +163,18 @@ class DepthEncoderDecoder(nn.Module):
         assert (count_mat == 0).sum() == 0
         if torch.onnx.is_in_onnx_export():
             # cast count_mat to constant while exporting to ONNX
-            count_mat = torch.from_numpy(count_mat.cpu().detach().numpy()).to(
-                device=img.device
-            )
+            count_mat = torch.from_numpy(count_mat.cpu().detach().numpy()).to(device=img.device)
         preds = preds / count_mat
         return preds
 
-    def inference(self, img, img_meta, rescale, size=None, mode="whole"):
+    def inference(
+        self,
+        img,
+        img_meta,
+        rescale,
+        size=None,
+        mode="whole",
+    ):
         """Inference with slide/whole style.
 
         Args:
@@ -195,7 +201,10 @@ class DepthEncoderDecoder(nn.Module):
         flip = img_meta[0]["flip"]
         if flip:
             flip_direction = img_meta[0]["flip_direction"]
-            assert flip_direction in ["horizontal", "vertical"]
+            assert flip_direction in [
+                "horizontal",
+                "vertical",
+            ]
             if flip_direction == "horizontal":
                 output = output.flip(dims=(3,))
             elif flip_direction == "vertical":
@@ -226,7 +235,10 @@ class DepthEncoderDecoder(nn.Module):
         depth_pred = self.inference(imgs[0], img_metas[0], rescale)
         for i in range(1, len(imgs)):
             cur_depth_pred = self.inference(
-                imgs[i], img_metas[i], rescale, size=depth_pred.shape[-2:]
+                imgs[i],
+                img_metas[i],
+                rescale,
+                size=depth_pred.shape[-2:],
             )
             depth_pred += cur_depth_pred
         depth_pred /= len(imgs)
@@ -245,15 +257,15 @@ class DepthEncoderDecoder(nn.Module):
                 augs (multiscale, flip, etc.) and the inner list indicates
                 images in a batch.
         """
-        for var, name in [(imgs, "imgs"), (img_metas, "img_metas")]:
+        for var, name in [
+            (imgs, "imgs"),
+            (img_metas, "img_metas"),
+        ]:
             if not isinstance(var, list):
                 raise TypeError(f"{name} must be a list, but got " f"{type(var)}")
         num_augs = len(imgs)
         if num_augs != len(img_metas):
-            raise ValueError(
-                f"num of augmentations ({len(imgs)}) != "
-                f"num of image meta ({len(img_metas)})"
-            )
+            raise ValueError(f"num of augmentations ({len(imgs)}) != " f"num of image meta ({len(img_metas)})")
         # all images in the same aug batch all of the same ori_shape and pad
         # shape
         for img_meta in img_metas:

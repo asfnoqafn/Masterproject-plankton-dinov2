@@ -88,7 +88,10 @@ class DepthBaseDecodeHead(BaseModule, metaclass=ABCMeta):
         self.scale_up = scale_up
 
         if self.classify:
-            assert bins_strategy in ["UD", "SID"], "Support bins_strategy: UD, SID"
+            assert bins_strategy in [
+                "UD",
+                "SID",
+            ], "Support bins_strategy: UD, SID"
             assert norm_strategy in [
                 "linear",
                 "softmax",
@@ -99,10 +102,20 @@ class DepthBaseDecodeHead(BaseModule, metaclass=ABCMeta):
             self.norm_strategy = norm_strategy
             self.softmax = nn.Softmax(dim=1)
             self.conv_depth = nn.Conv2d(
-                channels, n_bins, kernel_size=3, padding=1, stride=1
+                channels,
+                n_bins,
+                kernel_size=3,
+                padding=1,
+                stride=1,
             )
         else:
-            self.conv_depth = nn.Conv2d(channels, 1, kernel_size=3, padding=1, stride=1)
+            self.conv_depth = nn.Conv2d(
+                channels,
+                1,
+                kernel_size=3,
+                padding=1,
+                stride=1,
+            )
 
         self.fp16_enabled = False
         self.relu = nn.ReLU()
@@ -165,11 +178,17 @@ class DepthBaseDecodeHead(BaseModule, metaclass=ABCMeta):
 
             if self.bins_strategy == "UD":
                 bins = torch.linspace(
-                    self.min_depth, self.max_depth, self.n_bins, device=feat.device
+                    self.min_depth,
+                    self.max_depth,
+                    self.n_bins,
+                    device=feat.device,
                 )
             elif self.bins_strategy == "SID":
                 bins = torch.logspace(
-                    self.min_depth, self.max_depth, self.n_bins, device=feat.device
+                    self.min_depth,
+                    self.max_depth,
+                    self.n_bins,
+                    device=feat.device,
                 )
 
             # following Adabins, default linear

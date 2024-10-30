@@ -19,7 +19,10 @@ from torchmetrics.classification import (
     Precision,
     Recall,
 )
-from torchmetrics.utilities.data import dim_zero_cat, select_topk
+from torchmetrics.utilities.data import (
+    dim_zero_cat,
+    select_topk,
+)
 
 logger = logging.getLogger("dinov2")
 
@@ -48,7 +51,10 @@ class AccuracyAveraging(Enum):
 
 
 def build_metric(
-    metric_type: MetricType, *, num_classes: int, ks: Optional[tuple] = None
+    metric_type: MetricType,
+    *,
+    num_classes: int,
+    ks: Optional[tuple] = None,
 ):
     if metric_type.accuracy_averaging is not None:
         return build_topk_accuracy_metric(
@@ -66,39 +72,65 @@ def build_metric(
 
 
 def build_topk_accuracy_metric(
-    average_type: AccuracyAveraging, num_classes: int, ks: tuple = (1, 5)
+    average_type: AccuracyAveraging,
+    num_classes: int,
+    ks: tuple = (1, 5),
 ):
     num_classes = int(num_classes)
     metrics: Dict[str, Metric] = {
         f"top-{k}": MulticlassAccuracy(
-            top_k=k, num_classes=int(num_classes), average=average_type.value
+            top_k=k,
+            num_classes=int(num_classes),
+            average=average_type.value,
         )
         for k in ks
     }
 
     metrics["precision_ma"] = Precision(
-        task="multiclass", average="macro", num_classes=num_classes, top_k=1
+        task="multiclass",
+        average="macro",
+        num_classes=num_classes,
+        top_k=1,
     )
     metrics["precision_mi"] = Precision(
-        task="multiclass", average="micro", num_classes=num_classes, top_k=1
+        task="multiclass",
+        average="micro",
+        num_classes=num_classes,
+        top_k=1,
     )
     metrics["recall_ma"] = Recall(
-        task="multiclass", average="macro", num_classes=num_classes, top_k=1
+        task="multiclass",
+        average="macro",
+        num_classes=num_classes,
+        top_k=1,
     )
     metrics["recall_mi"] = Recall(
-        task="multiclass", average="micro", num_classes=num_classes, top_k=1
+        task="multiclass",
+        average="micro",
+        num_classes=num_classes,
+        top_k=1,
     )
     metrics["auroc"] = AUROC(
-        task="multiclass", average="macro", num_classes=num_classes
+        task="multiclass",
+        average="macro",
+        num_classes=num_classes,
     )
     metrics["ap"] = AveragePrecision(
-        task="multiclass", average="macro", num_classes=num_classes
+        task="multiclass",
+        average="macro",
+        num_classes=num_classes,
     )
     metrics["f1_ma"] = F1Score(
-        task="multiclass", average="macro", num_classes=num_classes, top_k=1
+        task="multiclass",
+        average="macro",
+        num_classes=num_classes,
+        top_k=1,
     )
     metrics["f1_mi"] = F1Score(
-        task="multiclass", average="micro", num_classes=num_classes, top_k=1
+        task="multiclass",
+        average="micro",
+        num_classes=num_classes,
+        top_k=1,
     )
     metrics["confmat"] = ConfusionMatrix(task="multiclass", num_classes=num_classes)
 
@@ -106,10 +138,7 @@ def build_topk_accuracy_metric(
 
 
 def build_topk_imagenet_real_accuracy_metric(num_classes: int, ks: tuple = (1, 5)):
-    metrics: Dict[str, Metric] = {
-        f"top-{k}": ImageNetReaLAccuracy(top_k=k, num_classes=int(num_classes))
-        for k in ks
-    }
+    metrics: Dict[str, Metric] = {f"top-{k}": ImageNetReaLAccuracy(top_k=k, num_classes=int(num_classes)) for k in ks}
     return MetricCollection(metrics)
 
 

@@ -37,7 +37,10 @@ class MSDeformAttnFunction(Function):
 
 
 def ms_deform_attn_core_pytorch(
-    value, value_spatial_shapes, sampling_locations, attention_weights
+    value,
+    value_spatial_shapes,
+    sampling_locations,
+    attention_weights,
 ):
     # for debug and test only,
     # need to use cuda version instead
@@ -48,9 +51,7 @@ def ms_deform_attn_core_pytorch(
     sampling_value_list = []
     for lid_, (H_, W_) in enumerate(value_spatial_shapes):
         # N_, H_*W_, M_, D_ -> N_, H_*W_, M_*D_ -> N_, M_*D_, H_*W_ -> N_*M_, D_, H_, W_
-        value_l_ = (
-            value_list[lid_].flatten(2).transpose(1, 2).reshape(N_ * M_, D_, H_, W_)
-        )
+        value_l_ = value_list[lid_].flatten(2).transpose(1, 2).reshape(N_ * M_, D_, H_, W_)
         # N_, Lq_, M_, P_, 2 -> N_, M_, Lq_, P_, 2 -> N_*M_, Lq_, P_, 2
         sampling_grid_l_ = sampling_grids[:, :, :, lid_].transpose(1, 2).flatten(0, 1)
         # N_*M_, D_, Lq_, P_
@@ -63,27 +64,26 @@ def ms_deform_attn_core_pytorch(
         )
         sampling_value_list.append(sampling_value_l_)
     # (N_, Lq_, M_, L_, P_) -> (N_, M_, Lq_, L_, P_) -> (N_, M_, 1, Lq_, L_*P_)
-    attention_weights = attention_weights.transpose(1, 2).reshape(
-        N_ * M_, 1, Lq_, L_ * P_
-    )
-    output = (
-        (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
-        .sum(-1)
-        .view(N_, M_ * D_, Lq_)
-    )
+    attention_weights = attention_weights.transpose(1, 2).reshape(N_ * M_, 1, Lq_, L_ * P_)
+    output = (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights).sum(-1).view(N_, M_ * D_, Lq_)
     return output.transpose(1, 2).contiguous()
 
 
 def _is_power_of_2(n):
     if (not isinstance(n, int)) or (n < 0):
-        raise ValueError(
-            "invalid input for _is_power_of_2: {} (type: {})".format(n, type(n))
-        )
+        raise ValueError("invalid input for _is_power_of_2: {} (type: {})".format(n, type(n)))
     return (n & (n - 1) == 0) and n != 0
 
 
 class MSDeformAttn(nn.Module):
-    def __init__(self, d_model=256, n_levels=4, n_heads=8, n_points=4, ratio=1.0):
+    def __init__(
+        self,
+        d_model=256,
+        n_levels=4,
+        n_heads=8,
+        n_points=4,
+        ratio=1.0,
+    ):
         """Multi-Scale Deformable Attention Module.
 
         :param d_model      hidden dimension
@@ -93,11 +93,7 @@ class MSDeformAttn(nn.Module):
         """
         super().__init__()
         if d_model % n_heads != 0:
-            raise ValueError(
-                "d_model must be divisible by n_heads, " "but got {} and {}".format(
-                    d_model, n_heads
-                )
-            )
+            raise ValueError("d_model must be divisible by n_heads, " "but got {} and {}".format(d_model, n_heads))
         _d_per_head = d_model // n_heads
         # you'd better set _d_per_head to a power of 2
         # which is more efficient in our CUDA implementation
@@ -124,9 +120,7 @@ class MSDeformAttn(nn.Module):
 
     def _reset_parameters(self):
         constant_(self.sampling_offsets.weight.data, 0.0)
-        thetas = torch.arange(self.n_heads, dtype=torch.float32) * (
-            2.0 * math.pi / self.n_heads
-        )
+        thetas = torch.arange(self.n_heads, dtype=torch.float32) * (2.0 * math.pi / self.n_heads)
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
         grid_init = (
             (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -182,21 +176,40 @@ class MSDeformAttn(nn.Module):
             value = value.masked_fill(input_padding_mask[..., None], float(0))
 
         value = value.view(
-            N, Len_in, self.n_heads, int(self.ratio * self.d_model) // self.n_heads
+            N,
+            Len_in,
+            self.n_heads,
+            int(self.ratio * self.d_model) // self.n_heads,
         )
         sampling_offsets = self.sampling_offsets(query).view(
-            N, Len_q, self.n_heads, self.n_levels, self.n_points, 2
+            N,
+            Len_q,
+            self.n_heads,
+            self.n_levels,
+            self.n_points,
+            2,
         )
         attention_weights = self.attention_weights(query).view(
-            N, Len_q, self.n_heads, self.n_levels * self.n_points
+            N,
+            Len_q,
+            self.n_heads,
+            self.n_levels * self.n_points,
         )
         attention_weights = F.softmax(attention_weights, -1).view(
-            N, Len_q, self.n_heads, self.n_levels, self.n_points
+            N,
+            Len_q,
+            self.n_heads,
+            self.n_levels,
+            self.n_points,
         )
 
         if reference_points.shape[-1] == 2:
             offset_normalizer = torch.stack(
-                [input_spatial_shapes[..., 1], input_spatial_shapes[..., 0]], -1
+                [
+                    input_spatial_shapes[..., 1],
+                    input_spatial_shapes[..., 0],
+                ],
+                -1,
             )
             sampling_locations = (
                 reference_points[:, :, None, :, None, :]
@@ -205,16 +218,11 @@ class MSDeformAttn(nn.Module):
         elif reference_points.shape[-1] == 4:
             sampling_locations = (
                 reference_points[:, :, None, :, None, :2]
-                + sampling_offsets
-                / self.n_points
-                * reference_points[:, :, None, :, None, 2:]
-                * 0.5
+                + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
             )
         else:
             raise ValueError(
-                "Last dim of reference_points must be 2 or 4, but get {} instead.".format(
-                    reference_points.shape[-1]
-                )
+                "Last dim of reference_points must be 2 or 4, but get {} instead.".format(reference_points.shape[-1])
             )
         output = MSDeformAttnFunction.apply(
             value,

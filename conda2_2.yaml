@@ -1,0 +1,32 @@
+name: dinov2_2
+channels:
+  - defaults
+  - pytorch
+  - nvidia
+  - xformers
+  - conda-forge
+dependencies:
+  - python=3.10.*
+  - pytorch::pytorch=2.2.*
+  - pytorch::pytorch-cuda
+  - pytorch::torchvision
+  - omegaconf
+  - torchmetrics
+  - fvcore
+  - iopath
+  - xformers::xformers
+  - pip
+  - wandb
+  - h5py
+  - matplotlib
+  - seaborn
+  - hdf5
+  - jupyterlab
+  - git
+  - kornia
+  - einops
+  - imageio
+  - scikit-image
+  - gcc=12.*
+  - pip:
+    - lmdb

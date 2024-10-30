@@ -18,6 +18,7 @@ class _SplitLMDBDataset(Enum):
     ALL = "all"
 
 
+# TODO: Fix inheritance logic
 class LMDBDataset(ImageNet):
     Target = _TargetLMDBDataset
     Split = _SplitLMDBDataset
@@ -30,12 +31,18 @@ class LMDBDataset(ImageNet):
         return image_data
 
     def get_target(self, index: int) -> Optional[Target]:
-        if self.split in [_SplitLMDBDataset.TEST, _SplitLMDBDataset.ALL]:
+        if self.split in [
+            _SplitLMDBDataset.TEST,
+            _SplitLMDBDataset.ALL,
+        ]:
             return None
         else:
             entries = self._get_entries()
-            class_index = entries[index]["class_id"]
-            return int(class_index)
+            if self.with_targets:
+                class_index = entries[index]["class_id"]
+                return int(class_index)
+            else:
+                return None
 
     def get_class_ids(self) -> np.ndarray:
         self._get_entries()
@@ -50,7 +57,10 @@ class LMDBDataset(ImageNet):
         elif self._split.value.upper() == "ALL":
             return os.path.join(self.root, "*")
         else:
-            return os.path.join(self.root, f"*-{self._split.value.upper()}_*")
+            return os.path.join(
+                self.root,
+                f"*-{self._split.value.upper()}_*",
+            )
 
     def _get_extra_full_path(self, extra_path: str) -> str:
         if not os.path.isdir(self.root):
@@ -84,14 +94,26 @@ class LMDBDataset(ImageNet):
         if self.do_short_run:
             file_list_labels = file_list_labels[:1]
             file_list_imgs = file_list_imgs[:1]
-        for lmdb_path_labels, lmdb_path_imgs in zip(file_list_labels, file_list_imgs):
-            lmdb_env_labels = lmdb.open(
-                lmdb_path_labels,
-                readonly=True,
-                lock=False,
-                readahead=False,
-                meminit=False,
-            )
+
+        if len(file_list_labels) > 0:
+            lists_to_iterate = zip(file_list_labels, file_list_imgs)
+        else:
+            lists_to_iterate = file_list_imgs
+        for iter_obj in lists_to_iterate:
+            if len(file_list_labels) > 0:
+                lmdb_path_labels, lmdb_path_imgs = iter_obj
+                lmdb_env_labels = lmdb.open(
+                    lmdb_path_labels,
+                    readonly=True,
+                    lock=False,
+                    readahead=False,
+                    meminit=False,
+                )
+                lmdb_txn_labels = lmdb_env_labels.begin()
+
+            else:
+                lmdb_path_imgs = iter_obj
+
             lmdb_env_imgs = lmdb.open(
                 lmdb_path_imgs,
                 readonly=True,
@@ -100,18 +122,26 @@ class LMDBDataset(ImageNet):
                 meminit=False,
             )
             # ex: "/home/jluesch/Documents/data/plankton/lmdb/2007-TRAIN")
-            print("lmdb_env_imgs.stat()", lmdb_env_imgs.stat())
+            print(
+                lmdb_path_imgs,
+                "lmdb_env_imgs.stat()",
+                lmdb_env_imgs.stat(),
+            )
 
-            lmdb_txn_labels = lmdb_env_labels.begin()
             lmdb_txn_imgs = lmdb_env_imgs.begin()
             # save img tcxn from which to get labels later
             self._lmdb_txns[lmdb_path_imgs] = lmdb_txn_imgs
 
-            lmdb_cursor = lmdb_txn_labels.cursor()
+            if len(file_list_labels) > 0:
+                lmdb_cursor = lmdb_txn_labels.cursor()
+            else:
+                lmdb_cursor = lmdb_txn_imgs.cursor()
             for key, value in lmdb_cursor:
                 entry = dict()
-                entry["index"] = int(key.decode())
-                entry["class_id"] = int(value.decode())
+                entry["index"] = key.decode()
+                if self.with_targets and len(file_list_labels) > 0:
+                    entry["class_id"] = int(value.decode())
+
                 entry["lmdb_imgs_file"] = lmdb_path_imgs
 
                 accumulated.append(entry)
@@ -121,13 +151,15 @@ class LMDBDataset(ImageNet):
                 accumulated = [el for el in accumulated if el["class_id"] < 5]
             # free up resources
             lmdb_cursor.close()
-            lmdb_env_labels.close()
+            if lmdb_env_labels is not None:
+                lmdb_env_labels.close()
 
-        class_ids = [el["class_id"] for el in accumulated]
-        print(f"#unique_class_ids: {self._split}, {len(set(class_ids))}")
+        if self.with_targets:
+            class_ids = [el["class_id"] for el in accumulated]
+            print(f"#unique_class_ids: {self._split}, {len(set(class_ids))}")
+            self._class_ids = class_ids
 
         self._entries = accumulated
-        self._class_ids = class_ids
 
     def __len__(self) -> int:
         entries = self._get_entries()

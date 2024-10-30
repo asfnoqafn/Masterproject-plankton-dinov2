@@ -40,14 +40,9 @@ def _make_dinov2_linear_classification_head(
 
     if pretrained:
         model_base_name = _make_dinov2_model_name(arch_name, patch_size)
-        model_full_name = _make_dinov2_model_name(
-            arch_name, patch_size, num_register_tokens
-        )
+        model_full_name = _make_dinov2_model_name(arch_name, patch_size, num_register_tokens)
         layers_str = str(layers) if layers == 4 else ""
-        url = (
-            _DINOV2_BASE_URL
-            + f"/{model_base_name}/{model_full_name}_linear{layers_str}_head.pth"
-        )
+        url = _DINOV2_BASE_URL + f"/{model_base_name}/{model_full_name}_linear{layers_str}_head.pth"
         state_dict = torch.hub.load_state_dict_from_url(url, map_location="cpu")
         linear_head.load_state_dict(state_dict, strict=True)
 
@@ -55,7 +50,13 @@ def _make_dinov2_linear_classification_head(
 
 
 class _LinearClassifierWrapper(nn.Module):
-    def __init__(self, *, backbone: nn.Module, linear_head: nn.Module, layers: int = 4):
+    def __init__(
+        self,
+        *,
+        backbone: nn.Module,
+        linear_head: nn.Module,
+        layers: int = 4,
+    ):
         super().__init__()
         self.backbone = backbone
         self.linear_head = linear_head
@@ -121,7 +122,9 @@ def _make_dinov2_linear_classifier(
     )
 
     return _LinearClassifierWrapper(
-        backbone=backbone, linear_head=linear_head, layers=layers
+        backbone=backbone,
+        linear_head=linear_head,
+        layers=layers,
     )
 
 

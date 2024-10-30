@@ -8,7 +8,11 @@ import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mmcv.cnn import Conv2d, build_plugin_layer, caffe2_xavier_init
+from mmcv.cnn import (
+    Conv2d,
+    build_plugin_layer,
+    caffe2_xavier_init,
+)
 from mmcv.cnn.bricks.transformer import (
     build_positional_encoding,
     build_transformer_layer_sequence,
@@ -16,11 +20,15 @@ from mmcv.cnn.bricks.transformer import (
 from mmcv.ops import point_sample
 from mmcv.runner import ModuleList, force_fp32
 from mmseg.models.builder import HEADS, build_loss
-from mmseg.models.decode_heads.decode_head import BaseDecodeHead
+from mmseg.models.decode_heads.decode_head import (
+    BaseDecodeHead,
+)
 
 from ...core import build_sampler, multi_apply, reduce_mean
 from ..builder import build_assigner
-from ..utils import get_uncertain_point_coords_with_randomness
+from ..utils import (
+    get_uncertain_point_coords_with_randomness,
+)
 
 
 @HEADS.register_module()
@@ -97,10 +105,7 @@ class Mask2FormerHead(BaseDecodeHead):
         self.num_transformer_feat_level = num_transformer_feat_level
         self.num_heads = transformer_decoder.transformerlayers.attn_cfgs.num_heads
         self.num_transformer_decoder_layers = transformer_decoder.num_layers
-        assert (
-            pixel_decoder.encoder.transformerlayers.attn_cfgs.num_levels
-            == num_transformer_feat_level
-        )
+        assert pixel_decoder.encoder.transformerlayers.attn_cfgs.num_levels == num_transformer_feat_level
         pixel_decoder_ = copy.deepcopy(pixel_decoder)
         pixel_decoder_.update(
             in_channels=in_channels,
@@ -114,18 +119,17 @@ class Mask2FormerHead(BaseDecodeHead):
         self.decoder_input_projs = ModuleList()
         # from low resolution to high resolution
         for _ in range(num_transformer_feat_level):
-            if (
-                self.decoder_embed_dims != feat_channels
-                or enforce_decoder_input_project
-            ):
+            if self.decoder_embed_dims != feat_channels or enforce_decoder_input_project:
                 self.decoder_input_projs.append(
-                    Conv2d(feat_channels, self.decoder_embed_dims, kernel_size=1)
+                    Conv2d(
+                        feat_channels,
+                        self.decoder_embed_dims,
+                        kernel_size=1,
+                    )
                 )
             else:
                 self.decoder_input_projs.append(nn.Identity())
-        self.decoder_positional_encoding = build_positional_encoding(
-            positional_encoding
-        )
+        self.decoder_positional_encoding = build_positional_encoding(positional_encoding)
         self.query_embed = nn.Embedding(self.num_queries, feat_channels)
         self.query_feat = nn.Embedding(self.num_queries, feat_channels)
         # from low resolution to high resolution
@@ -148,9 +152,7 @@ class Mask2FormerHead(BaseDecodeHead):
             self.sampler = build_sampler(self.train_cfg.sampler, context=self)
             self.num_points = self.train_cfg.get("num_points", 12544)
             self.oversample_ratio = self.train_cfg.get("oversample_ratio", 3.0)
-            self.importance_sample_ratio = self.train_cfg.get(
-                "importance_sample_ratio", 0.75
-            )
+            self.importance_sample_ratio = self.train_cfg.get("importance_sample_ratio", 0.75)
 
         self.class_weight = loss_cls.class_weight
         self.loss_cls = build_loss(loss_cls)
@@ -169,7 +171,12 @@ class Mask2FormerHead(BaseDecodeHead):
                 nn.init.xavier_normal_(p)
 
     def get_targets(
-        self, cls_scores_list, mask_preds_list, gt_labels_list, gt_masks_list, img_metas
+        self,
+        cls_scores_list,
+        mask_preds_list,
+        gt_labels_list,
+        gt_masks_list,
+        img_metas,
     ):
         """Compute classification and mask targets for all images for a decoder
         layer.
@@ -230,7 +237,14 @@ class Mask2FormerHead(BaseDecodeHead):
             num_total_neg,
         )
 
-    def _get_target_single(self, cls_score, mask_pred, gt_labels, gt_masks, img_metas):
+    def _get_target_single(
+        self,
+        cls_score,
+        mask_pred,
+        gt_labels,
+        gt_masks,
+        img_metas,
+    ):
         """Compute classification and mask targets for one image.
 
         Args:
@@ -267,16 +281,22 @@ class Mask2FormerHead(BaseDecodeHead):
         point_coords = torch.rand((1, self.num_points, 2), device=cls_score.device)
         # shape (num_queries, num_points)
         mask_points_pred = point_sample(
-            mask_pred.unsqueeze(1), point_coords.repeat(num_queries, 1, 1)
+            mask_pred.unsqueeze(1),
+            point_coords.repeat(num_queries, 1, 1),
         ).squeeze(1)
         # shape (num_gts, num_points)
         gt_points_masks = point_sample(
-            gt_masks.unsqueeze(1).float(), point_coords.repeat(num_gts, 1, 1)
+            gt_masks.unsqueeze(1).float(),
+            point_coords.repeat(num_gts, 1, 1),
         ).squeeze(1)
 
         # assign and sample
         assign_result = self.assigner.assign(
-            cls_score, mask_points_pred, gt_labels, gt_points_masks, img_metas
+            cls_score,
+            mask_points_pred,
+            gt_labels,
+            gt_points_masks,
+            img_metas,
         )
         sampling_result = self.sampler.sample(assign_result, mask_pred, gt_masks)
         pos_inds = sampling_result.pos_inds
@@ -284,7 +304,9 @@ class Mask2FormerHead(BaseDecodeHead):
 
         # label target
         labels = gt_labels.new_full(
-            (self.num_queries,), self.num_classes, dtype=torch.long
+            (self.num_queries,),
+            self.num_classes,
+            dtype=torch.long,
         )
         labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]
         label_weights = gt_labels.new_ones((self.num_queries,))
@@ -294,10 +316,22 @@ class Mask2FormerHead(BaseDecodeHead):
         mask_weights = mask_pred.new_zeros((self.num_queries,))
         mask_weights[pos_inds] = 1.0
 
-        return (labels, label_weights, mask_targets, mask_weights, pos_inds, neg_inds)
+        return (
+            labels,
+            label_weights,
+            mask_targets,
+            mask_weights,
+            pos_inds,
+            neg_inds,
+        )
 
     def loss_single(
-        self, cls_scores, mask_preds, gt_labels_list, gt_masks_list, img_metas
+        self,
+        cls_scores,
+        mask_preds,
+        gt_labels_list,
+        gt_masks_list,
+        img_metas,
     ):
         """Loss function for outputs from a single decoder layer.
 
@@ -329,7 +363,11 @@ class Mask2FormerHead(BaseDecodeHead):
             num_total_pos,
             num_total_neg,
         ) = self.get_targets(
-            cls_scores_list, mask_preds_list, gt_labels_list, gt_masks_list, img_metas
+            cls_scores_list,
+            mask_preds_list,
+            gt_labels_list,
+            gt_masks_list,
+            img_metas,
         )
         # shape (batch_size, num_queries)
         labels = torch.stack(labels_list, dim=0)
@@ -348,7 +386,10 @@ class Mask2FormerHead(BaseDecodeHead):
 
         class_weight = cls_scores.new_tensor(self.class_weight)
         loss_cls = self.loss_cls(
-            cls_scores, labels, label_weights, avg_factor=class_weight[labels].sum()
+            cls_scores,
+            labels,
+            label_weights,
+            avg_factor=class_weight[labels].sum(),
         )
 
         num_total_masks = reduce_mean(cls_scores.new_tensor([num_total_pos]))
@@ -374,16 +415,17 @@ class Mask2FormerHead(BaseDecodeHead):
             )
             # shape (num_total_gts, h, w) -> (num_total_gts, num_points)
             mask_point_targets = point_sample(
-                mask_targets.unsqueeze(1).float(), points_coords
+                mask_targets.unsqueeze(1).float(),
+                points_coords,
             ).squeeze(1)
         # shape (num_queries, h, w) -> (num_queries, num_points)
-        mask_point_preds = point_sample(mask_preds.unsqueeze(1), points_coords).squeeze(
-            1
-        )
+        mask_point_preds = point_sample(mask_preds.unsqueeze(1), points_coords).squeeze(1)
 
         # dice loss
         loss_dice = self.loss_dice(
-            mask_point_preds, mask_point_targets, avg_factor=num_total_masks
+            mask_point_preds,
+            mask_point_targets,
+            avg_factor=num_total_masks,
         )
 
         # mask loss
@@ -401,7 +443,12 @@ class Mask2FormerHead(BaseDecodeHead):
 
     @force_fp32(apply_to=("all_cls_scores", "all_mask_preds"))
     def loss(
-        self, all_cls_scores, all_mask_preds, gt_labels_list, gt_masks_list, img_metas
+        self,
+        all_cls_scores,
+        all_mask_preds,
+        gt_labels_list,
+        gt_masks_list,
+        img_metas,
     ):
         """Loss function.
 
@@ -442,7 +489,9 @@ class Mask2FormerHead(BaseDecodeHead):
         # loss from other decoder layers
         num_dec_layer = 0
         for loss_cls_i, loss_mask_i, loss_dice_i in zip(
-            losses_cls[:-1], losses_mask[:-1], losses_dice[:-1]
+            losses_cls[:-1],
+            losses_mask[:-1],
+            losses_dice[:-1],
         ):
             loss_dict[f"d{num_dec_layer}.loss_cls"] = loss_cls_i
             loss_dict[f"d{num_dec_layer}.loss_mask"] = loss_mask_i
@@ -450,7 +499,12 @@ class Mask2FormerHead(BaseDecodeHead):
             num_dec_layer += 1
         return loss_dict
 
-    def forward_head(self, decoder_out, mask_feature, attn_mask_target_size):
+    def forward_head(
+        self,
+        decoder_out,
+        mask_feature,
+        attn_mask_target_size,
+    ):
         """Forward for head part which is called after every decoder layer.
 
         Args:
@@ -479,16 +533,14 @@ class Mask2FormerHead(BaseDecodeHead):
         # shape (num_queries, batch_size, h, w)
         mask_pred = torch.einsum("bqc,bchw->bqhw", mask_embed, mask_feature)
         attn_mask = F.interpolate(
-            mask_pred, attn_mask_target_size, mode="bilinear", align_corners=False
+            mask_pred,
+            attn_mask_target_size,
+            mode="bilinear",
+            align_corners=False,
         )
         # shape (num_queries, batch_size, h, w) ->
         #   (batch_size * num_head, num_queries, h, w)
-        attn_mask = (
-            attn_mask.flatten(2)
-            .unsqueeze(1)
-            .repeat((1, self.num_heads, 1, 1))
-            .flatten(0, 1)
-        )
+        attn_mask = attn_mask.flatten(2).unsqueeze(1).repeat((1, self.num_heads, 1, 1)).flatten(0, 1)
         attn_mask = attn_mask.sigmoid() < 0.5
         attn_mask = attn_mask.detach()
 
@@ -526,12 +578,11 @@ class Mask2FormerHead(BaseDecodeHead):
             decoder_input = decoder_input + level_embed
             # shape (batch_size, c, h, w) -> (h*w, batch_size, c)
             mask = decoder_input.new_zeros(
-                (batch_size,) + multi_scale_memorys[i].shape[-2:], dtype=torch.bool
+                (batch_size,) + multi_scale_memorys[i].shape[-2:],
+                dtype=torch.bool,
             )
             decoder_positional_encoding = self.decoder_positional_encoding(mask)
-            decoder_positional_encoding = decoder_positional_encoding.flatten(
-                2
-            ).permute(2, 0, 1)
+            decoder_positional_encoding = decoder_positional_encoding.flatten(2).permute(2, 0, 1)
             decoder_inputs.append(decoder_input)
             decoder_positional_encodings.append(decoder_positional_encoding)
         # shape (num_queries, c) -> (num_queries, batch_size, c)
@@ -541,7 +592,9 @@ class Mask2FormerHead(BaseDecodeHead):
         cls_pred_list = []
         mask_pred_list = []
         cls_pred, mask_pred, attn_mask = self.forward_head(
-            query_feat, mask_features, multi_scale_memorys[0].shape[-2:]
+            query_feat,
+            mask_features,
+            multi_scale_memorys[0].shape[-2:],
         )
         cls_pred_list.append(cls_pred)
         mask_pred_list.append(mask_pred)
@@ -568,9 +621,7 @@ class Mask2FormerHead(BaseDecodeHead):
             cls_pred, mask_pred, attn_mask = self.forward_head(
                 query_feat,
                 mask_features,
-                multi_scale_memorys[(i + 1) % self.num_transformer_feat_level].shape[
-                    -2:
-                ],
+                multi_scale_memorys[(i + 1) % self.num_transformer_feat_level].shape[-2:],
             )
 
             cls_pred_list.append(cls_pred)
@@ -578,7 +629,14 @@ class Mask2FormerHead(BaseDecodeHead):
 
         return cls_pred_list, mask_pred_list
 
-    def forward_train(self, x, img_metas, gt_semantic_seg, gt_labels, gt_masks):
+    def forward_train(
+        self,
+        x,
+        img_metas,
+        gt_semantic_seg,
+        gt_labels,
+        gt_masks,
+    ):
         """Forward function for training mode.
 
         Args:
@@ -603,7 +661,11 @@ class Mask2FormerHead(BaseDecodeHead):
 
         # loss
         losses = self.loss(
-            all_cls_scores, all_mask_preds, gt_labels, gt_masks, img_metas
+            all_cls_scores,
+            all_mask_preds,
+            gt_labels,
+            gt_masks,
+            img_metas,
         )
 
         return losses
@@ -623,7 +685,10 @@ class Mask2FormerHead(BaseDecodeHead):
             seg_mask (Tensor): Predicted semantic segmentation logits.
         """
         all_cls_scores, all_mask_preds = self(inputs, img_metas)
-        cls_score, mask_pred = all_cls_scores[-1], all_mask_preds[-1]
+        cls_score, mask_pred = (
+            all_cls_scores[-1],
+            all_mask_preds[-1],
+        )
         ori_h, ori_w, _ = img_metas[0]["ori_shape"]
 
         # semantic inference

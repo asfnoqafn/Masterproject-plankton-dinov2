@@ -92,7 +92,10 @@ class DepthBaseDecodeHead(nn.Module):
         self.scale_up = scale_up
 
         if self.classify:
-            assert bins_strategy in ["UD", "SID"], "Support bins_strategy: UD, SID"
+            assert bins_strategy in [
+                "UD",
+                "SID",
+            ], "Support bins_strategy: UD, SID"
             assert norm_strategy in [
                 "linear",
                 "softmax",
@@ -103,10 +106,20 @@ class DepthBaseDecodeHead(nn.Module):
             self.norm_strategy = norm_strategy
             self.softmax = nn.Softmax(dim=1)
             self.conv_depth = nn.Conv2d(
-                channels, n_bins, kernel_size=3, padding=1, stride=1
+                channels,
+                n_bins,
+                kernel_size=3,
+                padding=1,
+                stride=1,
             )
         else:
-            self.conv_depth = nn.Conv2d(channels, 1, kernel_size=3, padding=1, stride=1)
+            self.conv_depth = nn.Conv2d(
+                channels,
+                1,
+                kernel_size=3,
+                padding=1,
+                stride=1,
+            )
 
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
@@ -159,11 +172,17 @@ class DepthBaseDecodeHead(nn.Module):
 
             if self.bins_strategy == "UD":
                 bins = torch.linspace(
-                    self.min_depth, self.max_depth, self.n_bins, device=feat.device
+                    self.min_depth,
+                    self.max_depth,
+                    self.n_bins,
+                    device=feat.device,
                 )
             elif self.bins_strategy == "SID":
                 bins = torch.logspace(
-                    self.min_depth, self.max_depth, self.n_bins, device=feat.device
+                    self.min_depth,
+                    self.max_depth,
+                    self.n_bins,
+                    device=feat.device,
                 )
 
             # following Adabins, default linear
@@ -255,11 +274,19 @@ class BNHead(DepthBaseDecodeHead):
         # self.bn = nn.SyncBatchNorm(self.in_channels)
         if self.classify:
             self.conv_depth = nn.Conv2d(
-                self.channels, self.n_bins, kernel_size=1, padding=0, stride=1
+                self.channels,
+                self.n_bins,
+                kernel_size=1,
+                padding=0,
+                stride=1,
             )
         else:
             self.conv_depth = nn.Conv2d(
-                self.channels, 1, kernel_size=1, padding=0, stride=1
+                self.channels,
+                1,
+                kernel_size=1,
+                padding=0,
+                stride=1,
             )
 
     def _transform_inputs(self, inputs):
@@ -458,8 +485,12 @@ class ConvModule(nn.Module):
             norm = partial(norm_layer, num_features=norm_channels)
             self.add_module("norm", norm)
             if self.with_bias:
-                from torch.nnModules.batchnorm import _BatchNorm
-                from torch.nnModules.instancenorm import _InstanceNorm
+                from torch.nnModules.batchnorm import (
+                    _BatchNorm,
+                )
+                from torch.nnModules.instancenorm import (
+                    _InstanceNorm,
+                )
 
                 if isinstance(norm, (_BatchNorm, _InstanceNorm)):
                     warnings.warn("Unnecessary conv bias before batch/instance norm")
@@ -470,7 +501,10 @@ class ConvModule(nn.Module):
         if self.with_activation:
             # nn.Tanh has no 'inplace' argument
             # (nn.Tanh, nn.PReLU, nn.Sigmoid, nn.HSigmoid, nn.Swish, nn.GELU)
-            if not isinstance(act_layer, (nn.Tanh, nn.PReLU, nn.Sigmoid, nn.GELU)):
+            if not isinstance(
+                act_layer,
+                (nn.Tanh, nn.PReLU, nn.Sigmoid, nn.GELU),
+            ):
                 act_layer = partial(act_layer, inplace=inplace)
             self.activate = act_layer()
 
@@ -503,7 +537,10 @@ class ConvModule(nn.Module):
                 a = 0
             if hasattr(self.conv, "weight") and self.conv.weight is not None:
                 nn.init.kaiming_normal_(
-                    self.conv.weight, a=a, mode="fan_out", nonlinearity=nonlinearity
+                    self.conv.weight,
+                    a=a,
+                    mode="fan_out",
+                    nonlinearity=nonlinearity,
                 )
             if hasattr(self.conv, "bias") and self.conv.bias is not None:
                 nn.init.constant_(self.conv.bias, 0)
@@ -548,9 +585,25 @@ class HeadDepth(nn.Module):
     def __init__(self, features):
         super(HeadDepth, self).__init__()
         self.head = nn.Sequential(
-            nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
-            Interpolate(scale_factor=2, mode="bilinear", align_corners=True),
-            nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(
+                features,
+                features // 2,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            Interpolate(
+                scale_factor=2,
+                mode="bilinear",
+                align_corners=True,
+            ),
+            nn.Conv2d(
+                features // 2,
+                32,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
             nn.ReLU(),
             nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
         )
@@ -626,7 +679,10 @@ class ReassembleBlocks(nn.Module):
             self.readout_projects = nn.ModuleList()
             for _ in range(len(self.projects)):
                 self.readout_projects.append(
-                    nn.Sequential(nn.Linear(2 * in_channels, in_channels), nn.GELU())
+                    nn.Sequential(
+                        nn.Linear(2 * in_channels, in_channels),
+                        nn.GELU(),
+                    )
                 )
 
     def forward(self, inputs):
@@ -662,7 +718,14 @@ class PreActResidualConvUnit(nn.Module):
         dilation (int): dilation rate for convs layers. Default: 1.
     """
 
-    def __init__(self, in_channels, act_layer, norm_layer, stride=1, dilation=1):
+    def __init__(
+        self,
+        in_channels,
+        act_layer,
+        norm_layer,
+        stride=1,
+        dilation=1,
+    ):
         super(PreActResidualConvUnit, self).__init__()
 
         self.conv1 = ConvModule(
@@ -709,7 +772,12 @@ class FeatureFusionBlock(nn.Module):
     """
 
     def __init__(
-        self, in_channels, act_layer, norm_layer, expand=False, align_corners=True
+        self,
+        in_channels,
+        act_layer,
+        norm_layer,
+        expand=False,
+        align_corners=True,
     ):
         super(FeatureFusionBlock, self).__init__()
 
@@ -730,10 +798,14 @@ class FeatureFusionBlock(nn.Module):
         )
 
         self.res_conv_unit1 = PreActResidualConvUnit(
-            in_channels=self.in_channels, act_layer=act_layer, norm_layer=norm_layer
+            in_channels=self.in_channels,
+            act_layer=act_layer,
+            norm_layer=norm_layer,
         )
         self.res_conv_unit2 = PreActResidualConvUnit(
-            in_channels=self.in_channels, act_layer=act_layer, norm_layer=norm_layer
+            in_channels=self.in_channels,
+            act_layer=act_layer,
+            norm_layer=norm_layer,
         )
 
     def forward(self, *inputs):
@@ -750,7 +822,12 @@ class FeatureFusionBlock(nn.Module):
                 res = inputs[1]
             x = x + self.res_conv_unit1(res)
         x = self.res_conv_unit2(x)
-        x = resize(x, scale_factor=2, mode="bilinear", align_corners=self.align_corners)
+        x = resize(
+            x,
+            scale_factor=2,
+            mode="bilinear",
+            align_corners=self.align_corners,
+        )
         x = self.project(x)
         return x
 
@@ -783,11 +860,14 @@ class DPTHead(DepthBaseDecodeHead):
         self.in_channels = self.in_channels
         self.expand_channels = expand_channels
         self.reassemble_blocks = ReassembleBlocks(
-            embed_dims, post_process_channels, readout_type, patch_size
+            embed_dims,
+            post_process_channels,
+            readout_type,
+            patch_size,
         )
 
         self.post_process_channels = [
-            channel * math.pow(2, i) if expand_channels else channel
+            (channel * math.pow(2, i) if expand_channels else channel)
             for i, channel in enumerate(post_process_channels)
         ]
         self.convs = nn.ModuleList()
@@ -805,7 +885,11 @@ class DPTHead(DepthBaseDecodeHead):
         self.fusion_blocks = nn.ModuleList()
         for _ in range(len(self.convs)):
             self.fusion_blocks.append(
-                FeatureFusionBlock(self.channels, self.act_layer, self.norm_layer)
+                FeatureFusionBlock(
+                    self.channels,
+                    self.act_layer,
+                    self.norm_layer,
+                )
             )
         self.fusion_blocks[0].res_conv_unit1 = None
         self.project = ConvModule(

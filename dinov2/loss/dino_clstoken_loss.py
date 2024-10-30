@@ -29,15 +29,16 @@ class DINOLoss(nn.Module):
     def softmax_center_teacher(self, teacher_output, teacher_temp):
         self.apply_center_update()
         # teacher centering and sharpening
-        return F.softmax((teacher_output - self.center) / teacher_temp, dim=-1)
+        return F.softmax(
+            (teacher_output - self.center) / teacher_temp,
+            dim=-1,
+        )
 
     @torch.no_grad()
     def sinkhorn_knopp_teacher(self, teacher_output, teacher_temp, n_iterations=3):
         teacher_output = teacher_output.float()
         world_size = dist.get_world_size() if dist.is_initialized() else 1
-        Q = torch.exp(
-            teacher_output / teacher_temp
-        ).t()  # Q is K-by-B for consistency with notations from our paper
+        Q = torch.exp(teacher_output / teacher_temp).t()  # Q is K-by-B for consistency with notations from our paper
         B = Q.shape[1] * world_size  # number of samples to assign
         K = Q.shape[0]  # how many prototypes
 
@@ -62,10 +63,20 @@ class DINOLoss(nn.Module):
         Q *= B  # the columns must sum to 1 so that Q is an assignment
         return Q.t()
 
-    def forward(self, student_output_list, teacher_out_softmaxed_centered_list):
+    def forward(
+        self,
+        student_output_list,
+        teacher_out_softmaxed_centered_list,
+    ):
         """
         Cross-entropy between softmax outputs of the teacher and student networks.
+        len of input lists = Nb local and global crops
+        sizes = B D for ALL
         """
+        # print(
+        #    f"loss lc_stud {len(student_output_list)} {[el.shape for el in student_output_list]} \
+        #        gc_teach {len(teacher_out_softmaxed_centered_list)} {[el.shape for el in teacher_out_softmaxed_centered_list]}"
+        # )
         # TODO: Use cross_entropy_distribution here
         total_loss = 0
         for s in student_output_list:
@@ -96,8 +107,6 @@ class DINOLoss(nn.Module):
                 self.reduce_handle.wait()
             _t = self.async_batch_center / (self.len_teacher_output * world_size)
 
-            self.center = self.center * self.center_momentum + _t * (
-                1 - self.center_momentum
-            )
+            self.center = self.center * self.center_momentum + _t * (1 - self.center_momentum)
 
             self.updated = True

@@ -25,7 +25,15 @@ class SamplingResult:
         })>
     """
 
-    def __init__(self, pos_inds, neg_inds, bboxes, gt_bboxes, assign_result, gt_flags):
+    def __init__(
+        self,
+        pos_inds,
+        neg_inds,
+        bboxes,
+        gt_bboxes,
+        assign_result,
+        gt_flags,
+    ):
         self.pos_inds = pos_inds
         self.neg_inds = neg_inds
         self.pos_bboxes = bboxes[pos_inds]
@@ -114,8 +122,12 @@ class SamplingResult:
             >>> print(self.__dict__)
         """
         from mmdet.core.bbox import demodata
-        from mmdet.core.bbox.assigners.assign_result import AssignResult
-        from mmdet.core.bbox.samplers.random_sampler import RandomSampler
+        from mmdet.core.bbox.assigners.assign_result import (
+            AssignResult,
+        )
+        from mmdet.core.bbox.samplers.random_sampler import (
+            RandomSampler,
+        )
 
         rng = demodata.ensure_rng(rng)
 

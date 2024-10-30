@@ -22,7 +22,11 @@ class GradientLoss(nn.Module):
     """
 
     def __init__(
-        self, valid_mask=True, loss_weight=1.0, max_depth=None, loss_name="loss_grad"
+        self,
+        valid_mask=True,
+        loss_weight=1.0,
+        max_depth=None,
+        loss_name="loss_grad",
     ):
         super(GradientLoss, self).__init__()
         self.valid_mask = valid_mask

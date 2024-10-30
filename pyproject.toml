@@ -1,9 +1,10 @@
 [tool.black]
-line-length = 120
+line-length = 60
 
 [tool.pylint.master]
 persistent = false
 score = false
+max-line-length = 120
 
 [tool.pylint.messages_control]
 disable = "all"

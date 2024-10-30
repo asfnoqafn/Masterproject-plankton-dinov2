@@ -11,7 +11,11 @@ import torch
 
 from .backbones import _make_dinov2_model
 from .depth import BNHead, DepthEncoderDecoder, DPTHead
-from .utils import _DINOV2_BASE_URL, CenterPadding, _make_dinov2_model_name
+from .utils import (
+    _DINOV2_BASE_URL,
+    CenterPadding,
+    _make_dinov2_model_name,
+)
 
 
 class Weights(Enum):
@@ -19,9 +23,7 @@ class Weights(Enum):
     KITTI = "KITTI"
 
 
-def _get_depth_range(
-    pretrained: bool, weights: Weights = Weights.NYU
-) -> Tuple[float, float]:
+def _get_depth_range(pretrained: bool, weights: Weights = Weights.NYU) -> Tuple[float, float]:
     if not pretrained:  # Default
         return (0.001, 10.0)
 
@@ -128,17 +130,12 @@ def _make_dinov2_linear_depther(
         return_class_token=True,
         norm=False,
     )
-    model.backbone.register_forward_pre_hook(
-        lambda _, x: CenterPadding(patch_size)(x[0])
-    )
+    model.backbone.register_forward_pre_hook(lambda _, x: CenterPadding(patch_size)(x[0]))
 
     if pretrained:
         layers_str = str(layers) if layers == 4 else ""
         weights_str = weights.value.lower()
-        url = (
-            _DINOV2_BASE_URL
-            + f"/{model_name}/{model_name}_{weights_str}_linear{layers_str}_head.pth"
-        )
+        url = _DINOV2_BASE_URL + f"/{model_name}/{model_name}_{weights_str}_linear{layers_str}_head.pth"
         checkpoint = torch.hub.load_state_dict_from_url(url, map_location="cpu")
         if "state_dict" in checkpoint:
             state_dict = checkpoint["state_dict"]
@@ -247,7 +244,9 @@ def _make_dinov2_dpt_depther(
 
     model_name = _make_dinov2_model_name(arch_name, backbone.patch_size)
     dpt_depth_head = _make_dinov2_dpt_depth_head(
-        embed_dim=backbone.embed_dim, min_depth=min_depth, max_depth=max_depth
+        embed_dim=backbone.embed_dim,
+        min_depth=min_depth,
+        max_depth=max_depth,
     )
 
     out_index = {
@@ -265,15 +264,11 @@ def _make_dinov2_dpt_depther(
         return_class_token=True,
         norm=False,
     )
-    model.backbone.register_forward_pre_hook(
-        lambda _, x: CenterPadding(backbone.patch_size)(x[0])
-    )
+    model.backbone.register_forward_pre_hook(lambda _, x: CenterPadding(backbone.patch_size)(x[0]))
 
     if pretrained:
         weights_str = weights.value.lower()
-        url = (
-            _DINOV2_BASE_URL + f"/{model_name}/{model_name}_{weights_str}_dpt_head.pth"
-        )
+        url = _DINOV2_BASE_URL + f"/{model_name}/{model_name}_{weights_str}_dpt_head.pth"
         checkpoint = torch.hub.load_state_dict_from_url(url, map_location="cpu")
         if "state_dict" in checkpoint:
             state_dict = checkpoint["state_dict"]
@@ -283,31 +278,52 @@ def _make_dinov2_dpt_depther(
 
 
 def dinov2_vits14_dd(
-    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs
+    *,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.NYU,
+    **kwargs,
 ):
     return _make_dinov2_dpt_depther(
-        arch_name="vit_small", pretrained=pretrained, weights=weights, **kwargs
+        arch_name="vit_small",
+        pretrained=pretrained,
+        weights=weights,
+        **kwargs,
     )
 
 
 def dinov2_vitb14_dd(
-    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs
+    *,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.NYU,
+    **kwargs,
 ):
     return _make_dinov2_dpt_depther(
-        arch_name="vit_base", pretrained=pretrained, weights=weights, **kwargs
+        arch_name="vit_base",
+        pretrained=pretrained,
+        weights=weights,
+        **kwargs,
     )
 
 
 def dinov2_vitl14_dd(
-    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs
+    *,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.NYU,
+    **kwargs,
 ):
     return _make_dinov2_dpt_depther(
-        arch_name="vit_large", pretrained=pretrained, weights=weights, **kwargs
+        arch_name="vit_large",
+        pretrained=pretrained,
+        weights=weights,
+        **kwargs,
     )
 
 
 def dinov2_vitg14_dd(
-    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs
+    *,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.NYU,
+    **kwargs,
 ):
     return _make_dinov2_dpt_depther(
         arch_name="vit_giant2",

@@ -3,4 +3,6 @@
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
 
-from .point_generator import MlvlPointGenerator  # noqa: F403
+from .point_generator import (
+    MlvlPointGenerator,
+)  # noqa: F403
