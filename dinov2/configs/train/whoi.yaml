@@ -80,7 +80,7 @@ student:
   drop_path_rate: 0
   layerscale: 1.0e-05
   drop_path_uniform: true
-  pretrained_weights: '/fast/AG_Kainmueller/plankton/checkpoints/dinov2_vits14_pretrain.pth'
+  pretrained_weights: 'checkpoints/dinov2_vits14_pretrain.pth'
   ffn_layer: "mlp"
   block_chunks: 0
   qkv_bias: true
