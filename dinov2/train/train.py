@@ -512,7 +512,6 @@ def do_train(cfg, model, resume=False):
 
 
 def main(args):
-    print("Hello World")
     torchvision.disable_beta_transforms_warning()
     cfg = setup(args)
 
