@@ -100,9 +100,6 @@ def get_args_parser(add_help: bool = True):
         default=1,
         help="Set number of nodes used.",
     )
-    parser.add_argument(
-        "--num_nodes", type=int, default=1, help="Set number of nodes used."
-    )
 
     return parser
 
@@ -515,6 +512,7 @@ def do_train(cfg, model, resume=False):
 
 
 def main(args):
+    print("Hello World")
     torchvision.disable_beta_transforms_warning()
     cfg = setup(args)
 
