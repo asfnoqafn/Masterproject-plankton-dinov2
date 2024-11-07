@@ -327,17 +327,8 @@ def do_train(cfg, model, resume=False):
     collate_fn_cpu, collate_fn_gpu = select_collate_fn(
         cfg, n_tokens, mask_generator, inputs_dtype
     )
-    if (
-        cfg.crops.use_ch_patch_embed
-    ):  # use normal num tokens for mask, and multiply by in_chans for the rest
-        print(
-            f"Number of tokens {n_tokens} * {model.student.backbone.in_chans} = {n_tokens * model.student.backbone.in_chans}"
-        )
-        n_tokens *= model.student.backbone.in_chans
-    else:
-        print(
-            f"Number of tokens {n_tokens}, in_chans {model.student.backbone.in_chans}"
-        )
+
+    print(f"Number of tokens {n_tokens}, in_chans {cfg.train.in_chans}")
     # setup data loader
     dataset = make_dataset(
         dataset_str=cfg.train.dataset_path,
@@ -389,6 +380,8 @@ def do_train(cfg, model, resume=False):
         )
         profiler.start()
 
+    if not isinstance(cfg.train.in_chans, int):
+        dataset.set_curr_in_chans(cfg.train.in_chans[0])
     for data in metric_logger.log_every(
         data_loader,
         20,
@@ -443,112 +436,106 @@ def do_train(cfg, model, resume=False):
         apply_optim_scheduler(optimizer, lr, wd, last_layer_lr)
 
         # compute losses
-        optimizer.zero_grad(set_to_none=True)
-        # TODO iter for each el if data['collated_global_crops'] is a list in forward backward
+        if cfg.crops.use_variable_channels and iteration % len(cfg.train.in_chans) == 0:
+            loss_accumulator = 0
+            optimizer.zero_grad(set_to_none=True)
         if not cfg.crops.use_variable_channels:
             loss_accumulator, loss_dict = model.forward_teacher_student(
                 data, teacher_temp=teacher_temp
             )
         else:
-            loss_dict = dict()
-            loss_accumulator = 0
-            for i in range(nb_diff_ch_nbs):
-                data["collated_global_crops"] = data["collated_global_crops" + str(i)]
-                data["collated_local_crops"] = data["collated_local_crops" + str(i)]
-                data["collated_masks"] = data["collated_masks" + str(i)]
-                data["mask_indices_list"] = data["mask_indices_list" + str(i)]
-                data["masks_weight"] = data["masks_weight" + str(i)]
-                data["upperbound"] = data["upperbound" + str(i)]
-                data["n_masked_patches"] = data["n_masked_patches" + str(i)]
-
-                partial_loss_accumulator, partial_loss_dict = (
-                    model.forward_teacher_student(
-                        data,
-                        teacher_temp=teacher_temp,
-                    )
-                )
-                loss_accumulator += partial_loss_accumulator
-                if i == 0:
-                    loss_dict = partial_loss_dict
-                else:
-                    loss_dict = {
-                        k: v1 + v2
-                        for k, v1, v2 in zip(
-                            partial_loss_dict.keys(),
-                            loss_dict.values(),
-                            partial_loss_dict.values(),
-                        )
-                    }
-            loss_dict = {k: v / nb_diff_ch_nbs for k, v in loss_dict.items()}
-
-        # torch.distributed.all_reduce(loss_accumulator)
-        # Think it should be here, but cause hang
-        model.backward(loss_accumulator)
-
-        # clip gradients
-        if fp16_scaler is not None:
-            if cfg.optim.clip_grad:
-                fp16_scaler.unscale_(optimizer)
-                for v in model.student.values():
-                    v.clip_grad_norm_(cfg.optim.clip_grad)
-            fp16_scaler.step(optimizer)
-            fp16_scaler.update()
-        else:
-            if cfg.optim.clip_grad:
-                for v in model.student.values():
-                    v.clip_grad_norm_(cfg.optim.clip_grad)
-            optimizer.step()
-
-        # perform teacher EMA update
-        model.update_teacher(mom)
-
-        # logging
-        if distributed.get_global_size() > 1:
-            for v in loss_dict.values():
-                torch.distributed.all_reduce(v)
-        loss_dict_reduced = {
-            k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()
-        }
-
-        if math.isnan(sum(loss_dict_reduced.values())):
-            logger.info("NaN detected")
-            for k, v in loss_dict_reduced.items():
-                if math.isnan(v):
-                    print("Key:{} is nan. Stopping...".format(k))
-            raise AssertionError
-        losses_reduced = sum(loss for loss in loss_dict_reduced.values())
-
-        metric_logger.update(lr=lr)
-        metric_logger.update(wd=wd)
-        metric_logger.update(mom=mom)
-        metric_logger.update(last_layer_lr=last_layer_lr)
-        metric_logger.update(current_batch_size=current_batch_size)
-        metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
-
-        if distributed.is_main_process():
-            wandb.log(
-                {
-                    "#samples": tot_nb_seen_samples,
-                    "lr": lr,
-                    "wd": wd,
-                    "mom": mom,
-                    "ll_lr": last_layer_lr,
-                    "total_loss": losses_reduced,
-                    **loss_dict_reduced,
-                }
+            partial_loss_accumulator, partial_loss_dict = model.forward_teacher_student(
+                data, teacher_temp=teacher_temp
             )
+            loss_accumulator += partial_loss_accumulator
+            if iteration % len(cfg.train.in_chans) == 0:
+                loss_dict = partial_loss_dict
+            else:
+                loss_dict = {
+                    k: v1 + v2
+                    for k, v1, v2 in zip(
+                        partial_loss_dict.keys(),
+                        loss_dict.values(),
+                        partial_loss_dict.values(),
+                    )
+                }
+            if (
+                iteration % len(cfg.train.in_chans) == len(cfg.train.in_chans) - 1
+            ):  # last iteration
+                loss_dict = {k: v / nb_diff_ch_nbs for k, v in loss_dict.items()}
 
-        # checkpointing and testing
+                # torch.distributed.all_reduce(loss_accumulator)
+                # Think it should be here, but causes hang
+                model.backward(loss_accumulator)
 
-        if (
-            cfg.evaluation.eval_period_iterations > 0
-            and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
-        ):
-            do_test(cfg, model, f"training_{iteration}")
-            torch.cuda.synchronize()
+            # clip gradients
+            if fp16_scaler is not None:
+                if cfg.optim.clip_grad:
+                    fp16_scaler.unscale_(optimizer)
+                    for v in model.student.values():
+                        v.clip_grad_norm_(cfg.optim.clip_grad)
+                fp16_scaler.step(optimizer)
+                fp16_scaler.update()
+            else:
+                if cfg.optim.clip_grad:
+                    for v in model.student.values():
+                        v.clip_grad_norm_(cfg.optim.clip_grad)
+                optimizer.step()
+
+            # perform teacher EMA update
+            model.update_teacher(mom)
+
+            # logging
+            if distributed.get_global_size() > 1:
+                for v in loss_dict.values():
+                    torch.distributed.all_reduce(v)
+            loss_dict_reduced = {
+                k: v.item() / distributed.get_global_size()
+                for k, v in loss_dict.items()
+            }
+
+            if math.isnan(sum(loss_dict_reduced.values())):
+                logger.info("NaN detected")
+                for k, v in loss_dict_reduced.items():
+                    if math.isnan(v):
+                        print("Key:{} is nan. Stopping...".format(k))
+                raise AssertionError
+            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+
+            metric_logger.update(lr=lr)
+            metric_logger.update(wd=wd)
+            metric_logger.update(mom=mom)
+            metric_logger.update(last_layer_lr=last_layer_lr)
+            metric_logger.update(current_batch_size=current_batch_size)
+            metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
+
+            if distributed.is_main_process():
+                wandb.log(
+                    {
+                        "#samples": tot_nb_seen_samples,
+                        "lr": lr,
+                        "wd": wd,
+                        "mom": mom,
+                        "ll_lr": last_layer_lr,
+                        "total_loss": losses_reduced,
+                        **loss_dict_reduced,
+                    }
+                )
+
+            # checkpointing and testing
+
+            if (
+                cfg.evaluation.eval_period_iterations > 0
+                and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
+            ):
+                do_test(cfg, model, f"training_{iteration}")
+                torch.cuda.synchronize()
 
         periodic_checkpointer.step(iteration)
         iteration = iteration + 1
+        if isinstance(cfg.train.in_chans, list):
+            curr_in_chans = cfg.train.in_chans[iteration % len(cfg.train.in_chans)]
+            dataset.set_curr_in_chans(curr_in_chans)
     metric_logger.synchronize_between_processes()
 
     if cfg.train.do_profiling:

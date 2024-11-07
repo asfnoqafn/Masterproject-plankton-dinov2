@@ -71,6 +71,7 @@ def collate_cpu(
 
 def collate_separate_sizes_cpu(samples):
     # list of samples of len B, each sample has (x,y), and x of len #gc of #lc
+    # Returns lists of tensors with differernt ch numbers
     n_global_crops = len(samples[0][0]["global_crops"])
     n_local_crops = len(samples[0][0]["local_crops"])
 
@@ -152,6 +153,7 @@ def collate_data_and_cast(
     patch_size=14,
     use_ch_patch_embed=False,
     use_variable_channels=False,
+    make_list_w_ch_nbs=False,
     do_debug=False,
 ):
     attn_mask_lc = attn_mask_gc = c = None
@@ -223,7 +225,7 @@ def collate_data_and_cast(
         B = coll_global_crops.size(0)
 
     else:  # on cpu
-        if use_variable_channels:
+        if make_list_w_ch_nbs:
             (
                 coll_local_crops,
                 coll_global_crops,
@@ -248,7 +250,7 @@ def collate_data_and_cast(
 
             B = len(coll_global_crops)
     N = n_tokens
-    if use_ch_patch_embed and use_variable_channels:
+    if use_ch_patch_embed and use_variable_channels and make_list_w_ch_nbs:
         upperbound_list = []
         masks_list = []
 

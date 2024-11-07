@@ -72,6 +72,7 @@ class ImageNet(ExtendedVisionDataset):
         do_short_run: bool = False,
         with_targets: bool = False,
         is_cached: bool = False,
+        curr_in_chans: int = None,
     ) -> None:
         super().__init__(root, transforms, transform, target_transform)
         self.root = root
@@ -85,6 +86,10 @@ class ImageNet(ExtendedVisionDataset):
         self.do_short_run = do_short_run
         self.with_targets = with_targets
         self.is_cached = is_cached
+        self.curr_in_chans = curr_in_chans
+
+    def set_curr_in_chans(self, curr_in_chans: int) -> None:
+        self.curr_in_chans = curr_in_chans
 
     @property
     def split(self) -> "ImageNet.Split":
@@ -169,7 +174,11 @@ class ImageNet(ExtendedVisionDataset):
 
     def get_targets(self) -> Optional[np.ndarray]:
         entries = self._get_entries()
-        return None if self.split == _Split.TEST else np.array([el["class_id"] for el in entries])
+        return (
+            None
+            if self.split == _Split.TEST
+            else np.array([el["class_id"] for el in entries])
+        )
 
     def get_class_id(self, index: int) -> Optional[str]:
         entries = self._get_entries()

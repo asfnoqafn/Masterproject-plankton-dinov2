@@ -154,8 +154,11 @@ class DinoVisionTransformer(nn.Module):
                 for ch in in_chans
             }
             num_patches = self.patch_embed[min(in_chans)].num_patches
+        print(f"Patch Embedding: {self.patch_embed}")
 
         if self.use_ch_patch_embed:
+            if not isinstance(in_chans, int):
+                in_chans = min(in_chans)
             num_patches = int(num_patches / in_chans)
         self.num_loc_crops = num_loc_crops
         self.free_shapes = free_shapes
@@ -164,6 +167,7 @@ class DinoVisionTransformer(nn.Module):
         self.pos_embed = nn.Parameter(
             torch.zeros(1, num_patches + self.num_tokens, embed_dim)
         )
+        print("init self.pos_embed", self.pos_embed.shape)
         assert num_register_tokens >= 0
         self.register_tokens = (
             nn.Parameter(torch.zeros(1, num_register_tokens, embed_dim))
@@ -262,6 +266,11 @@ class DinoVisionTransformer(nn.Module):
         w0 = w // self.patch_size
         h0 = h // self.patch_size
         M = int(math.sqrt(N))  # Recover the number of patches in each dimension
+        print(
+            "pos_embed",
+            f"N {N}, M{M}, w0 {w0}, h0 {h0}, w {w}, h {h}, self.pos_embed {self.pos_embed.shape}",
+            flush=True,
+        )
         assert N == M * M
         kwargs = {}
         if self.interpolate_offset:
@@ -284,10 +293,10 @@ class DinoVisionTransformer(nn.Module):
         assert (w0, h0) == patch_pos_embed.shape[-2:]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
 
-        if self.use_ch_patch_embed:
-            patch_pos_embed = patch_pos_embed.expand(1, self.in_chans, -1, dim).reshape(
-                1, -1, dim
-            )
+        # if self.use_ch_patch_embed:
+        #    patch_pos_embed = patch_pos_embed.expand(1, self.in_chans, -1, dim).reshape(
+        #        1, -1, dim
+        #    )
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1).to(
             previous_dtype
         )
