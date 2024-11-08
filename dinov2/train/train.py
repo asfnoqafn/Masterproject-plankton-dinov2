@@ -435,39 +435,30 @@ def do_train(cfg, model, resume=False):
         last_layer_lr = last_layer_lr_schedule[iteration]
         apply_optim_scheduler(optimizer, lr, wd, last_layer_lr)
 
-        # compute losses
         if cfg.crops.use_variable_channels and iteration % len(cfg.train.in_chans) == 0:
-            loss_accumulator = 0
-            optimizer.zero_grad(set_to_none=True)
-        if not cfg.crops.use_variable_channels:
-            loss_accumulator, loss_dict = model.forward_teacher_student(
-                data, teacher_temp=teacher_temp
-            )
+                total_loss_accumulator = 0
+                optimizer.zero_grad(set_to_none=True)
+        loss_accumulator, loss_dict = model.forward_teacher_student(data, teacher_temp=teacher_temp)
+        model.backward(loss_accumulator)
+
+        total_loss_accumulator += loss_accumulator
+        if iteration % len(cfg.train.in_chans) == 0:
+            total_loss_dict = loss_dict
         else:
-            partial_loss_accumulator, partial_loss_dict = model.forward_teacher_student(
-                data, teacher_temp=teacher_temp
-            )
-            loss_accumulator += partial_loss_accumulator
-            if iteration % len(cfg.train.in_chans) == 0:
-                loss_dict = partial_loss_dict
-            else:
-                loss_dict = {
-                    k: v1 + v2
-                    for k, v1, v2 in zip(
-                        partial_loss_dict.keys(),
-                        loss_dict.values(),
-                        partial_loss_dict.values(),
-                    )
-                }
-            if (
-                iteration % len(cfg.train.in_chans) == len(cfg.train.in_chans) - 1
-            ):  # last iteration
-                loss_dict = {k: v / nb_diff_ch_nbs for k, v in loss_dict.items()}
+            total_loss_dict = {
+                k: v1 + v2
+                for k, v1, v2 in zip(
+                    loss_dict.keys(),
+                    total_loss_dict.values(),
+                    loss_dict.values(),
+                )
+            }
+        if (
+            iteration % len(cfg.train.in_chans) == len(cfg.train.in_chans) - 1
+        ):  # last iteration
+            total_loss_dict = {k: v / nb_diff_ch_nbs for k, v in total_loss_dict.items()}
 
-                # torch.distributed.all_reduce(loss_accumulator)
-                # Think it should be here, but causes hang
-                model.backward(loss_accumulator)
-
+        if (not cfg.crops.use_variable_channels) or (cfg.crops.use_variable_channels and iteration % len(cfg.train.in_chans) == 0):
             # clip gradients
             if fp16_scaler is not None:
                 if cfg.optim.clip_grad:
@@ -531,8 +522,10 @@ def do_train(cfg, model, resume=False):
                 do_test(cfg, model, f"training_{iteration}")
                 torch.cuda.synchronize()
 
-        periodic_checkpointer.step(iteration)
-        iteration = iteration + 1
+            periodic_checkpointer.step(iteration)
+            iteration = iteration + 1
+        
+        # update in_chans
         if isinstance(cfg.train.in_chans, list):
             curr_in_chans = cfg.train.in_chans[iteration % len(cfg.train.in_chans)]
             dataset.set_curr_in_chans(curr_in_chans)
