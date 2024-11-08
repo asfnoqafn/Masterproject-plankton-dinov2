@@ -159,6 +159,16 @@ class SSLMetaArch(nn.Module):
 
         self.student = nn.ModuleDict(student_model_dict)
         self.teacher = nn.ModuleDict(teacher_model_dict)
+        for p in self.teacher.parameters():
+            if p.dtype != torch.float16:
+                print(p.dtype)
+
+        for p in self.student.parameters():
+            if p.dtype != torch.float16:
+                print(p.dtype)
+
+
+
 
         # there is no backpropagation through the teacher, so no need for gradients
         for p in self.teacher.parameters():

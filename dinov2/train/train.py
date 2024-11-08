@@ -436,8 +436,9 @@ def do_train(cfg, model, resume=False):
         apply_optim_scheduler(optimizer, lr, wd, last_layer_lr)
 
         if cfg.crops.use_variable_channels and iteration % len(cfg.train.in_chans) == 0:
-                total_loss_accumulator = 0
-                optimizer.zero_grad(set_to_none=True)
+            total_loss_accumulator = 0
+            optimizer.zero_grad(set_to_none=True)
+        
         loss_accumulator, loss_dict = model.forward_teacher_student(data, teacher_temp=teacher_temp)
         model.backward(loss_accumulator)
 
