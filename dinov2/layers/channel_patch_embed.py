@@ -37,8 +37,8 @@ class PatchEmbedPerChannel(nn.Module):
             embed_dim,
             kernel_size=(1, patch_size, patch_size),
             stride=(1, patch_size, patch_size),
-            dtype=torch.half,
-            device="cuda",
+            #dtype=torch.half,
+            #device="cuda",
         )  # CHANGED
 
         self.channel_embed = nn.parameter.Parameter(
@@ -75,7 +75,7 @@ class PatchEmbedPerChannel(nn.Module):
         x = self.proj(x.unsqueeze(1))  # B Cout Cin H W
 
         # channel specific offsets
-        x += self.channel_embed[:, :, cur_channels, :, :].cuda()  # B Cout Cin H W
+        x += self.channel_embed[:, :, cur_channels, :, :] #.cuda()  # B Cout Cin H W
 
         # preparing the output sequence
         x = x.flatten(2)  # B Cout CinHW
