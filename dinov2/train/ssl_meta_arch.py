@@ -159,13 +159,15 @@ class SSLMetaArch(nn.Module):
 
         self.student = nn.ModuleDict(student_model_dict)
         self.teacher = nn.ModuleDict(teacher_model_dict)
-        for p in self.teacher.parameters():
+
+        for i, p in enumerate(self.teacher.parameters()):
+            if i < 5: print(p)
             if p.dtype != torch.float16:
-                print(p.dtype)
+                print(p, p.dtype)
 
         for p in self.student.parameters():
             if p.dtype != torch.float16:
-                print(p.dtype)
+                print(p, p.dtype)
 
 
 
