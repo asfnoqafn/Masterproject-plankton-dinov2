@@ -20,6 +20,7 @@ class _SplitLMDBDataset(Enum):
 
 # TODO: Fix inheritance logic
 class LMDBDataset(ImageNet):
+
     Target = _TargetLMDBDataset
     Split = _SplitLMDBDataset
     lmdb_handles = {}
@@ -75,8 +76,9 @@ class LMDBDataset(ImageNet):
         return self._entries
 
     def _load_extra(self, extra_path: str):
-        # extra_full_path = self._get_extra_full_path(extra_path)
+        extra_full_path = self._get_extra_full_path(extra_path)
         print("extra_path", extra_path)
+        print("extra full path", extra_full_path)
         file_list = glob.glob(extra_path)
 
         file_list_labels = sorted([el for el in file_list if el.endswith("labels")])
@@ -101,6 +103,7 @@ class LMDBDataset(ImageNet):
             lists_to_iterate = file_list_imgs
         for iter_obj in lists_to_iterate:
             if len(file_list_labels) > 0:
+                print("")
                 lmdb_path_labels, lmdb_path_imgs = iter_obj
                 lmdb_env_labels = lmdb.open(
                     lmdb_path_labels,
@@ -136,6 +139,7 @@ class LMDBDataset(ImageNet):
                 lmdb_cursor = lmdb_txn_labels.cursor()
             else:
                 lmdb_cursor = lmdb_txn_imgs.cursor()
+
             for key, value in lmdb_cursor:
                 entry = dict()
                 entry["index"] = key.decode()
@@ -151,7 +155,8 @@ class LMDBDataset(ImageNet):
                 accumulated = [el for el in accumulated if el["class_id"] < 5]
             # free up resources
             lmdb_cursor.close()
-            if lmdb_env_labels is not None:
+            # if lmdb_env_labels is not None:  #breaks if we had no labels to begin with
+            if self.with_targets and len(file_list_labels) > 0:
                 lmdb_env_labels.close()
 
         if self.with_targets:
