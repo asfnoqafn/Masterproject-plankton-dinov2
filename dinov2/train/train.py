@@ -380,6 +380,7 @@ def do_train(cfg, model, resume=False):
         )
         profiler.start()
 
+    print("cfg.train.in_chans", cfg.train.in_chans)
     if not isinstance(cfg.train.in_chans, int):
         dataset.set_curr_in_chans(cfg.train.in_chans[0])
     for data in metric_logger.log_every(
@@ -410,6 +411,7 @@ def do_train(cfg, model, resume=False):
             nb_diff_ch_nbs = len(
                 [k for k in data.keys() if "collated_global_crops" in k]
             )
+            print('nb_diff_ch_nbs', nb_diff_ch_nbs)
             current_batch_size = (
                 sum(
                     [
@@ -442,25 +444,27 @@ def do_train(cfg, model, resume=False):
         loss_accumulator, loss_dict = model.forward_teacher_student(data, teacher_temp=teacher_temp)
         model.backward(loss_accumulator)
 
-        total_loss_accumulator += loss_accumulator
-        if iteration % len(cfg.train.in_chans) == 0:
-            total_loss_dict = loss_dict
-        else:
-            total_loss_dict = {
-                k: v1 + v2
-                for k, v1, v2 in zip(
-                    loss_dict.keys(),
-                    total_loss_dict.values(),
-                    loss_dict.values(),
-                )
-            }
-        if (
-            iteration % len(cfg.train.in_chans) == len(cfg.train.in_chans) - 1
-        ):  # last iteration
-            total_loss_dict = {k: v / nb_diff_ch_nbs for k, v in total_loss_dict.items()}
+        if cfg.crops.use_variable_channels:
+            total_loss_accumulator += loss_accumulator
+            if iteration % len(cfg.train.in_chans) == 0:
+                total_loss_dict = loss_dict
+            else:
+                total_loss_dict = {
+                    k: v1 + v2
+                    for k, v1, v2 in zip(
+                        loss_dict.keys(),
+                        total_loss_dict.values(),
+                        loss_dict.values(),
+                    )
+                }
+            if (
+                iteration % len(cfg.train.in_chans) == len(cfg.train.in_chans) - 1
+            ):  # last iteration
+                loss_dict = {k: v / nb_diff_ch_nbs for k, v in total_loss_dict.items()}
 
-        if (not cfg.crops.use_variable_channels) or (cfg.crops.use_variable_channels and iteration % len(cfg.train.in_chans) == 0):
+        if (not cfg.crops.use_variable_channels) or(cfg.crops.use_variable_channels and iteration % len(cfg.train.in_chans) == len(cfg.train.in_chans) - 1):
             # clip gradients
+
             if fp16_scaler is not None:
                 if cfg.optim.clip_grad:
                     fp16_scaler.unscale_(optimizer)
