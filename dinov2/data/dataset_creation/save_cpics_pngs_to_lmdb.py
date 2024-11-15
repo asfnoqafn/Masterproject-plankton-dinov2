@@ -80,8 +80,9 @@ def main(args):
 
             height, width = get_image_dimensions(abs_path)
 
-            # Check if the image is smaller than the minimum size
-            if height < args.min_size or width < args.min_size:
+            # Check if the image is smaller than the minimum size 
+            # probably should allow if only one dimension is smaller thin algae
+            if height < args.min_size and width < args.min_size:
                 #print(f"Skipping {abs_path} due to size constraints.")
                 continue
 
