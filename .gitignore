@@ -29,7 +29,9 @@ notebooks/test_nb.ipynb
 .DS_Store
 notebooks/test_nb.ipynb
 checkpoints/
-data/
+dinov2/data/dataset_creation/debug_output/
+dinov2/data/dataset_creation/cpics-TRAIN_imgs/
+dinov2/data/dataset_creation/cpics-TRAIN_labels/
 output_dir/
 notebooks/*.jpg
 notebooks/seg_examples_Quickshift.jpg
