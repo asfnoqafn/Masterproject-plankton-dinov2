@@ -5,7 +5,7 @@ from typing import Optional
 
 import lmdb
 import numpy as np
-
+import hashlib
 from dinov2.data.datasets import ImageNet
 
 _TargetLMDBDataset = int
@@ -25,6 +25,7 @@ class LMDBDataset(ImageNet):
     Split = _SplitLMDBDataset
     lmdb_handles = {}
 
+  
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
         lmdb_txn = self._lmdb_txns[entry["lmdb_imgs_file"]]
@@ -39,9 +40,14 @@ class LMDBDataset(ImageNet):
             return None
         else:
             entries = self._get_entries()
-            if self.with_targets:
-                class_index = entries[index]["class_id"]
-                return int(class_index)
+            if True:#if self.with_targets:
+                #print(entries[index])
+                class_index = entries[index]["index"]
+                print(class_index.split("_")[0])
+                string = class_index.split("_")[0]
+                hash_object = hashlib.md5(string.encode())
+                print(int(hash_object.hexdigest(), 16))
+                return int(hash_object.hexdigest(), 16)
             else:
                 return None
 

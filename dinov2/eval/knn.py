@@ -24,6 +24,7 @@ from dinov2.data import (
 )
 from dinov2.data.transforms import (
     make_classification_eval_transform,
+    make_classification_train_transform
 )
 from dinov2.eval.metrics import (
     AccuracyAveraging,
@@ -33,6 +34,7 @@ from dinov2.eval.setup import (
     get_args_parser as get_setup_args_parser,
 )
 from dinov2.eval.setup import setup_and_build_model
+from sklearn.model_selection import train_test_split
 from dinov2.eval.utils import (
     ModelWithNormalize,
     evaluate,
@@ -412,8 +414,8 @@ def eval_knn(
 def eval_knn_with_model(
     model,
     output_dir,
-    train_dataset_str="ImageNet:split=TRAIN",
-    val_dataset_str="ImageNet:split=VAL",
+    train_dataset_str="LMDB:split=TRAIN",
+    val_dataset_str="LMDB:split=VAL",
     nb_knn=(10, 20, 100, 200),
     temperature=0.07,
     autocast_dtype=torch.float,
@@ -516,8 +518,26 @@ def main(args):
     return 0
 
 
+def split_dataset(dataset, test_size=0.3, random_state=42):
+    train_indices, test_indices = train_test_split(
+        list(range(len(dataset))),
+        test_size=test_size,
+        random_state=random_state,
+    )
+    train_dataset = torch.utils.data.Subset(dataset, train_indices)
+    test_dataset = torch.utils.data.Subset(dataset, test_indices)
+    return train_dataset, test_dataset
+
 if __name__ == "__main__":
     description = "DINOv2 k-NN evaluation"
     args_parser = get_args_parser(description=description)
     args = args_parser.parse_args()
+
+    if not args.val_dataset_str:
+        dataset = make_dataset(dataset_str=args.train_dataset_str, transform=make_classification_eval_transform())
+        train_dataset, val_dataset = split_dataset(dataset)
+    else:
+        train_dataset = make_dataset(dataset_str=args.train_dataset_str, transform=make_classification_train_transform())
+        val_dataset = make_dataset(dataset_str=args.val_dataset_str, transform=make_classification_eval_transform())
+
     sys.exit(main(args))

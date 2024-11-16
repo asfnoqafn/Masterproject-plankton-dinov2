@@ -27,17 +27,27 @@ class ExtendedVisionDataset(VisionDataset):
         raise NotImplementedError
 
     def __getitem__(self, index: int) -> Union[Tuple[Any, Any], torch.Tensor, Image.Image]:
-        num_channels = 3  # base number
+        num_channels = 1  # base number
         img_bytes = self.get_image_data(index)
-        if isinstance(img_bytes, list):  # image
-            image = [torch.from_numpy(iio.imread(ch_bytes, index=None)) for ch_bytes in img_bytes]
-            image = torch.stack(image, dim=0)
+        if True:  # image
+            image = torch.frombuffer(np.copy(img_bytes), dtype=torch.uint8)
+        #    print(image.shape)
+            image = decode_image(image)
             image = (image / 255.0).to(torch.float32)
+        #    # image = torch.stack(image, dim=0)
+        #     print(image.shape[0])
+        #     image = (image / 255.0).to(torch.float32)
+        #     image = image.reshape(num_channels, image.shape[0], image.shape[1])
+        #    print(image.shape)
+            
         else:
             try:
                 # have to copy bc stream not writeable
                 image = torch.frombuffer(np.copy(img_bytes), dtype=torch.uint8)
-
+                print("i suck")
+                print(image.shape[0])
+                print(num_channels)
+                print(image.shape[1])
                 if "plankton" in str(self.root):
                     image = decode_image(image, ImageReadMode.RGB)
                 else:
@@ -56,11 +66,13 @@ class ExtendedVisionDataset(VisionDataset):
                     raise RuntimeError(f"can not read image for sample {index}") from e
 
         target = self.get_target(index)
-        target = TargetDecoder(target).decode()
-
+        print(target)
         if self.transforms is not None:
-            image, target = self.transforms(image, target)
 
+            image, target = self.transforms(image, target)
+        # does the target remain after the transformation?
+        print("target:" + target)
+        print("image:" + image.shape)
         return image, target
 
     def __len__(self) -> int:

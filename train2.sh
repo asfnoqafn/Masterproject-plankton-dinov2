@@ -2,7 +2,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-gpu=1
+#SBATCH --cpus-per-gpu=10
 #SBATCH -e /home/hk-project-p0021769/hgf_grc7525/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_grc7525/output/log_%j.out
 #SBATCH --time 00:20:00
