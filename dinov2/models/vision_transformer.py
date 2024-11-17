@@ -481,6 +481,7 @@ class DinoVisionTransformer(nn.Module):
             x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
             interpolated_pos_embeds = self.interpolate_pos_encoding(x, w, h)
             if interpolated_pos_embeds.shape != x.shape:
+                num_ch_list = [x.shape[1]] * x.shape[0] # TESTING
                 c_max = max(num_ch_list)
                 # int((x.shape[1] - 1) / (interpolated_pos_embeds.shape[1] - 1))
                 # -1 to account for cls token
