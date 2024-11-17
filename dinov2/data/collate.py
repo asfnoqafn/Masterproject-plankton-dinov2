@@ -32,7 +32,7 @@ def collate_cpu(
     n_global_crops = len(samples[0][0]["global_crops"])
     n_local_crops = len(samples[0][0]["local_crops"])
 
-    n_gc, c, np, p = samples[0][0]["global_crops"].shape
+    n_gc, c = samples[0][0]["global_crops"]
     coll_global_crops = [
         s[0]["global_crops"][i] for i in range(n_global_crops) for s in samples
     ]
@@ -113,8 +113,9 @@ def collate_data_and_cast(
     # from b (nb_crops c h w) OR b (nb_crops c p nxp) to (b nc) c p np
     # nb crops goes with batch size ie: b nc -> (b nc)
     if isinstance(samples, dict):
-        if len(samples["global_crops"].size()) == 5:
-            B, nc, c, h, w = samples["global_crops"].size()
+        print("idk")
+        if len(samples["global_crops"]) == 5:
+            B, nc, c = samples["global_crops"]
             coll_global_crops = rearrange(
                 samples["global_crops"],
                 "b nc c h w -> (b nc) c h w",
@@ -132,7 +133,12 @@ def collate_data_and_cast(
             local_patch_pos = samples["local_patch_pos"]
             local_crop_dims = samples["local_crop_dims"]
         else:  # no free shapes
-            B, c, h, w = samples["global_crops"].size()
+            print(
+                "samples global crops",
+                len(samples["global_crops"]),
+                samples["global_crops"][0].shape,
+            )
+            B, c = samples["global_crops"]
             coll_global_crops = samples["global_crops"]
             coll_local_crops = samples["local_crops"]
             # Local shape torch.Size([256, 3, 98, 98]) Global shape  torch.Size([64, 3, 3584, 14])
@@ -140,8 +146,11 @@ def collate_data_and_cast(
             local_patch_pos = None
             local_crop_dims = None
 
-    elif isinstance(samples[0], dict):  # on gpu and with free_shapes
-        nc, c, h, w = samples[0]["global_crops"].size()
+    elif isinstance(
+        samples[0], dict
+    ):  # on gpu and with free_shapes
+        print("on gpu with free shapes")
+        nc, c = samples[0]["global_crops"].size()
 
         coll_global_crops = [
             rearrange(
@@ -189,6 +198,11 @@ def collate_data_and_cast(
         B = coll_global_crops.size(0)
 
     else:  # on cpu
+        print("on cpu")
+        print(
+            "Samples",
+            samples[0][0]["global_crops"][0].shape,
+        )
         (
             coll_global_crops,
             coll_local_crops,
@@ -206,6 +220,11 @@ def collate_data_and_cast(
 
         B = len(coll_global_crops)
     N = n_tokens
+    print("B", B)
+    print("c", c.shape)
+    print("mask probability", mask_probability)
+    if isinstance(samples, dict):
+        n_samples_masked = int(B * mask_probability)
     n_samples_masked = int(B * mask_probability)
     probs = torch.linspace(*mask_ratio_tuple, n_samples_masked + 1)
     upperbound = 0
@@ -216,7 +235,8 @@ def collate_data_and_cast(
         if do_free_shapes:
             mask_tensor = torch.rand(
                 1,
-                coll_global_crops[i].shape[-1] // patch_size,
+                coll_global_crops[i].shape[-1]
+                // patch_size,
             ) < random.uniform(prob_min, prob_max)
         else:
             mask_tensor = torch.BoolTensor(
@@ -247,9 +267,14 @@ def collate_data_and_cast(
     collated_masks = torch.stack(masks_list).flatten(
         1
     )  # ((b nc) 16 16) -> ((b nc) 256)
+    print("caaaa", c.shape)
     if use_ch_patch_embed:
-        collated_masks = collated_masks.tile((1, c))  # ((b nc) 256) -> ((b nc) (c 256))
-    mask_indices_list = collated_masks.flatten().nonzero().flatten()
+        collated_masks = collated_masks.tile(
+            (1, c.shape[0])
+        )  # ((b nc) 256) -> ((b nc) (c 256))
+    mask_indices_list = (
+        collated_masks.flatten().nonzero().flatten()
+    )
 
     masks_weight = (
         (1 / collated_masks.sum(-1).clamp(min=1.0))

@@ -342,6 +342,14 @@ def do_train(cfg, model, resume=False):
         with_targets=False,
         cache_dataset=cfg.train.cache_dataset,
     )
+
+    # test data in dataset dict_keys(['global_crops', 'global_crops_teacher', 'local_crops', 'offsets']) FOR CPU
+    print(
+        "test data in dataset",
+        # len(dataset[0][0]["global_crops"]), # THIS IS DIFFERENT FOR TORCHVISIION CPU AND GPU IN SHAPE
+        # dataset[0][0]["global_crops"][0].shape,
+    )
+
     # sampler_type = SamplerType.INFINITE
     sampler_type = SamplerType.SHARDED_INFINITE
     dl_kwargs = {
@@ -392,6 +400,14 @@ def do_train(cfg, model, resume=False):
         max_iter,
         start_iter,
     ):
+        # print(
+        #     "data",
+        #     data.keys(),
+        # )
+        # print(
+        #     "Data collated global crops",
+        #     data["collated_global_crops"].shape,
+        # )
         if cfg.train.do_profiling:
             profiler.step()
         if (

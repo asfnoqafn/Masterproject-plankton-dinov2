@@ -1,5 +1,5 @@
 MODEL:
-  WEIGHTS: ''
+  WEIGHTS: ""
 compute_precision:
   grad_scaler: true
   teacher:
@@ -52,8 +52,8 @@ ibot:
   loss_weight: 1.0
   mask_sample_probability: 0.5
   mask_ratio_min_max:
-  - 0.1
-  - 0.5
+    - 0.1
+    - 0.5
   separate_head: false
   head_n_prototypes: 65536
   head_bottleneck_dim: 256
@@ -62,7 +62,7 @@ ibot:
 train:
   batch_size_per_gpu: 16 #256
   dataset_path: LMDBDataset:split=ALL:root=/fast/AG_Kainmueller/plankton/data/WHOI/preprocessed/preprocessed_lmdb/:extra=*
-  output_dir: 'home/jluesch/output_dir'
+  output_dir: "home/jluesch/output_dir"
   saveckp_freq: 10
   seed: 0
   num_workers: 8
@@ -80,7 +80,7 @@ student:
   drop_path_rate: 0
   layerscale: 1.0e-05
   drop_path_uniform: true
-  pretrained_weights: 'checkpoints/dinov2_vits14_pretrain.pth'
+  pretrained_weights: ""
   ffn_layer: "mlp"
   block_chunks: 0
   qkv_bias: true
@@ -99,8 +99,8 @@ optim:
   epochs: 100
   weight_decay: 0.04
   weight_decay_end: 0.4
-  base_lr: 0.0005  # learning rate for a batch size of 1024
-  lr: 0.  # will be set after applying scaling rule
+  base_lr: 0.0005 # learning rate for a batch size of 1024
+  lr: 0. # will be set after applying scaling rule
   warmup_epochs: 10
   min_lr: 1.0e-06
   clip_grad: 3.0
@@ -114,12 +114,12 @@ crops:
   use_native_res: false
   free_shapes: false
   global_crops_scale:
-  - 0.32
-  - 1.0
+    - 0.32
+    - 1.0
   local_crops_number: 8
   local_crops_scale:
-  - 0.05
-  - 0.32
+    - 0.05
+    - 0.32
   global_crops_size: 224
   local_crops_size: 98
   use_ch_patch_embed: false

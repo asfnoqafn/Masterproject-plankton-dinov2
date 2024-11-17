@@ -4,7 +4,6 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 import logging
-import sys
 from enum import Enum
 
 import numpy as np
@@ -17,16 +16,11 @@ from kornia.augmentation.container import (
 from kornia.constants import Resample
 from skimage.segmentation import (
     felzenszwalb,
-    quickshift,
     slic,
 )
 from torchvision.ops import masks_to_boxes
 from torchvision.transforms import v2
-from torchvision.transforms.functional import (
-    InterpolationMode,
-)
 
-from dinov2.utils.utils import exists
 
 from .transforms import (
     GaussianBlur,
@@ -111,10 +105,18 @@ class DataAugmentationDINO(object):
                     p=1.0,
                     keepdim=False,
                 )
-                self.geometric_augmentation_global = augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0)
-                self.geometric_augmentation_local = AugmentationSequential(
-                    augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
-                    data_keys=["input", "input"],
+                self.geometric_augmentation_global = (
+                    augmentation.RandomHorizontalFlip(
+                        p=0.5, p_batch=1.0
+                    )
+                )
+                self.geometric_augmentation_local = (
+                    AugmentationSequential(
+                        augmentation.RandomHorizontalFlip(
+                            p=0.5, p_batch=1.0
+                        ),
+                        data_keys=["input"],
+                    )
                 )
 
                 self.std_augmentation_local = AugmentationSequential(
@@ -611,18 +613,31 @@ class DataAugmentationDINO(object):
     def __call__(self, image):
         # image : C H W
         output = {}
+        print("image at start shape", image.shape)
         image = self.pad_to_patch_mutiple(image)
+        print("image after padding", image.shape)
         # global crops:
         if self.use_native_res:
             image_global = self.make_rectangle_crop(image)
         else:
             image_global = image
-
-        im1_base = self.geometric_augmentation_global(image_global)
+        print("image_global shape", image_global.shape)
+        im1_base = self.geometric_augmentation_global(
+            image_global
+        )
+        im1_base = im1_base.squeeze()
+        print("im1_base shape", im1_base.shape)
         global_crop_1 = self.global_transfo1(im1_base)
-
-        im2_base = self.geometric_augmentation_global(image_global)
+        global_crop_1 = global_crop_1.squeeze()
+        print("global_crop_1 shape", global_crop_1.shape)
+        im2_base = self.geometric_augmentation_global(
+            image_global
+        )
+        im2_base = im2_base.squeeze()
+        print("im2_base shape", im2_base.shape)
         global_crop_2 = self.global_transfo2(im2_base)
+        global_crop_2 = global_crop_2.squeeze()
+        print("global_crop_2 shape", global_crop_2.shape)
 
         output["global_crops"] = [global_crop_1, global_crop_2]
 

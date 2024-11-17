@@ -36,14 +36,17 @@ class ExtendedVisionDataset(VisionDataset):
         else:
             try:
                 # have to copy bc stream not writeable
-                image = torch.frombuffer(np.copy(img_bytes), dtype=torch.uint8)
+                image = torch.frombuffer(np.copy(img_bytes),
+                dtype=torch.uint8
+                )
 
-                if "plankton" in str(self.root):
-                    image = decode_image(image, ImageReadMode.RGB)
-                else:
-                    image_size = int(np.sqrt(image.shape[0] / num_channels))
-                    image = image.reshape(num_channels, image_size, image_size)
+                image = decode_image(
+                    image, mode=ImageReadMode.RGB
+                )
                 image = (image / 255.0).to(torch.float32)
+
+                print(image.shape)
+
             except Exception as e:
                 print(e)
                 print(
