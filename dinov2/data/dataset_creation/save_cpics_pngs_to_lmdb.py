@@ -137,7 +137,8 @@ def get_args_parser():
 
 
 if __name__ == "__main__":
-    print("wtf")
     args_parser = get_args_parser()
     args = args_parser.parse_args()
     sys.exit(main(args))
+
+# example usage: !python save_cpics_pngs_to_lmdb.py --dataset_path="/home/nick/Downloads/113201/FlowCamNet/imgs" --lmdb_dir_name="/home/nick/Documents/ws24/lmdb/bigger_imgs/" --min_size=128 --dataset_name="FlowCamNet"
