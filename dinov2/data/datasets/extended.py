@@ -66,13 +66,18 @@ class ExtendedVisionDataset(VisionDataset):
                     raise RuntimeError(f"can not read image for sample {index}") from e
 
         target = self.get_target(index)
-        print(target)
+        #print("target:" + str(target))
+        #print("image:" + str(image.shape))
+        #print(self.transforms)
+        intiala, initialb = image.shape[1], image.shape[2]
         if self.transforms is not None:
-
             image, target = self.transforms(image, target)
+            #print("transformed")
+            #print(intiala, initialb, image.shape)
         # does the target remain after the transformation?
-        print("target:" + target)
-        print("image:" + image.shape)
+        # TODO: check if target is still valid after transformation
+        #print("target:" + str(target))
+        #print("image:" + str(image.shape))
         return image, target
 
     def __len__(self) -> int:

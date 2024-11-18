@@ -433,10 +433,12 @@ def eval_knn_with_model(
         dataset_str=train_dataset_str,
         transform=transform,
     )
+    print(f"train_dataset: {len(train_dataset)}")
     val_dataset = make_dataset(
         dataset_str=val_dataset_str,
         transform=transform,
     )
+    print(f"val_dataset: {len(val_dataset)}")
 
     with torch.cuda.amp.autocast(dtype=autocast_dtype):
         results_dict_knn = eval_knn(
@@ -537,7 +539,7 @@ if __name__ == "__main__":
         dataset = make_dataset(dataset_str=args.train_dataset_str, transform=make_classification_eval_transform())
         train_dataset, val_dataset = split_dataset(dataset)
     else:
-        train_dataset = make_dataset(dataset_str=args.train_dataset_str, transform=make_classification_train_transform())
+        train_dataset = make_dataset(dataset_str=args.train_dataset_str, transform=make_classification_eval_transform())
         val_dataset = make_dataset(dataset_str=args.val_dataset_str, transform=make_classification_eval_transform())
 
     sys.exit(main(args))

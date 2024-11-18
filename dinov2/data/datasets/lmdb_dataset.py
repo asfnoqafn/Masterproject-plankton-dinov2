@@ -43,11 +43,11 @@ class LMDBDataset(ImageNet):
             if True:#if self.with_targets:
                 #print(entries[index])
                 class_index = entries[index]["index"]
-                print(class_index.split("_")[0])
+                #print(class_index.split("_")[0])
                 string = class_index.split("_")[0]
                 hash_object = hashlib.md5(string.encode())
-                print(int(hash_object.hexdigest(), 16))
-                return int(hash_object.hexdigest(), 16)
+                #print(int(hash_object.hexdigest(), 16))
+                return int(hash_object.hexdigest()[:8], 16)
             else:
                 return None
 

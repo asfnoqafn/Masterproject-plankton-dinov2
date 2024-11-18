@@ -8,7 +8,7 @@ from typing import Sequence, Union
 import torch
 from kornia import augmentation
 from torchvision.transforms import v2
-
+from PIL import Image
 
 class KorniaGaussianBlur(augmentation.RandomGaussianBlur):
     """
@@ -121,13 +121,13 @@ def make_classification_eval_transform(
     std: Sequence[float] = [WHOI_DEFAULT_STD],
 ) -> v2.Compose:
     transforms_list = [
+        #v2.Lambda(lambda x: Image.fromarray(x.numpy()) if isinstance(x, torch.Tensor) else x),
         v2.Resize(
             resize_size,
             interpolation=interpolation,
             antialias=True,
         ),
         v2.CenterCrop(crop_size),
-        print("i got to maybe to tensor"),
         MaybeToTensor(),
         make_normalize_transform(mean=mean, std=std),
     ]

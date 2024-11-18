@@ -112,6 +112,7 @@ def extract_features(
 ):
     dataset_with_enumerated_targets = DatasetWithEnumeratedTargets(dataset)
     sample_count = len(dataset_with_enumerated_targets)
+    print(f"sample_count: {sample_count}")
     data_loader = make_data_loader(
         dataset=dataset_with_enumerated_targets,
         batch_size=batch_size,
@@ -126,6 +127,7 @@ def extract_features(
 
 @torch.inference_mode()
 def extract_features_with_dataloader(model, data_loader, sample_count, gather_on_cpu=False):
+    print("extract_features_with_dataloader")
     gather_device = torch.device("cpu") if gather_on_cpu else torch.device("cuda")
     metric_logger = MetricLogger(
         delimiter="  ",
@@ -171,5 +173,5 @@ def extract_features_with_dataloader(model, data_loader, sample_count, gather_on
     logger.info(f"Labels shape: {tuple(all_labels.shape)}")
 
     assert torch.all(all_labels > -1)
-
+    print("returning features and labels")
     return features, all_labels
