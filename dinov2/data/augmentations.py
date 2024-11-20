@@ -111,7 +111,9 @@ class DataAugmentationDINO(object):
                     p=1.0,
                     keepdim=False,
                 )
-                self.geometric_augmentation_global = augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0)
+                self.geometric_augmentation_global = augmentation.RandomHorizontalFlip(
+                    p=0.5, p_batch=1.0
+                )
                 self.geometric_augmentation_local = AugmentationSequential(
                     augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
                     data_keys=["input", "input"],
@@ -201,7 +203,9 @@ class DataAugmentationDINO(object):
                     global_transfo2_extra,
                     self.normalize,
                 )
-                self.local_transfo = AugmentationSequential(local_transfo_extra, self.normalize)
+                self.local_transfo = AugmentationSequential(
+                    local_transfo_extra, self.normalize
+                )
 
         ######## TORCHVISION
         else:
@@ -302,9 +306,15 @@ class DataAugmentationDINO(object):
         return crop_len - crop_len % self.patch_size
 
     def make_rectangle_crop(self, image):
+        """
+        Without resizing
+        """
         img_global_list = []
         for single_image in image:
-            if single_image.size(-1) > self.global_crops_size and single_image.size(-2) > self.global_crops_size:
+            if (
+                single_image.size(-1) > self.global_crops_size
+                and single_image.size(-2) > self.global_crops_size
+            ):
                 single_image = self.random_crop(single_image).squeeze()
             else:
                 H, W = single_image.size(-2), single_image.size(-1)
@@ -361,7 +371,9 @@ class DataAugmentationDINO(object):
                 start_label=1,
             )
         else:
-            raise NotImplementedError(f"Specified segmentation algorithm {seg_algo} not implemented")
+            raise NotImplementedError(
+                f"Specified segmentation algorithm {seg_algo} not implemented"
+            )
 
         def seg_to_patched_seg(segments, image_gray):
             segments = segments / (segments.max() + 1e-5)
@@ -369,9 +381,9 @@ class DataAugmentationDINO(object):
 
             pooled_seg = self.patch_maxpool_op(conv_input)
 
-            resized_masks = pooled_seg.repeat_interleave(self.patch_size, dim=1).repeat_interleave(
-                self.patch_size, dim=2
-            )  # back to orig shape
+            resized_masks = pooled_seg.repeat_interleave(
+                self.patch_size, dim=1
+            ).repeat_interleave(self.patch_size, dim=2)  # back to orig shape
             # assert torch.all(resized_masks_alt == resized_masks)
 
             resized_masks = resized_masks[0, :, :]
@@ -398,7 +410,9 @@ class DataAugmentationDINO(object):
                     self.patch_size * self.patch_size * MIN_NB_PATCHES_IN_CROP
                 ):  # possible that some masks are 0
                     masks.append(resized_masks_int == mask_idx)
-                    patch_pos_list = torch.where(pooled_seg_int[0, :, :].ravel() == mask_idx)
+                    patch_pos_list = torch.where(
+                        pooled_seg_int[0, :, :].ravel() == mask_idx
+                    )
                     patches_pos_list.append(patch_pos_list)
 
             masks = torch.stack(masks)
@@ -469,12 +483,17 @@ class DataAugmentationDINO(object):
         )
 
     def crop_to_patches(self, crop):
+        """
+        Takes a B C H W samples and returns a B C (N1 N2 P) P sample
+        """
         # B is usually 1 here
         if len(crop.size()) == 3:
             crop = crop[None, :, :, :]
         b, c, h, w = crop.size()
 
-        patches = crop.unfold(-1, self.patch_size, self.patch_size).unfold(-3, self.patch_size, self.patch_size)
+        patches = crop.unfold(-1, self.patch_size, self.patch_size).unfold(
+            -3, self.patch_size, self.patch_size
+        )
         patches = rearrange(
             patches,
             "b c n1 n2 p1 p2 -> b c (n1 n2 p2) p1",
@@ -486,8 +505,12 @@ class DataAugmentationDINO(object):
         return patches
 
     def make_std_params(self):
-        patch_nb_per_crop = (self.local_crops_size * self.local_crops_size) / (self.patch_size * self.patch_size)
-        crop_len = torch.ones(self.local_crops_number, dtype=torch.long) * patch_nb_per_crop
+        patch_nb_per_crop = (self.local_crops_size * self.local_crops_size) / (
+            self.patch_size * self.patch_size
+        )
+        crop_len = (
+            torch.ones(self.local_crops_number, dtype=torch.long) * patch_nb_per_crop
+        )
         filtered_patch_pos_list = torch.tile(
             torch.arange(patch_nb_per_crop),
             (self.local_crops_number, 1),
@@ -548,7 +571,9 @@ class DataAugmentationDINO(object):
                             self.crop_to_patches(
                                 self.local_transfo(self.std_augmentation_local(image))
                             ).squeeze()  # c (n p) p
-                            for _ in range(self.local_crops_number)  # 8 is std local crops nb
+                            for _ in range(
+                                self.local_crops_number
+                            )  # 8 is std local crops nb
                         ]
                         return torch.cat(local_crop, dim=1)  # c (n p) p
 
@@ -566,7 +591,9 @@ class DataAugmentationDINO(object):
             selected_patches, selected_patch_pos = [], []
             for i, (mask_patch, img_patch) in enumerate(zip(mask_patches, img_patches)):
                 if torch.any(mask_patch) > 0:
-                    if (not do_drop_patches) or (do_drop_patches and torch.var(img_patch) > PATCH_THRESHOLD):
+                    if (not do_drop_patches) or (
+                        do_drop_patches and torch.var(img_patch) > PATCH_THRESHOLD
+                    ):
                         # TODO: add randomness to decide to transpose or not
                         selected_patches.append(img_patch.transpose(-1, -2))
                         selected_patch_pos.append(i)
@@ -579,12 +606,16 @@ class DataAugmentationDINO(object):
             crop_len_list.append(curr_nb_patches)
             selected_patches = torch.cat(selected_patches, dim=1)  # c (n_p p) p
             list_flat_patches.append(selected_patches)
-            filtered_patch_pos_list.append(torch.tensor(selected_patch_pos, dtype=torch.long))
+            filtered_patch_pos_list.append(
+                torch.tensor(selected_patch_pos, dtype=torch.long)
+            )
             filtered_bboxes.append(bbox)
 
         # list_flat_patches n_crop (c (n_p p) p)
         if len(list_flat_patches) == 0:
-            print(f"tot_patches: {tot_patches}, len: {len(crop_len_list)}, {crop_len_list}")
+            print(
+                f"tot_patches: {tot_patches}, len: {len(crop_len_list)}, {crop_len_list}"
+            )
             flat_patches = std_patching(image)
             (
                 crop_len,
@@ -624,10 +655,25 @@ class DataAugmentationDINO(object):
         im2_base = self.geometric_augmentation_global(image_global)
         global_crop_2 = self.global_transfo2(im2_base)
 
-        output["global_crops"] = [global_crop_1, global_crop_2]
-
-        # global crops for teacher:
-        output["global_crops_teacher"] = [global_crop_1, global_crop_2]
+        output["global_crops_vis"] = [
+            global_crop_1,
+            global_crop_2,
+        ]
+        if self.use_native_res:
+            global_crops = torch.cat(
+                [
+                    self.crop_to_patches(global_crop_1),
+                    self.crop_to_patches(global_crop_2),
+                ],
+                dim=0,
+            )  # (2 b) c (n p) p
+        else:
+            global_crops = torch.cat(
+                [global_crop_1, global_crop_2],
+                dim=0,
+            )  # (2 b) c h w
+        nb_gc_patches = (global_crops.shape[2] / self.patch_size) * 2
+        output["global_crops"] = global_crops
 
         # local crops:
         if self.do_seg_crops:
@@ -657,7 +703,9 @@ class DataAugmentationDINO(object):
             masks = [mask[0, :, :] > 0 for mask in masks]  # to bool
             # crops to list of patches, masked p are dropped
 
-            output["local_crops_vis"] = local_crops  # before patching, for visualization
+            output["local_crops_vis"] = (
+                local_crops  # before patching, for visualization
+            )
             (
                 local_crops,
                 local_crop_len,
@@ -684,7 +732,8 @@ class DataAugmentationDINO(object):
             output["local_crop_dims"] = crop_dims
         else:
             local_crops = [
-                self.local_transfo(self.geometric_augmentation_local(image)) for _ in range(self.local_crops_number)
+                self.local_transfo(self.geometric_augmentation_local(image))
+                for _ in range(self.local_crops_number)
             ]
             output["local_crops"] = torch.cat(local_crops, dim=0)
         output["offsets"] = ()

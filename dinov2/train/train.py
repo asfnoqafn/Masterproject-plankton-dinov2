@@ -41,9 +41,7 @@ from dinov2.utils.utils import (
     none_or_str,
 )
 
-torch.backends.cuda.matmul.allow_tf32 = (
-    True  # PyTorch 1.12 sets this to False by default
-)
+torch.backends.cuda.matmul.allow_tf32 = True  # PyTorch 1.12 sets this to False by default
 logger = logging.getLogger("dinov2")
 
 
@@ -147,9 +145,9 @@ def build_schedulers(cfg):
     teacher_temp_schedule = CosineScheduler(**teacher_temp)
     last_layer_lr_schedule = CosineScheduler(**lr)
 
-    last_layer_lr_schedule.schedule[
-        : cfg.optim["freeze_last_layer_epochs"] * OFFICIAL_EPOCH_LENGTH
-    ] = 0  # mimicking the original schedules
+    last_layer_lr_schedule.schedule[: cfg.optim["freeze_last_layer_epochs"] * OFFICIAL_EPOCH_LENGTH] = (
+        0  # mimicking the original schedules
+    )
 
     logger.info("Schedulers ready.")
 
@@ -223,9 +221,7 @@ def select_augmentations(cfg, do_multi_channel=False):
         data_transform_cpu = DataAugmentationDINO(use_kornia=True, **aug_kwargs)
         data_transform_gpu = None
     else:
-        print(
-            f"ERROR: type augmentation type {cfg.train.augmentations} is not supported"
-        )
+        print(f"ERROR: type augmentation type {cfg.train.augmentations} is not supported")
         print(
             f"Supported types are: {AugmentationType.TORCHV_CPU.value}, {AugmentationType.TORCHV_GPU.value}, {AugmentationType.KORNIA_GPU.value}"
         )
@@ -265,7 +261,6 @@ def do_train(cfg, model, resume=False):
     fp16_scaler = model.fp16_scaler  # for mixed precision training
 
     # setup optimizer
-
     optimizer = build_optimizer(cfg, model.get_params_groups())
     (
         lr_schedule,
@@ -290,12 +285,7 @@ def do_train(cfg, model, resume=False):
         resume,
     )
     if os.path.isfile(cfg.MODEL.WEIGHTS):
-        start_iter = (
-            checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=resume).get(
-                "iteration", -1
-            )
-            + 1
-        )
+        start_iter = checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=resume).get("iteration", -1) + 1
     else:
         start_iter = 0
 
@@ -322,18 +312,10 @@ def do_train(cfg, model, resume=False):
         max_num_patches=0.5 * img_size // patch_size * img_size // patch_size,
     )
     do_multi_channel = cfg.crops.use_variable_channels
-    data_transform_cpu, data_transform_gpu = select_augmentations(
-        cfg, do_multi_channel=do_multi_channel
-    )
-    collate_fn_cpu, collate_fn_gpu = select_collate_fn(
-        cfg, n_tokens, mask_generator, inputs_dtype
-    )
-    if (
-        cfg.crops.use_ch_patch_embed
-    ):  # use normal num tokens for mask, and multiply by in_chans for the rest
-        n_tokens *= model.student.backbone.in_chans
-    print(f"Number of tokens {n_tokens}")
+    data_transform_cpu, data_transform_gpu = select_augmentations(cfg, do_multi_channel=do_multi_channel)
+    collate_fn_cpu, collate_fn_gpu = select_collate_fn(cfg, n_tokens, mask_generator, inputs_dtype)
 
+    print(f"Number of tokens {n_tokens}, in_chans {cfg.train.in_chans}")
     # setup data loader
     dataset = make_dataset(
         dataset_str=cfg.train.dataset_path,
@@ -351,7 +333,7 @@ def do_train(cfg, model, resume=False):
         "shuffle": True,
         "seed": start_iter,  # TODO: Fix this -- cfg.train.seed
         "sampler_type": sampler_type,
-        "sampler_advance": 0,  # TODO(qas): fix this -- start_iter * cfg.train.batch_size_per_gpu,
+        "sampler_advance": 0,  # TODO(qas): Fix this -- start_iter * cfg.train.batch_size_per_gpu,
         "drop_last": True,
     }
     data_loader = make_data_loader(collate_fn=collate_fn_cpu, **dl_kwargs)
@@ -385,6 +367,9 @@ def do_train(cfg, model, resume=False):
         )
         profiler.start()
 
+    print("cfg.train.in_chans", cfg.train.in_chans)
+    if not isinstance(cfg.train.in_chans, int):
+        dataset.set_curr_in_chans(cfg.train.in_chans[0])
     for data in metric_logger.log_every(
         data_loader,
         20,
@@ -392,12 +377,10 @@ def do_train(cfg, model, resume=False):
         max_iter,
         start_iter,
     ):
+        print(11111)
         if cfg.train.do_profiling:
             profiler.step()
-        if (
-            data_transform_gpu is not None
-            or cfg.train.augmentations == AugmentationType.KORNIA_CPU.value
-        ):
+        if data_transform_gpu is not None or cfg.train.augmentations == AugmentationType.KORNIA_CPU.value:
             # current_device_nb = model.student.backbone.device
             if isinstance(data, list):
                 data = data[0]
@@ -409,13 +392,19 @@ def do_train(cfg, model, resume=False):
 
             data = utils.data_to_cuda(data)
 
-        current_batch_size = data["collated_global_crops"].shape[0] / 2
-        tot_nb_seen_samples += (
-            current_batch_size * distributed.get_global_size()
-        )  # to get effective batch size
+        if cfg.crops.use_variable_channels:
+            nb_diff_ch_nbs = len([k for k in data.keys() if "collated_global_crops" in k])
+            print("nb_diff_ch_nbs", nb_diff_ch_nbs)
+            current_batch_size = (
+                sum([data["collated_global_crops" + str(i)].shape[0] for i in range(nb_diff_ch_nbs)]) / 2
+            )
+        else:
+            current_batch_size = data["collated_global_crops"].shape[0] / 2
+        tot_nb_seen_samples += current_batch_size * distributed.get_global_size()  # to get effective batch size
         if iteration > max_iter:
             return
 
+        print(122222)
         # apply schedules
         lr = lr_schedule[iteration]
         wd = wd_schedule[iteration]
@@ -424,74 +413,100 @@ def do_train(cfg, model, resume=False):
         last_layer_lr = last_layer_lr_schedule[iteration]
         apply_optim_scheduler(optimizer, lr, wd, last_layer_lr)
 
-        # compute losses
-        optimizer.zero_grad(set_to_none=True)
-        loss_dict = model.forward_backward(data, teacher_temp=teacher_temp)
+        if cfg.crops.use_variable_channels and iteration % len(cfg.train.in_chans) == 0:
+            total_loss_accumulator = 0
+            optimizer.zero_grad(set_to_none=True)
 
-        # clip gradients
-        if fp16_scaler is not None:
-            if cfg.optim.clip_grad:
-                fp16_scaler.unscale_(optimizer)
-                for v in model.student.values():
-                    v.clip_grad_norm_(cfg.optim.clip_grad)
-            fp16_scaler.step(optimizer)
-            fp16_scaler.update()
-        else:
-            if cfg.optim.clip_grad:
-                for v in model.student.values():
-                    v.clip_grad_norm_(cfg.optim.clip_grad)
-            optimizer.step()
+        loss_accumulator, loss_dict = model.forward_teacher_student(data, teacher_temp=teacher_temp)
+        model.backward(loss_accumulator)
 
-        # perform teacher EMA update
-        model.update_teacher(mom)
-
-        # logging
-        if distributed.get_global_size() > 1:
-            for v in loss_dict.values():
-                torch.distributed.all_reduce(v)
-        loss_dict_reduced = {
-            k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()
-        }
-
-        if math.isnan(sum(loss_dict_reduced.values())):
-            logger.info("NaN detected")
-            for k, v in loss_dict_reduced.items():
-                if math.isnan(v):
-                    print("Key:{} is nan. Stopping...".format(k))
-            raise AssertionError
-        losses_reduced = sum(loss for loss in loss_dict_reduced.values())
-
-        metric_logger.update(lr=lr)
-        metric_logger.update(wd=wd)
-        metric_logger.update(mom=mom)
-        metric_logger.update(last_layer_lr=last_layer_lr)
-        metric_logger.update(current_batch_size=current_batch_size)
-        metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
-
-        if distributed.is_main_process():
-            wandb.log(
-                {
-                    "#samples": tot_nb_seen_samples,
-                    "lr": lr,
-                    "wd": wd,
-                    "mom": mom,
-                    "ll_lr": last_layer_lr,
-                    "total_loss": losses_reduced,
-                    **loss_dict_reduced,
+        if cfg.crops.use_variable_channels:
+            total_loss_accumulator += loss_accumulator
+            if iteration % len(cfg.train.in_chans) == 0:
+                total_loss_dict = loss_dict
+            else:
+                total_loss_dict = {
+                    k: v1 + v2
+                    for k, v1, v2 in zip(
+                        loss_dict.keys(),
+                        total_loss_dict.values(),
+                        loss_dict.values(),
+                    )
                 }
-            )
+            if iteration % len(cfg.train.in_chans) == len(cfg.train.in_chans) - 1:  # last iteration
+                loss_dict = {k: v / nb_diff_ch_nbs for k, v in total_loss_dict.items()}
 
-        # checkpointing and testing
-
-        if (
-            cfg.evaluation.eval_period_iterations > 0
-            and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
+        if (not cfg.crops.use_variable_channels) or (
+            cfg.crops.use_variable_channels and iteration % len(cfg.train.in_chans) == len(cfg.train.in_chans) - 1
         ):
-            do_test(cfg, model, f"training_{iteration}")
-            torch.cuda.synchronize()
+            # clip gradients
 
-        periodic_checkpointer.step(iteration)
-        iteration = iteration + 1
+            if fp16_scaler is not None:
+                if cfg.optim.clip_grad:
+                    fp16_scaler.unscale_(optimizer)
+                    for v in model.student.values():
+                        v.clip_grad_norm_(cfg.optim.clip_grad)
+                fp16_scaler.step(optimizer)
+                fp16_scaler.update()
+            else:
+                if cfg.optim.clip_grad:
+                    for v in model.student.values():
+                        v.clip_grad_norm_(cfg.optim.clip_grad)
+                optimizer.step()
+
+            # perform teacher EMA update
+            model.update_teacher(mom)
+
+            # logging
+            if distributed.get_global_size() > 1:
+                for v in loss_dict.values():
+                    torch.distributed.all_reduce(v)
+            loss_dict_reduced = {k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()}
+
+            if math.isnan(sum(loss_dict_reduced.values())):
+                logger.info("NaN detected")
+                for k, v in loss_dict_reduced.items():
+                    if math.isnan(v):
+                        print("Key:{} is nan. Stopping...".format(k))
+                raise AssertionError
+            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+
+            metric_logger.update(lr=lr)
+            metric_logger.update(wd=wd)
+            metric_logger.update(mom=mom)
+            metric_logger.update(last_layer_lr=last_layer_lr)
+            metric_logger.update(current_batch_size=current_batch_size)
+            metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
+
+            if distributed.is_main_process():
+                wandb.log(
+                    {
+                        "#samples": tot_nb_seen_samples,
+                        "lr": lr,
+                        "wd": wd,
+                        "mom": mom,
+                        "ll_lr": last_layer_lr,
+                        "total_loss": losses_reduced,
+                        **loss_dict_reduced,
+                    }
+                )
+
+            # checkpointing and testing
+
+            if (
+                cfg.evaluation.eval_period_iterations > 0
+                and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
+            ):
+                do_test(cfg, model, f"training_{iteration}")
+                torch.cuda.synchronize()
+
+            periodic_checkpointer.step(iteration)
+            iteration = iteration + 1
+
+        # update in_chans
+        if isinstance(cfg.train.in_chans, list):
+            curr_in_chans = cfg.train.in_chans[iteration % len(cfg.train.in_chans)]
+            dataset.set_curr_in_chans(curr_in_chans)
     metric_logger.synchronize_between_processes()
 
     if cfg.train.do_profiling:

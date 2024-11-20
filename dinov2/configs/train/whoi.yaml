@@ -48,6 +48,7 @@ dino:
   head_hidden_dim: 2048
   koleo_loss_weight: 0.1
   head_use_bn: false
+  head_use_bn: false
 ibot:
   loss_weight: 1.0
   mask_sample_probability: 0.5
@@ -71,6 +72,9 @@ train:
   cache_dataset: false
   use_torch_compile: true
   do_profiling: false
+  augmentations: kornia_gpu
+  in_chans: 3
+  do_debug: false
   augmentations: "kornia_gpu"
   in_chans: 3
   do_debug: false
@@ -122,6 +126,8 @@ crops:
   - 0.32
   global_crops_size: 224
   local_crops_size: 98
+  use_ch_patch_embed: false
+  use_variable_channels: false
   use_ch_patch_embed: false
   use_variable_channels: false
 evaluation:

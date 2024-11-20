@@ -39,3 +39,4 @@ notebooks/seg_examples_SLIC.jpg
 notebooks/segmentations.jpg
 notebooks/plots
 
+train_qsub.sh.save

@@ -30,7 +30,12 @@ class ExtendedVisionDataset(VisionDataset):
         num_channels = 3  # base number
         img_bytes = self.get_image_data(index)
         if isinstance(img_bytes, list):  # image
-            image = [torch.from_numpy(iio.imread(ch_bytes, index=None)) for ch_bytes in img_bytes]
+            image = []
+            print("bb", len(img_bytes))
+            for ch_bytes in img_bytes:
+                image.append(torch.from_numpy(iio.imread(ch_bytes, index=None)))
+
+            # image = [torch.from_numpy(iio.imread(ch_bytes, index=None)) for ch_bytes in img_bytes]
             image = torch.stack(image, dim=0)
             image = (image / 255.0).to(torch.float32)
         else:
