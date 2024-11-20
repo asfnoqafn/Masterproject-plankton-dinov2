@@ -31,6 +31,7 @@ class PanMDataset(ImageNet):
         if self.curr_in_chans is not None:
             lmdb_file_idx = self.nb_ch_list.index(self.curr_in_chans)
             lmdb_filename = self.lmdb_filenames[lmdb_file_idx]
+            print()
             print(
                 "self.nb_ch_list",
                 self.nb_ch_list,
@@ -39,12 +40,13 @@ class PanMDataset(ImageNet):
                 lmdb_filename,
                 flush=True,
             )
+            print()
 
             if lmdb_file_idx > 0:
-                max_len = max(self.file_len_list)
+                tot_len = sum(self.file_len_list)
                 print(self.file_len_list, "aaa", flush=True)
                 index = int(
-                    index / max_len * sum(self.file_len_list[:lmdb_file_idx])
+                    (index - sum(self.file_len_list[:lmdb_file_idx])) / tot_len * sum(self.file_len_list[lmdb_file_idx])
                 )  # normalize the index to correspond to the lmdb file
         else:
             lmdb_filename = self._entries[index]["lmdb_imgs_file"]
@@ -60,10 +62,7 @@ class PanMDataset(ImageNet):
             f"self.curr_in_chans {self.curr_in_chans}",
             flush=True,
         )
-        image_data = [
-            lmdb_txn.get(f"{entry['index']}_ch{i}".encode("utf-8"))
-            for i in range(num_ch)
-        ]
+        image_data = [lmdb_txn.get(f"{entry['index']}_ch{i}".encode("utf-8")) for i in range(num_ch)]
 
         return image_data  # return list of channel image bytes
 
@@ -87,23 +86,22 @@ class PanMDataset(ImageNet):
 
     @property
     def _entries_path(self) -> str:
-        if self.root.endswith("TRAIN") or self.root.endswith(
-            "VAL"
-        ):  # if we have a single file
-            return self.root + "_*"
+        entries_path = os.path.join(self.root, self._extra_root)
+        if entries_path.endswith("TRAIN") or entries_path.endswith("VAL"):  # if we have a single file
+            return entries_path + "_*"
         elif self._split.value.upper() == "ALL":
-            return os.path.join(self.root, "*")
+            return entries_path
         else:
             return os.path.join(
-                self.root,
+                entries_path,
                 f"*-{self._split.value.upper()}_*",
             )
 
     def _get_extra_full_path(self, extra_path: str) -> str:
-        if not os.path.isdir(self.root):
+        if not os.path.isdir(extra_path):
             return extra_path
         else:
-            return os.path.join(self.root, "*")
+            return os.path.join(self.root, extra_path)
 
     def _get_entries(self) -> list:
         if self._entries is None:
@@ -112,19 +110,15 @@ class PanMDataset(ImageNet):
         return self._entries
 
     def _load_extra(self, extra_path: str):
-        # extra_full_path = self._get_extra_full_path(extra_path)
-        print("extra_path", extra_path)
-        file_list = glob.glob(extra_path)
+        extra_full_path = self._get_extra_full_path(extra_path)
+        print("extra_full_path", extra_full_path)
+        file_list = glob.glob(extra_full_path)
         if len(file_list) < 50:
-            file_list = glob.glob(os.path.join(extra_path, "*"))
+            file_list = glob.glob(os.path.join(extra_full_path, "*"))
 
         file_list_labels = sorted([el for el in file_list if el.endswith("labels")])
-        file_list_imgs = sorted(
-            [el for el in file_list if el.endswith("imgs") or el.endswith("images")]
-        )
-        file_list_meta = sorted(
-            [el for el in file_list if el.endswith("metadata") or el.endswith("meta")]
-        )
+        file_list_imgs = sorted([el for el in file_list if el.endswith("imgs") or el.endswith("images")])
+        file_list_meta = sorted([el for el in file_list if el.endswith("metadata") or el.endswith("meta")])
         print("Datasets imgs file list: ", file_list_imgs)
         print("Datasets labels file list: ", file_list_labels)
         print("Datasets metadata file list: ", file_list_meta)
