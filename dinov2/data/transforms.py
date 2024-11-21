@@ -3,7 +3,7 @@
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
 
-from typing import Sequence, Union
+from typing import Union
 
 import torch
 from kornia import augmentation
@@ -72,14 +72,14 @@ WHOI_DEFAULT_STD = 0.10176649
 
 
 def make_normalize_transform(
-    mean: Sequence[float] = WHOI_DEFAULT_MEAN,
-    std: Sequence[float] = WHOI_DEFAULT_STD,
+    mean = WHOI_DEFAULT_MEAN,
+    std = WHOI_DEFAULT_STD,
     use_kornia=False,
 ) -> Union[v2.Normalize, augmentation.Normalize]:
     if use_kornia:
         return augmentation.Normalize(mean, std, p=1.0, keepdim=False)
     else:
-        return v2.Normalize(mean=mean, std=std)
+        return v2.Normalize(mean=[mean], std=[std])
 
 
 # This roughly matches torchvision's preset for classification training:
@@ -89,10 +89,10 @@ def make_classification_train_transform(
     crop_size: int = 224,
     interpolation=v2.InterpolationMode.BICUBIC,
     hflip_prob: float = 0.5,
-    mean: Sequence[float] = WHOI_DEFAULT_MEAN,
-    std: Sequence[float] = WHOI_DEFAULT_STD,
+    mean = WHOI_DEFAULT_MEAN,
+    std = WHOI_DEFAULT_STD,
 ):
-    transforms_list = [
+    transforms_list: list[Union[v2.Transform, augmentation.Normalize]] = [
         v2.RandomResizedCrop(
             crop_size,
             interpolation=interpolation,
@@ -117,8 +117,8 @@ def make_classification_eval_transform(
     resize_size: int = 256,
     interpolation=v2.InterpolationMode.BICUBIC,
     crop_size: int = 224,
-    mean: Sequence[float] = WHOI_DEFAULT_MEAN,
-    std: Sequence[float] = WHOI_DEFAULT_STD,
+    mean = WHOI_DEFAULT_MEAN,
+    std = WHOI_DEFAULT_STD,
 ) -> v2.Compose:
     transforms_list = [
         v2.Resize(

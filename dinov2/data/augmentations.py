@@ -4,7 +4,6 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 import logging
-import sys
 from enum import Enum
 
 import numpy as np
@@ -17,16 +16,10 @@ from kornia.augmentation.container import (
 from kornia.constants import Resample
 from skimage.segmentation import (
     felzenszwalb,
-    quickshift,
     slic,
 )
 from torchvision.ops import masks_to_boxes
 from torchvision.transforms import v2
-from torchvision.transforms.functional import (
-    InterpolationMode,
-)
-
-from dinov2.utils.utils import exists
 
 from .transforms import (
     GaussianBlur,
@@ -708,6 +701,8 @@ class DataAugmentationDINO(object):
             local_crops = [
                 self.local_transfo(self.geometric_augmentation_local(image)) for _ in range(self.local_crops_number)
             ]
+            # c h w (on cpu) / b c h w (on gpu) using torchvision
+            local_crops = [crop[None, :, :, :] if len(crop.size()) == 3 else crop for crop in local_crops]
             output["local_crops"] = torch.cat(local_crops, dim=0)
         output["offsets"] = ()
         return output
