@@ -112,10 +112,23 @@ class DataAugmentationDINO(object):
                     keepdim=False,
                 )
                 self.geometric_augmentation_global = augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0)
-                self.geometric_augmentation_local = AugmentationSequential(
-                    augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
-                    data_keys=["input", "input"],
-                )
+
+                if self.do_seg_crops is not None:
+                    # Needs 2 data_keys to apply same transfo on img and mask
+                    self.geometric_augmentation_local = AugmentationSequential(
+                        augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
+                        data_keys=["input", "input"],
+                    )
+                else:
+                    self.geometric_augmentation_local = AugmentationSequential(
+                        augmentation.RandomResizedCrop(
+                            local_crops_size,
+                            scale=local_crops_scale,
+                            resample=Resample.BICUBIC.name,
+                            same_on_batch=False,
+                        ),
+                        augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
+                    )
 
                 self.std_augmentation_local = AugmentationSequential(
                     augmentation.RandomResizedCrop(
@@ -611,6 +624,7 @@ class DataAugmentationDINO(object):
         # image : C H W
         output = {}
         image = self.pad_to_patch_mutiple(image)
+
         # global crops:
         if self.use_native_res:
             image_global = self.make_rectangle_crop(image)
@@ -638,7 +652,7 @@ class DataAugmentationDINO(object):
         output["global_crops"] = global_crops
 
         # local crops:
-        if self.do_seg_crops:
+        if self.do_seg_crops is not None:
             (
                 local_crops,
                 masks,
