@@ -30,7 +30,7 @@ notebooks/test_nb.ipynb
 .DS_Store
 notebooks/test_nb.ipynb
 checkpoints/
-data/
+
 output_dir/
 notebooks/*.jpg
 notebooks/seg_examples_Quickshift.jpg
