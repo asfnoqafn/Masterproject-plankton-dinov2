@@ -45,6 +45,7 @@ class ExtendedVisionDataset(VisionDataset):
 
                 if "plankton" in str(self.root):
                     image = decode_image(image, ImageReadMode.RGB)
+                    #print("i am in plankton")
                 else:
                     image_size = int(np.sqrt(image.shape[0] / num_channels))
                     image = image.reshape(num_channels, image_size, image_size)
@@ -62,6 +63,7 @@ class ExtendedVisionDataset(VisionDataset):
 
         target = self.get_target(index)
         target = TargetDecoder(target).decode()
+        #print("target", target)
 
         if self.transforms is not None:
             image, target = self.transforms(image, target)
