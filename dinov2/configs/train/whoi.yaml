@@ -60,7 +60,7 @@ ibot:
   head_nlayers: 3
   head_hidden_dim: 2048
 train:
-  batch_size_per_gpu: 256
+  batch_size_per_gpu: 16 #256
   dataset_path: LMDBDataset:split=ALL:root=/fast/AG_Kainmueller/plankton/data/WHOI/preprocessed/preprocessed_lmdb/:extra=*
   output_dir: 'home/jluesch/output_dir'
   saveckp_freq: 10
@@ -71,16 +71,18 @@ train:
   cache_dataset: false
   use_torch_compile: true
   do_profiling: false
-  augmentations: kornia_gpu
+  augmentations: "kornia_gpu"
+  in_chans: 3
+  do_debug: false
 student:
   arch: vit_small
   patch_size: 14
   drop_path_rate: 0
   layerscale: 1.0e-05
   drop_path_uniform: true
-  pretrained_weights: ''
+  pretrained_weights: 'checkpoints/dinov2_vits14_pretrain.pth'
   ffn_layer: "mlp"
-  block_chunks: 2
+  block_chunks: 0
   qkv_bias: true
   proj_bias: true
   ffn_bias: true
@@ -109,6 +111,8 @@ optim:
   adamw_beta1: 0.9
   adamw_beta2: 0.999
 crops:
+  use_native_res: false
+  free_shapes: false
   global_crops_scale:
   - 0.32
   - 1.0
@@ -118,5 +122,7 @@ crops:
   - 0.32
   global_crops_size: 224
   local_crops_size: 98
+  use_ch_patch_embed: false
+  use_variable_channels: false
 evaluation:
   eval_period_iterations: 12500
