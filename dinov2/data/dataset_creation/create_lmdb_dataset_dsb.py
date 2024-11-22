@@ -139,7 +139,7 @@ def write_databases(images_lmdb, labels_lmdb, metadata_lmdb, data):
     env_metadata.close()
 
 
-def main():
+def main(): 
     MAP_SIZE_IMAGE = int(1e10)
     MAP_SIZE_LABEL = int(1e10)
     MAP_SIZE_METADATA = int(1e10)
