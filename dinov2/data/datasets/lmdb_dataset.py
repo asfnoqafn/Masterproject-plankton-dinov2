@@ -151,7 +151,8 @@ class LMDBDataset(ImageNet):
                 accumulated = [el for el in accumulated if el["class_id"] < 5]
             # free up resources
             lmdb_cursor.close()
-            if lmdb_env_labels is not None:
+            # if lmdb_env_labels is not None:  #breaks if we had no labels to begin with
+            if self.with_targets and len(file_list_labels) > 0:
                 lmdb_env_labels.close()
 
         if self.with_targets:

@@ -11,7 +11,6 @@ from typing import Optional
 
 import dinov2.distributed as distributed
 import wandb
-
 from .helpers import MetricLogger, SmoothedValue
 
 
@@ -111,13 +110,12 @@ def setup_logging(
         _configure_logger(name, level=level, output=output)
 
         if do_eval:
-            project = "dinov2_plankton_eval"
+            project = "mp_aqqua"
         else:
-            project = "dinov2_plankton"
+            project = "mp_aqqua"
 
         wandb.init(
             name=args.run_name,
-            entity="kainmueller-lab",
             project=project,
             config=args,
             dir=output,
