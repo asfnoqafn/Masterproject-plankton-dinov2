@@ -12,7 +12,6 @@ dist/
 wandb/
 dinov2/.DS_Store
 *.sh~
-*.sh
 *.yaml
 notebooks/dataloader_benchmark_results.csv
 notebooks/dataloader_benchmark_results_10000_gpuTrue.csv

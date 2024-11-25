@@ -27,7 +27,9 @@ class LMDBDataset(ImageNet):
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
         lmdb_txn = self._lmdb_txns[entry["lmdb_imgs_file"]]
-        image_data = lmdb_txn.get(str(entry["index"]).encode("utf-8"))
+        #print(entry["index"])
+        image_data = lmdb_txn.get(entry["index"]) # we dont need to encode since new script already saves encoded img
+        #print("image_data", image_data.dtype)
         return image_data
 
     def get_target(self, index: int) -> Optional[Target]:
@@ -35,11 +37,13 @@ class LMDBDataset(ImageNet):
             _SplitLMDBDataset.TEST,
             _SplitLMDBDataset.ALL,
         ]:
+            print("I shouldnt be here")
             return None
         else:
             entries = self._get_entries()
-            if self.with_targets:
+            if True:
                 class_index = entries[index]["class_id"]
+                #print(class_index)
                 return int(class_index)
             else:
                 return None
@@ -134,17 +138,21 @@ class LMDBDataset(ImageNet):
                 lmdb_cursor = lmdb_txn_imgs.cursor()
             for key, value in lmdb_cursor:
                 entry = dict()
-                entry["index"] = key.decode()
-                if self.with_targets and len(file_list_labels) > 0:
-                    entry["class_id"] = int(value.decode())
-
+                if len(file_list_labels) > 0:
+                    #print("value", value)
+                    #print("value decode", int.from_bytes(value, byteorder="little"))
+                    entry["class_id"] = int.from_bytes(value, byteorder="little")
+                    #print("class_id", entry["class_id"])
+                    entry["index"] = key
+                else:
+                    print("i shouldnt be here")
                 entry["lmdb_imgs_file"] = lmdb_path_imgs
 
                 accumulated.append(entry)
                 global_idx += 1
 
-            if self.do_short_run:
-                accumulated = [el for el in accumulated if el["class_id"] < 5]
+            #if self.do_short_run:
+            #    accumulated = [el for el in accumulated if el["class_id"] < 5]
             # free up resources
             lmdb_cursor.close()
             if lmdb_env_labels is not None:

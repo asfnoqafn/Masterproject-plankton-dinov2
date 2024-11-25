@@ -77,7 +77,7 @@ def main(args):
     MAP_SIZE_META = int(args.map_size_meta)
 
     start_img_idx = args.start_img_idx
-    end_img_idx = args.end_img_idx
+    end_img_idx = args.start_img_idx + 10
 
     print(f"PROCESSING DATASET stored in {args.dataset_path}...")
     print(f"With labels: {args.with_labels}, with metadata: {args.with_metadata}")

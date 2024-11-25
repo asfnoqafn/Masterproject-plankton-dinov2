@@ -92,7 +92,7 @@ def get_args_parser(
     parser.add_argument(
         "--num-workers",
         type=int,
-        default=4,
+        default=19,
         help="Number of workers in DataLoader.",
     )
     parser.add_argument(
@@ -257,10 +257,14 @@ def create_module_dict(
     train_features,
     train_labels,
 ):
+    print(f"Shape of train_labels: {train_labels.shape}")
+    print(f"Shape of train_features: {train_features.shape}")
     modules = {}
     mapping = create_class_indices_mapping(train_labels)
+    #print("mapping", mapping)
     for npc in n_per_class_list:
         if npc < 0:  # Only one try needed when using the full data
+            #print("npc", npc)
             full_module = module(
                 train_features=train_features,
                 train_labels=train_labels,
@@ -363,6 +367,7 @@ def eval_knn(
                 **postprocessors,
                 **{(n_per_class, t, k): DictKeysModule([n_per_class, t, k]) for k in knn_try.nb_knn},
             }
+            print(f"Output from postprocessor: {postprocessors}")
             metrics = {
                 **metrics,
                 **{

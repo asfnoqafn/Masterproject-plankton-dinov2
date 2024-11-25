@@ -59,6 +59,7 @@ def evaluate(
     criterion: Optional[nn.Module] = None,
 ):
     model.eval()
+
     if criterion is not None:
         criterion.eval()
 
@@ -69,12 +70,20 @@ def evaluate(
         delimiter="  ",
         verbose=distributed.is_main_process(),
     )
+    logger.info(f"Metrics inputs: {metrics.keys()}")
+    for k, metric in metrics.items():
+        logger.info(f"{k}: {metric}")
     header = "Test:"
+    print("header")
+
 
     for samples, targets, *_ in metric_logger.log_every(data_loader, 10, header):
+        print("samples",samples.shape)
+ 
         # outputs is tuple of tuple 4 x (torch.Size([B, 2B, 384]), torch.Size([B, 384]))
         outputs = model(samples.to(device))
         targets = targets.to(device)
+        print("target",targets.shape)
         if criterion is not None:
             loss = criterion(outputs, targets)
             metric_logger.update(loss=loss.item())
@@ -139,6 +148,7 @@ def extract_features_with_dataloader(model, data_loader, sample_count, gather_on
         samples = samples.cuda(non_blocking=True)
         labels_rank = labels_rank.cuda(non_blocking=True)
         index = index.cuda(non_blocking=True)
+        #print("cuda index", index)
         features_rank = model(samples).float()
 
         # init storage feature matrix

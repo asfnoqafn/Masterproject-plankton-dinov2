@@ -70,7 +70,7 @@ class ImageNet(ExtendedVisionDataset):
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
         do_short_run: bool = False,
-        with_targets: bool = False,
+        with_targets: bool = True,
         is_cached: bool = False,
         curr_in_chans: int = None,
     ) -> None:
