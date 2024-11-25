@@ -91,7 +91,9 @@ class SwiGLUFFN(nn.Module):
         hidden_features = hidden_features or in_features
         swiglu_hidden_features = int(2 * hidden_features / 3)
         align_as = 8
-        swiglu_hidden_features = (swiglu_hidden_features + align_as - 1) // align_as * align_as
+        swiglu_hidden_features = (
+            (swiglu_hidden_features + align_as - 1) // align_as * align_as
+        )
         self.w1 = nn.Linear(in_features, swiglu_hidden_features)
         self.w2 = nn.Linear(in_features, swiglu_hidden_features)
         self.w3 = nn.Linear(swiglu_hidden_features, out_features)
@@ -119,6 +121,7 @@ class PatchEmbed(nn.Module):
         super().__init__()
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
+        print("img_size", img_size, flush=True)
         self.img_size = img_size
         self.patch_size = patch_size
         self.grid_size = (
@@ -167,7 +170,11 @@ class Attention(nn.Module):
 
     def forward(self, x, H, W):
         B, N, C = x.shape
-        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        qkv = (
+            self.qkv(x)
+            .reshape(B, N, 3, self.num_heads, C // self.num_heads)
+            .permute(2, 0, 3, 1, 4)
+        )
         q, k, v = qkv.unbind(0)  # make torchscript happy (cannot use tensor as tuple)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
@@ -235,7 +242,9 @@ def window_partition(x, window_size):
         window_size,
         C,
     )
-    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
+    windows = (
+        x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
+    )
     return windows
 
 
@@ -305,7 +314,9 @@ class WindowedAttention(nn.Module):
         )
         B, C_kw_kw, L = qkv.shape  # L - the num of windows
         qkv = qkv.reshape(B, C * 3, N_, L).permute(0, 3, 2, 1)  # [B, L, N_, C]
-        qkv = qkv.reshape(B, L, N_, 3, self.num_heads, C // self.num_heads).permute(3, 0, 1, 4, 2, 5)
+        qkv = qkv.reshape(B, L, N_, 3, self.num_heads, C // self.num_heads).permute(
+            3, 0, 1, 4, 2, 5
+        )
         q, k, v = qkv.unbind(0)  # make torchscript happy (cannot use tensor as tuple)
 
         # q,k,v [B, L, num_head, N_, C/num_head]
@@ -510,7 +521,9 @@ class TIMMVisionTransformer(BaseModule):
         """
         super().__init__()
         self.num_classes = num_classes
-        self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
+        self.num_features = self.embed_dim = (
+            embed_dim  # num_features for consistency with other models
+        )
         self.num_tokens = 1
         norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6)
         act_layer = act_layer or nn.GELU
@@ -521,8 +534,12 @@ class TIMMVisionTransformer(BaseModule):
         self.drop_rate = drop_rate
         self.patch_size = patch_size
 
-        window_attn = [window_attn] * depth if not isinstance(window_attn, list) else window_attn
-        window_size = [window_size] * depth if not isinstance(window_size, list) else window_size
+        window_attn = (
+            [window_attn] * depth if not isinstance(window_attn, list) else window_attn
+        )
+        window_size = (
+            [window_size] * depth if not isinstance(window_size, list) else window_size
+        )
         logging.info("window attention:", window_attn)
         logging.info("window size:", window_size)
         logging.info("layer scale:", layer_scale)
@@ -536,12 +553,16 @@ class TIMMVisionTransformer(BaseModule):
         )
         num_patches = self.patch_embed.num_patches
 
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + self.num_tokens, embed_dim))
+        self.pos_embed = nn.Parameter(
+            torch.zeros(1, num_patches + self.num_tokens, embed_dim)
+        )
         self.pos_drop = nn.Dropout(p=drop_rate)
 
         ffn_types = {"mlp": Mlp, "swiglu": SwiGLUFFN}
 
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
+        dpr = [
+            x.item() for x in torch.linspace(0, drop_path_rate, depth)
+        ]  # stochastic depth decay rule
         self.blocks = nn.Sequential(
             *[
                 Block(
@@ -588,7 +609,9 @@ class TIMMVisionTransformer(BaseModule):
 
     def forward_features(self, x):
         x, H, W = self.patch_embed(x)
-        cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
+        cls_token = self.cls_token.expand(
+            x.shape[0], -1, -1
+        )  # stole cls_tokens impl from Phil Wang, thanks
         x = torch.cat((cls_token, x), dim=1)
         x = self.pos_drop(x + self.pos_embed)
 
@@ -626,7 +649,9 @@ class TIMMVisionTransformer(BaseModule):
         # keep dim for easy deployment
         cls_token_weight = pos_embed[:, 0:1]
         pos_embed_weight = pos_embed[:, (-1 * pos_h * pos_w) :]
-        pos_embed_weight = pos_embed_weight.reshape(1, pos_h, pos_w, pos_embed.shape[2]).permute(0, 3, 1, 2)
+        pos_embed_weight = pos_embed_weight.reshape(
+            1, pos_h, pos_w, pos_embed.shape[2]
+        ).permute(0, 3, 1, 2)
         pos_embed_weight = resize(
             pos_embed_weight,
             size=input_shape,

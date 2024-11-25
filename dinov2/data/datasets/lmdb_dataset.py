@@ -50,12 +50,10 @@ class LMDBDataset(ImageNet):
 
     @property
     def _entries_path(self) -> str:
-        if self.root.endswith("TRAIN") or self.root.endswith(
-            "VAL"
-        ):  # if we have a single file
+        if self.root.endswith("TRAIN") or self.root.endswith("VAL"):  # if we have a single file
             return self.root + "_*"
         elif self._split.value.upper() == "ALL":
-            return os.path.join(self.root, "*")
+            return self.root
         else:
             return os.path.join(
                 self.root,
@@ -63,10 +61,10 @@ class LMDBDataset(ImageNet):
             )
 
     def _get_extra_full_path(self, extra_path: str) -> str:
-        if not os.path.isdir(self.root):
-            return extra_path
+        if not os.path.isdir(extra_path):
+            return os.path.join(self.root, extra_path)
         else:
-            return os.path.join(self.root, "*")
+            return self.root
 
     def _get_entries(self) -> list:
         if self._entries is None:
@@ -75,16 +73,14 @@ class LMDBDataset(ImageNet):
         return self._entries
 
     def _load_extra(self, extra_path: str):
-        # extra_full_path = self._get_extra_full_path(extra_path)
-        print("extra_path", extra_path)
-        file_list = glob.glob(extra_path)
+        extra_full_path = self._get_extra_full_path(extra_path)
+        print("extra_full_path", extra_full_path)
+        file_list = glob.glob(extra_full_path)
 
         file_list_labels = sorted([el for el in file_list if el.endswith("labels")])
         print("Datasets labels file list: ", file_list_labels)
 
-        file_list_imgs = sorted(
-            [el for el in file_list if el.endswith("imgs") or el.endswith("images")]
-        )
+        file_list_imgs = sorted([el for el in file_list if el.endswith("imgs") or el.endswith("images")])
         print("Datasets imgs file list: ", file_list_imgs)
 
         accumulated = []

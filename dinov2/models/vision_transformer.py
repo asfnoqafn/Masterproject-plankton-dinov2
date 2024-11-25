@@ -154,8 +154,11 @@ class DinoVisionTransformer(nn.Module):
                 for ch in in_chans
             }
             num_patches = self.patch_embed[min(in_chans)].num_patches
+        print(f"Patch Embedding: {self.patch_embed}")
 
         if self.use_ch_patch_embed:
+            if not isinstance(in_chans, int):
+                in_chans = min(in_chans)
             num_patches = int(num_patches / in_chans)
         self.num_loc_crops = num_loc_crops
         self.free_shapes = free_shapes
@@ -164,6 +167,7 @@ class DinoVisionTransformer(nn.Module):
         self.pos_embed = nn.Parameter(
             torch.zeros(1, num_patches + self.num_tokens, embed_dim)
         )
+        print("init self.pos_embed", self.pos_embed.shape)
         assert num_register_tokens >= 0
         self.register_tokens = (
             nn.Parameter(torch.zeros(1, num_register_tokens, embed_dim))
@@ -262,6 +266,11 @@ class DinoVisionTransformer(nn.Module):
         w0 = w // self.patch_size
         h0 = h // self.patch_size
         M = int(math.sqrt(N))  # Recover the number of patches in each dimension
+        print(
+            "pos_embed",
+            f"N {N}, M{M}, w0 {w0}, h0 {h0}, w {w}, h {h}, self.pos_embed {self.pos_embed.shape}",
+            flush=True,
+        )
         assert N == M * M
         kwargs = {}
         if self.interpolate_offset:
@@ -284,10 +293,10 @@ class DinoVisionTransformer(nn.Module):
         assert (w0, h0) == patch_pos_embed.shape[-2:]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
 
-        if self.use_ch_patch_embed:
-            patch_pos_embed = patch_pos_embed.expand(1, self.in_chans, -1, dim).reshape(
-                1, -1, dim
-            )
+        # if self.use_ch_patch_embed:
+        #    patch_pos_embed = patch_pos_embed.expand(1, self.in_chans, -1, dim).reshape(
+        #        1, -1, dim
+        #    )
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1).to(
             previous_dtype
         )
@@ -395,12 +404,13 @@ class DinoVisionTransformer(nn.Module):
         Returns:
             torch.Tensor: tokens with positional embeddings, shape = (b, n, d)
         """
+        """
         print(
             "prepare_tokens_with_masks x.shape local_patch_pos local_crop_dims local_crop_len num_ch_list"
         )
         print(
             f"prepare_tokens_with_masks {x.shape} {local_patch_pos} {local_crop_dims} {local_crop_len} {num_ch_list}"
-        )
+        )"""
 
         # newly created pos embed vect also needs padding
         # b c w h OR b c p (n p)
@@ -417,7 +427,6 @@ class DinoVisionTransformer(nn.Module):
                 x_list = torch.split(x, num_ch_list, dim=0)  # b [c n d]
                 x = pad_sequence(x_list, batch_first=True)  # b c_max n d
                 x = x.reshape(b, -1, x.shape[-1])  # b (c_max n) d
-                print("x.shape", x.shape)
 
         x_dim = x.shape[-1]
 
@@ -480,36 +489,49 @@ class DinoVisionTransformer(nn.Module):
         else:
             x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
             interpolated_pos_embeds = self.interpolate_pos_encoding(x, w, h)
-            if interpolated_pos_embeds.shape != x.shape:
-                c_max = max(num_ch_list)
-                # int((x.shape[1] - 1) / (interpolated_pos_embeds.shape[1] - 1))
-                # -1 to account for cls token
-                # allch_pos_embeds = interpolated_pos_embeds[:, 1:, :].tile(1, c_max, 1)
-                pos_embeds = []
-                for ch_nb in num_ch_list:
-                    allch_pos_embeds = interpolated_pos_embeds[:, 1:, :].tile(
-                        1, ch_nb, 1
-                    )
-                    pos_embed_padding = torch.zeros(
-                        (
-                            1,
-                            (c_max - ch_nb) * (interpolated_pos_embeds.shape[1] - 1),
-                            interpolated_pos_embeds.shape[-1],
-                        ),
-                        device=interpolated_pos_embeds.device,
-                        dtype=interpolated_pos_embeds.dtype,
-                    )
-                    allch_pos_embeds = torch.cat(
+
+            if (
+                self.use_ch_patch_embed
+                and interpolated_pos_embeds.shape[1:] != x.shape[1:]
+            ):
+                if exists(num_ch_list):
+                    c_max = max(num_ch_list)
+                    pos_embeds = []
+                    for ch_nb in num_ch_list:
+                        allch_pos_embeds = interpolated_pos_embeds[:, 1:, :].tile(
+                            1, ch_nb, 1
+                        )
+                        pos_embed_padding = torch.zeros(
+                            (
+                                1,
+                                (c_max - ch_nb)
+                                * (interpolated_pos_embeds.shape[1] - 1),
+                                interpolated_pos_embeds.shape[-1],
+                            ),
+                            device=interpolated_pos_embeds.device,
+                            dtype=interpolated_pos_embeds.dtype,
+                        )
+                        allch_pos_embeds = torch.cat(
+                            (
+                                interpolated_pos_embeds[:, :1, :],
+                                allch_pos_embeds,
+                                pos_embed_padding,
+                            ),
+                            dim=1,
+                        )
+                        pos_embeds.append(allch_pos_embeds)
+
+                    interpolated_pos_embeds = torch.cat(pos_embeds, dim=0)
+                else:
+                    # -1 to account for cls token
+                    all_pos_embeds = interpolated_pos_embeds[:, 1:, :].tile(1, c, 1)
+                    interpolated_pos_embeds = torch.cat(
                         (
                             interpolated_pos_embeds[:, :1, :],
-                            allch_pos_embeds,
-                            pos_embed_padding,
+                            all_pos_embeds,
                         ),
                         dim=1,
                     )
-                    pos_embeds.append(allch_pos_embeds)
-
-                interpolated_pos_embeds = torch.cat(pos_embeds, dim=0)
 
         x = x + interpolated_pos_embeds
         if self.register_tokens is not None:

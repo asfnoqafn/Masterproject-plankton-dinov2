@@ -74,6 +74,7 @@ train:
   do_profiling: false
   use_ch_patch_embed: false
   in_chans: 3
+  do_debug: false
 student:
   arch: vit_small
   patch_size: 14
@@ -123,5 +124,6 @@ crops:
   - 0.32
   global_crops_size: 224
   local_crops_size: 98
+  use_variable_channels: false
 evaluation:
   eval_period_iterations: 1250
