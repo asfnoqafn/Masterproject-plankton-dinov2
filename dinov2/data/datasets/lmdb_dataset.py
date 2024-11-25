@@ -23,11 +23,14 @@ class LMDBDataset(ImageNet):
     Target = _TargetLMDBDataset
     Split = _SplitLMDBDataset
     lmdb_handles = {}
+    #with_targets = False
 
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
         lmdb_txn = self._lmdb_txns[entry["lmdb_imgs_file"]]
-        image_data = lmdb_txn.get(str(entry["index"]).encode("utf-8"))
+        #print(entry["index"])
+        image_data = lmdb_txn.get(entry["index"]) # we dont need to encode since new script already saves encoded img
+        #print("image_data", image_data.dtype)
         return image_data
 
     def get_target(self, index: int) -> Optional[Target]:
@@ -35,11 +38,13 @@ class LMDBDataset(ImageNet):
             _SplitLMDBDataset.TEST,
             _SplitLMDBDataset.ALL,
         ]:
+            print("I shouldnt be here")
             return None
         else:
             entries = self._get_entries()
-            if self.with_targets:
+            if True:
                 class_index = entries[index]["class_id"]
+                #print(class_index)
                 return int(class_index)
             else:
                 return None
@@ -50,9 +55,7 @@ class LMDBDataset(ImageNet):
 
     @property
     def _entries_path(self) -> str:
-        if self.root.endswith("TRAIN") or self.root.endswith(
-            "VAL"
-        ):  # if we have a single file
+        if self.root.endswith("TRAIN") or self.root.endswith("VAL"):  # if we have a single file
             return self.root + "_*"
         elif self._split.value.upper() == "ALL":
             return os.path.join(self.root, "*")
@@ -63,8 +66,8 @@ class LMDBDataset(ImageNet):
             )
 
     def _get_extra_full_path(self, extra_path: str) -> str:
-        if not os.path.isdir(self.root):
-            return extra_path
+        if not os.path.isdir(extra_path):
+            return os.path.join(self.root, extra_path)
         else:
             return os.path.join(self.root, "*")
 
@@ -75,16 +78,14 @@ class LMDBDataset(ImageNet):
         return self._entries
 
     def _load_extra(self, extra_path: str):
-        # extra_full_path = self._get_extra_full_path(extra_path)
-        print("extra_path", extra_path)
-        file_list = glob.glob(extra_path)
+        extra_full_path = self._get_extra_full_path(extra_path)
+        print("extra_full_path", extra_full_path)
+        file_list = glob.glob(extra_full_path)
 
         file_list_labels = sorted([el for el in file_list if el.endswith("labels")])
         print("Datasets labels file list: ", file_list_labels)
 
-        file_list_imgs = sorted(
-            [el for el in file_list if el.endswith("imgs") or el.endswith("images")]
-        )
+        file_list_imgs = sorted([el for el in file_list if el.endswith("imgs") or el.endswith("images")])
         print("Datasets imgs file list: ", file_list_imgs)
 
         accumulated = []
@@ -138,20 +139,23 @@ class LMDBDataset(ImageNet):
                 lmdb_cursor = lmdb_txn_imgs.cursor()
             for key, value in lmdb_cursor:
                 entry = dict()
-                entry["index"] = key.decode()
-                if self.with_targets and len(file_list_labels) > 0:
-                    entry["class_id"] = int(value.decode())
-
+                if len(file_list_labels) > 0:
+                    #print("value", value)
+                    #print("value decode", int.from_bytes(value, byteorder="little"))
+                    entry["class_id"] = int.from_bytes(value, byteorder="little")
+                    #print("class_id", entry["class_id"])
+                    entry["index"] = key
+                else:
+                    print("i shouldnt be here")
                 entry["lmdb_imgs_file"] = lmdb_path_imgs
 
                 accumulated.append(entry)
                 global_idx += 1
 
-            if self.do_short_run:
-                accumulated = [el for el in accumulated if el["class_id"] < 5]
+            #if self.do_short_run:
+            #    accumulated = [el for el in accumulated if el["class_id"] < 5]
             # free up resources
             lmdb_cursor.close()
-            # if lmdb_env_labels is not None:  #breaks if we had no labels to begin with
             if self.with_targets and len(file_list_labels) > 0:
                 lmdb_env_labels.close()
 
