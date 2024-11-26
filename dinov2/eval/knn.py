@@ -118,6 +118,11 @@ def get_args_parser(
         default=1,
         help="Set number of nodes used.",
     )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        help="Output directory to write results and logs",
+    )
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
         val_dataset_str="ImageNet:split=VAL",
@@ -504,7 +509,7 @@ def main(args):
     print("args.output_dir", args.output_dir)
     eval_knn_with_model(
         model=model,
-        output_dir=args.output_dir_ckpt,
+        output_dir=args.output_dir,
         train_dataset_str=args.train_dataset_str,
         val_dataset_str=args.val_dataset_str,
         nb_knn=args.nb_knn,
