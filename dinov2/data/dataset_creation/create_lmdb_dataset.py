@@ -15,31 +15,14 @@ class _DataType(Enum):
     LABELS = "labels"
 
 
-class _Split(Enum):
-    TRAIN = "train"
-    VAL = "val"
-    TEST = "test"
-    ALL = "all"
-
-
-IMAGE_SUFFIXES = (
-    ".jpg",
-    ".JPG",
-    ".jpeg",
-    ".JPEG",
-    ".png",
-    ".PNG",
-)
-
-
-def normalize(x: np.ndarray):
+def _normalize(x: np.ndarray):
     """
     Normalizes an numpy.ndarray without dividing by zero.
     """
     return (x - x.min()) / (x.max() - x.min() + 1e-5)
 
 
-def load_image(image_path):
+def _load_image(image_path):
     """
     Load an image from the given image path and preprocess it. All common image file types are supported
     Parameters:
@@ -49,12 +32,12 @@ def load_image(image_path):
     """
 
     image = iio.imread(image_path)  # (H W) or (H W C)
-    image = normalize(np.squeeze(image))
+    image = _normalize(np.squeeze(image))
     image = (image * 255).astype(np.uint8)
     return image
 
 
-def create_lmdb(
+def _create_lmdb(
     dataset_lmdb_dir: Path,
     name: _DataType,
     map_size: int = 1e10
@@ -80,29 +63,7 @@ def create_lmdb(
     return env, txn
 
 
-def _find_files(dataset_path):
-    """
-    Finds all images and labels in the dataset
-    Parameters:
-        dataset_path (str): The folder of the dataset
-    Returns:
-        list: A list of tuples of image path strings and label strings (or None) and metadata dicts (or None)
-    """
-
-    result = []
-
-    for path in Path(dataset_path).rglob('*.jpg'):
-        image_folder_name = path.parents[0].name
-        label = None
-        if image_folder_name != 'test':
-            label = image_folder_name
-
-        result.append((path.as_posix(), label, None))
-
-    return result
-
-
-def write_databases(images_lmdb, labels_lmdb, metadata_lmdb, data):
+def _write_databases(unlabeled_images_lmdb, labeled_images_lmdb, labels_lmdb, metadata_lmdb, data):
     """
     Writes all three databases (images, labels, metadata) simulataniously
     Parameters:
@@ -112,70 +73,86 @@ def write_databases(images_lmdb, labels_lmdb, metadata_lmdb, data):
         data (list): List of tuples of image path strings and label strings (or None) and metadata dicts (or None)
     """
 
-    env_images, txn_images = images_lmdb
+    env_unlabeled_images, txn_unlabeled_images = unlabeled_images_lmdb
+    env_labeled_images, txn_labeled_images = labeled_images_lmdb
     env_labels, txn_labels = labels_lmdb
     env_metadata, txn_metadata = metadata_lmdb
 
     for image_path, label, metadata in tqdm(data):
         index = str(uuid.uuid4()).encode("utf-8")
 
-        uint8_image = load_image(image_path)
+        uint8_image = _load_image(image_path)
         image_jpg_encoded = iio.imwrite("<bytes>", uint8_image, extension=".jpeg")
-        txn_images.put(index, image_jpg_encoded)
-        
+
         if label != None:
+            txn_labeled_images.put(index, image_jpg_encoded)
             txn_labels.put(index, label.encode("utf-8"))
+        else:
+            txn_unlabeled_images.put(index, image_jpg_encoded)
 
         if metadata != None:
             metadata_encoded = json.dumps(metadata).encode("utf-8")
             txn_metadata.put(index, metadata_encoded)
         
-    txn_images.commit()
+    txn_unlabeled_images.commit()
+    txn_labeled_images.commit()
     txn_labels.commit()
     txn_metadata.commit()
 
-    env_images.close()
+    env_unlabeled_images.close()
+    env_labeled_images.close()
     env_labels.close() 
     env_metadata.close()
 
 
-def main():
-    MAP_SIZE_IMAGE = int(1e10)
-    MAP_SIZE_LABEL = int(1e10)
-    MAP_SIZE_METADATA = int(1e10)
-    dataset_path = "/home/hk-project-p0021769/hgf_auh3910/data/datasciencebowl"
-    base_lmdb_dir = "/home/hk-project-p0021769/hgf_auh3910/data/lmdb_datasciencebowl"
+def build_databases(
+    data: list,
+    base_lmdb_directory: Path,
+    map_size: int,
+):
+    """
+    Converts the data colleted via the collect script into lmdb databases
+    Args:
+        data (list): List of imagefiles with their label (or None) and their metadata (or None)
+        base_lmdb_directory (Path): The directory to store the lmdb files in
+        map_size (int): The memory allocated for lmdb creation
+    """
 
-    print(f"PROCESSING DATASET stored in {dataset_path}...")
+    number_of_images = len(data)
+    number_of_images_with_labels = sum(1 for item in data if item[1] != None)
+    number_of_images_with_metadata = sum(1 for item in data if item[2] != None)
+    number_of_images_without_labels = number_of_images - number_of_images_with_labels
 
-    os.makedirs(base_lmdb_dir, exist_ok=True)
+    print('DATASET STATISTICS:')
+    print(f'{number_of_images} <- number of images')
+    print(f'{number_of_images_with_labels} <- number of images with labels')
+    print(f'{number_of_images_with_metadata} <- number of images with metadata')
+    print(f'{number_of_images_without_labels} <- number of images without labels')
 
-    data = _find_files(dataset_path)
-
-    print(f"TOTAL #images {len(data)}")
-
-    images_lmdb = create_lmdb(
-        base_lmdb_dir,
-        name=_DataType.IMAGES,
-        map_size=MAP_SIZE_IMAGE,
+    unlabeled_images_lmdb = _create_lmdb(
+        base_lmdb_directory,
+        name=f'unlabled_{_DataType.IMAGES}_{number_of_images_without_labels}',
+        map_size=map_size,
     )
 
-    labels_lmdb = create_lmdb(
-        base_lmdb_dir,
-        name=_DataType.LABELS,
-        map_size=MAP_SIZE_LABEL,
+    labeled_images_lmdb = _create_lmdb(
+        base_lmdb_directory,
+        name=f'labled_{_DataType.IMAGES}_{number_of_images_with_labels}',
+        map_size=map_size,
     )
 
-    metadata_lmdb = create_lmdb(
-        base_lmdb_dir,
-        name=_DataType.METADATA,
-        map_size=MAP_SIZE_METADATA,
+    labels_lmdb = _create_lmdb(
+        base_lmdb_directory,
+        name=f'{_DataType.LABELS}_{number_of_images_with_labels}',
+        map_size=map_size,
     )
 
-    write_databases(images_lmdb, labels_lmdb, metadata_lmdb, data)
+    metadata_lmdb = _create_lmdb(
+        base_lmdb_directory,
+        name=f'{_DataType.METADATA}_{number_of_images_with_metadata}',
+        map_size=map_size,
+    )
+
+    _write_databases(unlabeled_images_lmdb, labeled_images_lmdb, labels_lmdb, metadata_lmdb, data)
     
-    print(f"FINISHED DATASET SAVED AT: {base_lmdb_dir}")
-
-
-if __name__ == "__main__":
-    main()
+    print(f"FINISHED DATASET SAVED AT: {base_lmdb_directory}")
