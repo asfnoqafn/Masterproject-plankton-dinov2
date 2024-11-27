@@ -4,6 +4,7 @@ from enum import Enum
 from typing import Optional
 
 import lmdb
+import numpy as np
 
 from dinov2.data.datasets import ImageNet
 
@@ -63,6 +64,10 @@ class LMDBDataset(ImageNet):
             self._load_extra(self._entries_path)
         assert self._entries is not None
         return self._entries
+    
+    def get_class_ids(self) -> np.ndarray:
+        self._get_entries()
+        return self._class_ids
 
     def _load_extra(self, extra_path: str):
         extra_full_path = self._get_extra_full_path(extra_path)
