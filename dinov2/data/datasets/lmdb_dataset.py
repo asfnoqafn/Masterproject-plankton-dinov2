@@ -4,7 +4,6 @@ from enum import Enum
 from typing import Optional
 
 import lmdb
-import numpy as np
 
 from dinov2.data.datasets import ImageNet
 
@@ -23,14 +22,11 @@ class LMDBDataset(ImageNet):
     Target = _TargetLMDBDataset
     Split = _SplitLMDBDataset
     lmdb_handles = {}
-    #with_targets = False
 
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
         lmdb_txn = self._lmdb_txns[entry["lmdb_imgs_file"]]
-        #print(entry["index"])
         image_data = lmdb_txn.get(entry["index"]) # we dont need to encode since new script already saves encoded img
-        #print("image_data", image_data.dtype)
         return image_data
 
     def get_target(self, index: int) -> Optional[Target]:
@@ -38,20 +34,11 @@ class LMDBDataset(ImageNet):
             _SplitLMDBDataset.TEST,
             _SplitLMDBDataset.ALL,
         ]:
-            print("I shouldnt be here")
             return None
         else:
             entries = self._get_entries()
-            if True:
-                class_index = entries[index]["class_id"]
-                #print(class_index)
-                return int(class_index)
-            else:
-                return None
-
-    def get_class_ids(self) -> np.ndarray:
-        self._get_entries()
-        return self._class_ids
+            class_index = entries[index].get("class_id")
+            return int(class_index) if class_index is not None else None
 
     @property
     def _entries_path(self) -> str:
@@ -140,13 +127,8 @@ class LMDBDataset(ImageNet):
             for key, value in lmdb_cursor:
                 entry = dict()
                 if len(file_list_labels) > 0:
-                    #print("value", value)
-                    #print("value decode", int.from_bytes(value, byteorder="little"))
                     entry["class_id"] = int.from_bytes(value, byteorder="little")
-                    #print("class_id", entry["class_id"])
-                    entry["index"] = key
-                else:
-                    print("i shouldnt be here")
+                entry["index"] = key
                 entry["lmdb_imgs_file"] = lmdb_path_imgs
 
                 accumulated.append(entry)
