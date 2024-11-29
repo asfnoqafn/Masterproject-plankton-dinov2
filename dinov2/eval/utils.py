@@ -173,3 +173,99 @@ def extract_features_with_dataloader(model, data_loader, sample_count, gather_on
     assert torch.all(all_labels > -1)
 
     return features, all_labels
+
+
+
+import torch
+
+class PCA:
+    def __init__(self, num_components: int):
+        """
+        Initialize PCA with the number of components to retain.
+        """
+        self.num_components = num_components
+        self.mean = None
+        self.components = None
+
+    def fit(self, data: torch.Tensor):
+        """
+        Compute the principal components from the data.
+        :param data: Input data of shape (n_samples, n_features)
+        """
+        # Compute mean and subtract it
+        self.mean = data.mean(dim=0)
+        centered_data = data - self.mean
+
+        # Compute covariance matrix
+        covariance_matrix = torch.mm(centered_data.T, centered_data) / (data.size(0) - 1)
+
+        # Compute eigenvalues and eigenvectors
+        eigenvalues, eigenvectors = torch.linalg.eigh(covariance_matrix)
+
+        # Sort eigenvalues and eigenvectors in descending order
+        sorted_indices = torch.argsort(eigenvalues, descending=True)
+        self.components = eigenvectors[:, sorted_indices[:self.num_components]]
+
+    def transform(self, data: torch.Tensor):
+        """
+        Project data onto the principal components.
+        :param data: Input data of shape (n_samples, n_features)
+        :return: Transformed data of shape (n_samples, num_components)
+        """
+        centered_data = data - self.mean
+        return torch.mm(centered_data, self.components)
+
+    def fit_transform(self, data: torch.Tensor):
+        """
+        Fit PCA to the data and transform it.
+        :param data: Input data of shape (n_samples, n_features)
+        :return: Transformed data of shape (n_samples, num_components)
+        """
+        self.fit(data)
+        return self.transform(data)
+    
+from sklearn.decomposition import IncrementalPCA
+
+class IncrementalPCAWrapper:
+    def __init__(self, num_components: int, batch_size: int):
+        """
+        Initialize IncrementalPCA with the number of components to retain.
+        :param num_components: Number of components for PCA
+        :param batch_size: Batch size for IncrementalPCA
+        """
+        self.num_components = num_components
+        self.batch_size = batch_size
+        self.ipca = IncrementalPCA(n_components=num_components, batch_size=batch_size)
+
+    def fit(self, data: torch.Tensor):
+        """
+        Compute the principal components from the data using mini-batches.
+        :param data: Input data of shape (n_samples, n_features)
+        """
+        # IncrementalPCA expects numpy arrays, so convert tensor to numpy
+        data_np = data.cpu().numpy()
+
+        # Fit the model incrementally
+        self.ipca.fit(data_np)
+
+    def transform(self, data: torch.Tensor):
+        """
+        Project data onto the principal components using the fitted IncrementalPCA.
+        :param data: Input data of shape (n_samples, n_features)
+        :return: Transformed data of shape (n_samples, num_components)
+        """
+        data_np = data.cpu().numpy()
+
+        transformed_data = self.ipca.transform(data_np)
+
+        return torch.tensor(transformed_data, device=data.device)
+
+    def fit_transform(self, data: torch.Tensor):
+        """
+        Fit IncrementalPCA to the data and transform it.
+        :param data: Input data of shape (n_samples, n_features)
+        :return: Transformed data of shape (n_samples, num_components)
+        """
+        self.fit(data)
+        return self.transform(data)
+
