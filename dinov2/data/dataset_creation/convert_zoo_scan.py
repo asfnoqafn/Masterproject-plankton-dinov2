@@ -11,7 +11,7 @@ def main():
     print(f"PROCESSING DATASET stored in {dataset_path}...")
 
     data = collect_files_zoo_scan(dataset_path)
-    #build_databases(data, base_lmdb_directory, int(1e10))
+    build_databases(data, base_lmdb_directory, int(1e10))
 
 
 

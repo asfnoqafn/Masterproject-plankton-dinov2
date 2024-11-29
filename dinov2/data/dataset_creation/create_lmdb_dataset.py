@@ -39,14 +39,14 @@ def _load_image(image_path):
 
 def _create_lmdb(
     dataset_lmdb_dir: Path,
-    name: _DataType,
+    name: str,
     map_size: int = 1e10
 ):
     """
     Creates an LMDB database file and opens an environment and transaction
     Parameters:
         dataset_lmdb_dir (Path): Location of the lmdb file to be created.
-        name (_DataType): Enum to indicate the database content.
+        name (str): Name of the database.
         map_size (int): Memory used for the database creation.
     Returns:
         Environment: The environment for the transaction. (needs to be closed by the using function)
@@ -55,7 +55,7 @@ def _create_lmdb(
 
     lmdb_path = os.path.join(
         dataset_lmdb_dir,
-        f"{name.value}",
+        f"{name}",
     )
     os.makedirs(lmdb_path, exist_ok=True)
     env = lmdb.open(lmdb_path, map_size=map_size)
@@ -78,8 +78,10 @@ def _write_databases(unlabeled_images_lmdb, labeled_images_lmdb, labels_lmdb, me
     env_labels, txn_labels = labels_lmdb
     env_metadata, txn_metadata = metadata_lmdb
 
+    i = 0
     for image_path, label, metadata in tqdm(data):
-        index = str(uuid.uuid4()).encode("utf-8")
+        i += 1#str(uuid.uuid4()).encode("utf-8")
+        index = str(i).encode("utf-8")
 
         uint8_image = _load_image(image_path)
         image_jpg_encoded = iio.imwrite("<bytes>", uint8_image, extension=".jpeg")
@@ -131,25 +133,25 @@ def build_databases(
 
     unlabeled_images_lmdb = _create_lmdb(
         base_lmdb_directory,
-        name=f'unlabled_{_DataType.IMAGES}_{number_of_images_without_labels}',
+        name=f'unlabled_{_DataType.IMAGES.value}_{number_of_images_without_labels}',
         map_size=map_size,
     )
 
     labeled_images_lmdb = _create_lmdb(
         base_lmdb_directory,
-        name=f'labled_{_DataType.IMAGES}_{number_of_images_with_labels}',
+        name=f'labled_{_DataType.IMAGES.value}_{number_of_images_with_labels}',
         map_size=map_size,
     )
 
     labels_lmdb = _create_lmdb(
         base_lmdb_directory,
-        name=f'{_DataType.LABELS}_{number_of_images_with_labels}',
+        name=f'{_DataType.LABELS.value}_{number_of_images_with_labels}',
         map_size=map_size,
     )
 
     metadata_lmdb = _create_lmdb(
         base_lmdb_directory,
-        name=f'{_DataType.METADATA}_{number_of_images_with_metadata}',
+        name=f'{_DataType.METADATA.value}_{number_of_images_with_metadata}',
         map_size=map_size,
     )
 

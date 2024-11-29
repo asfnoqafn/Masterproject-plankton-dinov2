@@ -45,10 +45,14 @@ def collect_files_zoo_scan(dataset_path):
     for path in paths:
         image_folder_name = path.parents[0].name
         label = image_folder_name
-        labels.append(label)
+        labels.add(label)
 
         result.append((path.as_posix(), label, None))
-    
-    print(labels)
+
+    consistent_labels = set()
+    for label in labels:
+        consistent_label = label.lower()
+        consistent_label = consistent_label.replace(' ', '_')
+        consistent_labels.add(consistent_label)
 
     return result
