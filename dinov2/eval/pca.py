@@ -53,7 +53,7 @@ def extract_pca_features(dataset, batch_size, num_workers, num_components, devic
     ipca = IncrementalPCAWrapper(num_components=num_components, batch_size=batch_size)
 
     for samples, labels in dataloader:
-        samples = samples.to(device)  # Move to device
+        samples = samples.to(device)
         features = samples.view(samples.size(0), -1)  # Flatten images if needed
         
         # Apply Incremental PCA in batches
@@ -98,7 +98,6 @@ def eval_knn_pca(
     :return: Dictionary with evaluation metrics for each k.
     """
     print(f"Starting k-NN evaluation with PCA features on device {device}.")
-    device = torch.device(device)
     train_features = train_features.to(device)
     train_labels = train_labels.to(device)
     val_features = val_features.to(device)

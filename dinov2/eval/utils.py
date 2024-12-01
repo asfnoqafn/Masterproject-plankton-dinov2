@@ -258,7 +258,7 @@ class IncrementalPCAWrapper:
 
         transformed_data = self.ipca.transform(data_np)
 
-        return torch.tensor(transformed_data, device=data.device)
+        return torch.tensor(transformed_data, device="cuda")
 
     def fit_transform(self, data: torch.Tensor):
         """

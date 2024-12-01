@@ -31,14 +31,12 @@ def load_lmdb_data(lmdb_path):
     print(f"Loaded {len(data)} items from {lmdb_path}")
     return data
 
-def save_lmdb_data(lmdb_path_img, lmdb_path_label, img_data, label_data, label_map_path):
+def save_lmdb_data(lmdb_path_img, lmdb_path_label, img_data, label_data, label_map, label_map_path=None):
     """
     Saves images and labels to LMDB and saves the label mapping as a JSON file.
     """
     env_imgs = lmdb.open(lmdb_path_img, map_size=MAP_SIZE_IMG)
     env_labels = lmdb.open(lmdb_path_label, map_size=MAP_SIZE_META)
-    label_map = {}  # Maps string labels to unique integers
-    next_id = 0  # Tracks the next available unique integer ID
 
     with (
         env_imgs.begin(write=True) as txn_imgs,
@@ -49,19 +47,23 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, img_data, label_data, label_m
                 print(f"Warning: Mismatched keys! img_key: {img_key}, label_key: {label_key}")
                 continue  # Skip if keys don't match
 
-            # Convert label to integer ID
+            # Convert label to integer ID using the provided label map
             label_str = label.decode("utf-8")  # Assuming label is bytes
             if label_str not in label_map:
-                label_map[label_str] = next_id
-                next_id += 1
+                print(f"Warning: Label {label_str} not found in label_map.")
+                continue
 
             label_id = label_map[label_str]
-            txn_imgs.put(img_key, img_encoded)  
-            txn_labels.put(label_key, label_id.to_bytes(4, byteorder="little"))  # Store label as 4-byte integer
 
-    # Save label map to a JSON file
-    with open(label_map_path, "w") as f:
-        json.dump(label_map, f)
+            # Store the image and label
+            txn_imgs.put(img_key, img_encoded)
+            label_entry = label_id.to_bytes(4, byteorder="little")
+            txn_labels.put(label_key, label_entry)
+
+    # Save label map to a JSON file, if required
+    if label_map_path:
+        with open(label_map_path, "w") as f:
+            json.dump(label_map, f)
 
     env_imgs.close()
     env_labels.close()
@@ -92,28 +94,40 @@ def split_and_save_data(main_folder, output_folder, test_size=0.2):
     """
     os.makedirs(output_folder, exist_ok=True)
 
-    # Load all datasets
+
     img_data, label_data = load_all_datasets(main_folder)
     
     print(f"Total data loaded: {len(img_data)} images and {len(label_data)} labels.")
 
-    # Split dataset into train and test
+    # consistent label mapping TODO add similar string maachting and blacklist classes such as blurry
+    label_map = {}
+    next_id = 0
+    for _, label in label_data:
+        label_str = label.decode("utf-8")  # Assuming label is bytes
+        if label_str not in label_map:
+            label_map[label_str] = next_id
+            next_id += 1
+
+    print(f"Generated label map with {len(label_map)} classes.")
+    
     train_imgs, test_imgs = train_test_split(img_data, test_size=test_size, shuffle=True, random_state=43)
     train_labels, test_labels = train_test_split(label_data, test_size=test_size, shuffle=True, random_state=43)
 
     # Save the split data to LMDB
     save_lmdb_data(
-        os.path.join(output_folder, "TRAIN_imgs"),
-        os.path.join(output_folder, "TRAIN_labels"),
+        os.path.join(output_folder, "-TRAIN_imgs"),
+        os.path.join(output_folder, "-TRAIN_labels"),
         train_imgs,
         train_labels,
+        label_map,
         os.path.join(output_folder, "TRAIN_label_map.json")
     )
     save_lmdb_data(
-        os.path.join(output_folder, "VAL_imgs"),
-        os.path.join(output_folder, "VAL_labels"),
+        os.path.join(output_folder, "-VAL_imgs"),
+        os.path.join(output_folder, "-VAL_labels"),
         test_imgs,
         test_labels,
+        label_map,
         os.path.join(output_folder, "VAL_label_map.json")
     )
 
