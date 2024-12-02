@@ -10,7 +10,9 @@ from torch.nn.functional import softmax
 from dinov2.data.transforms import (
     make_classification_eval_transform,
 )
+import logging
 
+logger = logging.getLogger("dinov2")
 
 def get_args_parser():
     parser = argparse.ArgumentParser(description="PCA-based evaluation")
@@ -202,6 +204,7 @@ def main():
         n_tries=args.n_tries,
         device="cuda"
     )
+    
 
     # Save results
     with open(f"{args.output_dir}/pca_knn_results.json", "w") as f:

@@ -15,6 +15,6 @@ PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/Masterproject-plankton-dinov2 t
  --standalone --nnodes=1 Masterproject-plankton-dinov2/dinov2/eval/pca.py \
  --num-components=$NUM_COMPONENTS \
  --output-dir='/home/hk-project-p0021769/hgf_grc7525/output/' \
- --train-dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/plankton:extra=*" \
- --val-dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/plankton/:extra=*" \
- --batch-size=256 \
+ --train-dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/data/eval/:extra=*" \
+ --val-dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/data/eval/:extra=*" \
+ --batch-size=96 \

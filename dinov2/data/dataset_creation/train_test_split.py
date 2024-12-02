@@ -103,7 +103,7 @@ def split_and_save_data(main_folder, output_folder, test_size=0.2):
     label_map = {}
     next_id = 0
     for _, label in label_data:
-        label_str = label.decode("utf-8")  # Assuming label is bytes
+        label_str = label.decode("utf-8")  # Assums labels were stored as bytes
         if label_str not in label_map:
             label_map[label_str] = next_id
             next_id += 1
