@@ -8,6 +8,7 @@ from tqdm import tqdm
 import psutil
 from sklearn.model_selection import train_test_split
 import argparse
+import difflib
 
 def get_available_memory():
     """Get available memory and return a safe allocation size for LMDB."""
@@ -48,9 +49,11 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, img_data, label_data, label_m
                 continue  # Skip if keys don't match
 
             # Convert label to integer ID using the provided label map
-            label_str = label.decode("utf-8")  # Assuming label is bytes
+            label_str: str = label.decode("utf-8").lower()  # Assuming label is bytes
             if label_str not in label_map:
                 print(f"Warning: Label {label_str} not found in label_map.")
+                continue
+            if label_map[label_str] == -1:
                 continue
 
             label_id = label_map[label_str]
@@ -78,15 +81,28 @@ def load_all_datasets(main_folder):
     for dataset in sorted(os.listdir(main_folder)):
         print(f"Loading dataset: {dataset}")
         dataset_path = os.path.join(main_folder, dataset)
-        if dataset_path.endswith("_imgs"):
-            img_data.extend(load_lmdb_data(dataset_path))
-        elif dataset_path.endswith("_labels"):
-            label_data.extend(load_lmdb_data(dataset_path))
-        else:
-            print(f"Skipping {dataset_path}")
-        print(f"Loaded dataset: {dataset}")
-                
+        for subdir in sorted(os.listdir(dataset_path)):
+            print(f"Loading dataset: {subdir}")
+            datasetpath_lmdb = os.path.join(dataset_path, subdir)
+            print("dataset path: ", datasetpath_lmdb) 
+            
+            if datasetpath_lmdb.endswith("_imgs") or datasetpath_lmdb.endswith('images'):
+                img_data.extend(load_lmdb_data(datasetpath_lmdb))
+            elif datasetpath_lmdb.endswith("_labels") or datasetpath_lmdb.endswith('labels'):
+                label_data.extend(load_lmdb_data(datasetpath_lmdb))
+            else:
+                print(f"Skipping {datasetpath_lmdb}")
+            print(f"Loaded dataset: {dataset}")
+                    
     return img_data, label_data
+
+def is_in_blacklist(label, blacklist):
+    # return True if label is in blacklist
+    for s in blacklist:
+        if s in label:
+            return True
+    return False
+
 
 def split_and_save_data(main_folder, output_folder, test_size=0.2):
     """
@@ -94,22 +110,35 @@ def split_and_save_data(main_folder, output_folder, test_size=0.2):
     """
     os.makedirs(output_folder, exist_ok=True)
 
-
     img_data, label_data = load_all_datasets(main_folder)
-    
+
     print(f"Total data loaded: {len(img_data)} images and {len(label_data)} labels.")
 
-    # consistent label mapping TODO add similar string maachting and blacklist classes such as blurry
+    blacklist = ['artifacts', 'artifacts_edge', 'unknown_blobs_and_smudges', 'unknown_sticks', 'unknown_unclassified', 
+                 'artefact', 'badfocus', 'dark', 'light', 'streak', 'vertical line', 'artefact']
+    # consistent label mapping TODO add similar string machting and blacklist classes such as blurry
     label_map = {}
     next_id = 0
     for _, label in label_data:
-        label_str = label.decode("utf-8")  # Assums labels were stored as bytes
+        label_str: str = label.decode("utf-8") # Assumes labels were stored as bytes
+        label_str = label_str.lower()
+        label_str = label_str.replace(" ", "")
+        label_str = label_str.replace("_", "")
+        label_str = label_str.replace("-", "")
+        label_str = label_str.replace("'", "") # TODO ugly
+        # matches = difflib.get_close_matches(label_str, label_map.keys()) 
+        # Adds similarity matcher, UNTESTED and probably brkeaks classes like 'cyano a' and 'cyano b'
         if label_str not in label_map:
-            label_map[label_str] = next_id
-            next_id += 1
+
+            if is_in_blacklist(label_str, blacklist):
+                label_map[label_str] = -1
+                print("blacklist label: ", label_str)
+            else:
+                label_map[label_str] = next_id
+                next_id += 1
 
     print(f"Generated label map with {len(label_map)} classes.")
-    
+
     train_imgs, test_imgs = train_test_split(img_data, test_size=test_size, shuffle=True, random_state=43)
     train_labels, test_labels = train_test_split(label_data, test_size=test_size, shuffle=True, random_state=43)
 
@@ -145,7 +174,7 @@ def get_args_parser():
         "--lmdb_dir_name", type=str, help="Base lmdb dir name", default="_lmdb"
     )
     parser.add_argument(
-        "--min_size", type=int, help="Minimum image size (width and height)", default=0
+        "--min_size", type=int, help="Minimum image size (width and height)", default=0.0
     )
 
     return parser
@@ -154,6 +183,7 @@ def main(args):
     split_and_save_data(main_folder=args.dataset_path , output_folder=args.lmdb_dir_name, test_size=0.2)
 
 if __name__ == "__main__":
+    #split_and_save_data(main_folder="data/seaone_raw", output_folder="data/seaone_raw_lmdb", test_size=0.00001)
     args_parser = get_args_parser()
     args = args_parser.parse_args()
     sys.exit(main(args))

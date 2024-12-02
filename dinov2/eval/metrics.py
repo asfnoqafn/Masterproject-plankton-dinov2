@@ -133,7 +133,7 @@ def build_topk_accuracy_metric(
         num_classes=num_classes,
         top_k=1,
     ).to(torch.cuda.current_device())
-    metrics["confmat"] = ConfusionMatrix(task="multiclass", num_classes=num_classes).to(torch.cuda.current_device())
+    #metrics["confmat"] = ConfusionMatrix(task="multiclass", num_classes=num_classes).to(torch.cuda.current_device())
 
     return MetricCollection(metrics).to(torch.cuda.current_device())
 
