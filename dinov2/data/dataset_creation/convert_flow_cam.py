@@ -18,7 +18,7 @@ def collect_files(dataset_path):
 
     paths = []
     for suffix in IMAGE_SUFFIXES:
-        paths += Path(dataset_path + '/imgs/').rglob(f'*{suffix}')
+        paths += (Path(dataset_path) / 'imgs').rglob(f'*{suffix}')
 
     labels = set()
     for path in paths:
@@ -37,8 +37,8 @@ def collect_files(dataset_path):
     return result
 
 def main():
-    dataset_path = r"C:\Users\rk81o\Desktop\MP\data\ZooScanNet"
-    base_lmdb_directory = r"C:\Users\rk81o\Desktop\data\zoo_scan_net_lmdb"
+    dataset_path = '/home/hk-project-p0021769/hgf_grc7525/data/with_labels/FlowCamNet'
+    base_lmdb_directory = '~/own_data/lmdb_flowcamnet'
     os.makedirs(base_lmdb_directory, exist_ok=True)
     
     print(f"PROCESSING DATASET stored in {dataset_path}...")
