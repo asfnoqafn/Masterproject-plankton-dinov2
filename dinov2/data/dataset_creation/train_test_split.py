@@ -8,6 +8,7 @@ from tqdm import tqdm
 import psutil
 from sklearn.model_selection import train_test_split
 import argparse
+import difflib
 
 def get_available_memory():
     """Get available memory and return a safe allocation size for LMDB."""
@@ -88,28 +89,41 @@ def load_all_datasets(main_folder):
                 
     return img_data, label_data
 
+def is_in_blacklist(label, blacklist):
+    # return True if label is in blacklist
+    for s in blacklist:
+        if s in label:
+            return True
+    return False
+
+
 def split_and_save_data(main_folder, output_folder, test_size=0.2):
     """
     Loads all datasets, splits the data into train and test, and saves them in the output folder.
     """
     os.makedirs(output_folder, exist_ok=True)
 
-
     img_data, label_data = load_all_datasets(main_folder)
-    
+
     print(f"Total data loaded: {len(img_data)} images and {len(label_data)} labels.")
 
-    # consistent label mapping TODO add similar string maachting and blacklist classes such as blurry
+    blacklist = ['unknown', 'blurry', 'noisy'] # TODO add more classes to blacklist
+    # consistent label mapping TODO add similar string machting and blacklist classes such as blurry
     label_map = {}
     next_id = 0
     for _, label in label_data:
-        label_str = label.decode("utf-8")  # Assums labels were stored as bytes
-        if label_str not in label_map:
-            label_map[label_str] = next_id
-            next_id += 1
+        label_str = label.decode("utf-8")  # Assumes labels were stored as bytes
+        matches = difflib.get_close_matches(label_str, label_map.keys())
+        if label_str not in matches:
+
+            if is_in_blacklist(label_str, blacklist):
+                label_map[label_str] = -1
+            else:
+                label_map[label_str] = next_id
+                next_id += 1
 
     print(f"Generated label map with {len(label_map)} classes.")
-    
+
     train_imgs, test_imgs = train_test_split(img_data, test_size=test_size, shuffle=True, random_state=43)
     train_labels, test_labels = train_test_split(label_data, test_size=test_size, shuffle=True, random_state=43)
 
@@ -145,7 +159,7 @@ def get_args_parser():
         "--lmdb_dir_name", type=str, help="Base lmdb dir name", default="_lmdb"
     )
     parser.add_argument(
-        "--min_size", type=int, help="Minimum image size (width and height)", default=0
+        "--min_size", type=int, help="Minimum image size (width and height)", default=0.0
     )
 
     return parser
@@ -154,6 +168,7 @@ def main(args):
     split_and_save_data(main_folder=args.dataset_path , output_folder=args.lmdb_dir_name, test_size=0.2)
 
 if __name__ == "__main__":
-    args_parser = get_args_parser()
-    args = args_parser.parse_args()
-    sys.exit(main(args))
+    split_and_save_data(main_folder="data/seaone_raw", output_folder="data/seaone_raw_lmdb", test_size=0.00001)
+    # args_parser = get_args_parser()
+    # args = args_parser.parse_args()
+    # sys.exit(main(args))
