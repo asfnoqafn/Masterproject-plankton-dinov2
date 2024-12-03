@@ -440,10 +440,12 @@ def eval_knn_with_model(
     train_dataset = make_dataset(
         dataset_str=train_dataset_str,
         transform=transform,
+        with_targets=True
     )
     val_dataset = make_dataset(
         dataset_str=val_dataset_str,
         transform=transform,
+        with_targets=True
     )
 
     with torch.cuda.amp.autocast(dtype=autocast_dtype):

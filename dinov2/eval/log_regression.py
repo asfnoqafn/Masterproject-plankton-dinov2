@@ -427,17 +427,20 @@ def eval_log_regression_with_model(
         dataset_str=train_dataset_str,
         transform=transform,
         target_transform=target_transform,
+        with_targets=True
     )
     val_dataset = make_dataset(
         dataset_str=val_dataset_str,
         transform=transform,
         target_transform=target_transform,
+        with_targets=True
     )
     if finetune_dataset_str is not None:
         finetune_dataset = make_dataset(
             dataset_str=finetune_dataset_str,
             transform=transform,
             target_transform=target_transform,
+            with_targets=True
         )
     else:
         finetune_dataset = None
