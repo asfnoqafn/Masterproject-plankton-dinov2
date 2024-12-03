@@ -1,13 +1,19 @@
 import json
 import os
-import uuid
-import lmdb
-import imageio.v3 as iio
-import numpy as np
+import sys
 from enum import Enum
 from pathlib import Path
+from typing import Callable
+
+import imageio.v3 as iio
+import lmdb
+import numpy as np
 from tqdm import tqdm
 
+MAP_SIZE_IMG = int(1e12)  # 1TB
+MAP_SIZE_META = int(1e8)  # 100MB
+
+Image_Transformation = Callable[[np.ndarray], np.ndarray]
 
 class _DataType(Enum):
     IMAGES = "images"
@@ -22,7 +28,7 @@ def _normalize(x: np.ndarray):
     return (x - x.min()) / (x.max() - x.min() + 1e-5)
 
 
-def _load_image(image_path):
+def _load_image(image_path, extra_transformations: list[Image_Transformation] = []):
     """
     Load an image from the given image path and preprocess it. All common image file types are supported
     Parameters:
@@ -30,8 +36,9 @@ def _load_image(image_path):
     Returns:
         numpy.ndarray: The preprocessed image as a numpy array of uint8 type.
     """
-
     image = iio.imread(image_path)  # (H W) or (H W C)
+    for transformation in extra_transformations:
+        image = transformation(image)
     image = _normalize(np.squeeze(image))
     image = (image * 255).astype(np.uint8)
     return image
@@ -40,7 +47,7 @@ def _load_image(image_path):
 def _create_lmdb(
     dataset_lmdb_dir: Path,
     name: str,
-    map_size: int = 1e10
+    map_size: int
 ):
     """
     Creates an LMDB database file and opens an environment and transaction
@@ -63,7 +70,7 @@ def _create_lmdb(
     return env, txn
 
 
-def _write_databases(unlabeled_images_lmdb, labeled_images_lmdb, labels_lmdb, metadata_lmdb, data):
+def _write_databases(unlabeled_images_lmdb, labeled_images_lmdb, labels_lmdb, metadata_lmdb, data, extra_transformations: list[Image_Transformation] = []):
     """
     Writes all three databases (images, labels, metadata) simulataniously
     Parameters:
@@ -78,23 +85,33 @@ def _write_databases(unlabeled_images_lmdb, labeled_images_lmdb, labels_lmdb, me
     env_labels, txn_labels = labels_lmdb
     env_metadata, txn_metadata = metadata_lmdb
 
+
+    number_of_filtered_images = 0
     i = 0
     for image_path, label, metadata in tqdm(data):
         i += 1#str(uuid.uuid4()).encode("utf-8")
         index = str(i).encode("utf-8")
 
-        uint8_image = _load_image(image_path)
-        image_jpg_encoded = iio.imwrite("<bytes>", uint8_image, extension=".jpeg")
+        try:
+            uint8_image = _load_image(image_path, extra_transformations=extra_transformations)
+        except Exception as e:
+            print(f"Error loading image {image_path}: {e}. Skipping...", file=sys.stderr)
+            number_of_filtered_images += 1
+            continue
+        image_jpg_encoded = iio.imwrite("<bytes>", uint8_image, extension=".png")
 
-        if label != None:
+        if label is not None:
             txn_labeled_images.put(index, image_jpg_encoded)
             txn_labels.put(index, label.encode("utf-8"))
         else:
             txn_unlabeled_images.put(index, image_jpg_encoded)
 
-        if metadata != None:
+        if metadata is not None:
             metadata_encoded = json.dumps(metadata).encode("utf-8")
             txn_metadata.put(index, metadata_encoded)
+
+    if number_of_filtered_images > 0:
+        print(f"Filtered {number_of_filtered_images} images")
         
     txn_unlabeled_images.commit()
     txn_labeled_images.commit()
@@ -110,7 +127,9 @@ def _write_databases(unlabeled_images_lmdb, labeled_images_lmdb, labels_lmdb, me
 def build_databases(
     data: list,
     base_lmdb_directory: Path,
-    map_size: int,
+    map_size_img: int = MAP_SIZE_IMG,
+    map_size_meta: int = MAP_SIZE_META,
+    extra_transformations: list[Image_Transformation] = []
 ):
     """
     Converts the data colleted via the collect script into lmdb databases
@@ -134,27 +153,24 @@ def build_databases(
     unlabeled_images_lmdb = _create_lmdb(
         base_lmdb_directory,
         name=f'unlabled_{_DataType.IMAGES.value}_{number_of_images_without_labels}',
-        map_size=map_size,
+        map_size=map_size_img,
     )
-
     labeled_images_lmdb = _create_lmdb(
         base_lmdb_directory,
         name=f'labled_{_DataType.IMAGES.value}_{number_of_images_with_labels}',
-        map_size=map_size,
+        map_size=map_size_img,
     )
-
     labels_lmdb = _create_lmdb(
         base_lmdb_directory,
         name=f'{_DataType.LABELS.value}_{number_of_images_with_labels}',
-        map_size=map_size,
+        map_size=map_size_meta,
     )
-
     metadata_lmdb = _create_lmdb(
         base_lmdb_directory,
         name=f'{_DataType.METADATA.value}_{number_of_images_with_metadata}',
-        map_size=map_size,
+        map_size=map_size_meta,
     )
 
-    _write_databases(unlabeled_images_lmdb, labeled_images_lmdb, labels_lmdb, metadata_lmdb, data)
+    _write_databases(unlabeled_images_lmdb, labeled_images_lmdb, labels_lmdb, metadata_lmdb, data, extra_transformations=extra_transformations)
     
     print(f"FINISHED DATASET SAVED AT: {base_lmdb_directory}")

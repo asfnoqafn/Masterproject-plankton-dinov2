@@ -1,49 +1,67 @@
-from dinov2.data.dataset_creation.create_lmdb_dataset import build_databases
-
+import argparse
 import os
+import sys
 from pathlib import Path
+
 from tqdm import tqdm
 
-IMAGE_SUFFIXES = (
-    ".jpg",
-    ".JPG",
-    ".jpeg",
-    ".JPEG",
-    ".png",
-    ".PNG",
-)
+from dinov2.data.dataset_creation.create_lmdb_dataset import build_databases
 
-BASE_SEANOE_PATH = Path("/home/hk-project-p0021769/hgf_vwg6996/data/seanoe_uvp")
 
-# zoo_scan_net
-def collect_files(training_csv_path, test_csv_path, validation_csv_path, unlabeled_csv_path):
+def remove_bottom_px(px=32):
+    def remove_bottom_px(image):
+        if len(image) <= px:
+            raise ValueError(f"Image is too small to remove {px}px from the bottom")
+        return image[:-px]
+    return remove_bottom_px
+
+# collect (image, label, metadata) tuples from seanoe_uvp csv files
+def collect_files(dataset_path: Path, include_morphocluster=False):
     result = []
-    csv_paths = [training_csv_path, test_csv_path, validation_csv_path, unlabeled_csv_path]
+    csv_paths = ["training.csv", "test.csv", "validation.csv", "unlabeled.csv"]
+    if include_morphocluster:
+        csv_paths += "morphocluster.csv"
+    csv_paths = [dataset_path / csv_path for csv_path in csv_paths]
 
     for csv_path in csv_paths:
-        with open(BASE_SEANOE_PATH.joinpath(csv_path).as_posix(), 'r') as f:
-             lines = f.readlines()[1:]
-             for i, line in tqdm(enumerate(lines), total=len(lines)):
+        if not csv_path.exists():
+            print(f"File {csv_path} does not exist. Skipping...")
+            continue
+        with csv_path.open() as f:
+             lines = f.readlines()[1:] # skip header
+             for line in tqdm(lines, total=len(lines)):
                 label, img_path = line.strip().split(',')
                 if (label == ''):
                     label = None
-                img = BASE_SEANOE_PATH.joinpath(img_path)
-                result_entry = (img.as_posix(), label, None)
-                result.append(result_entry)
-                # if Path.exists(img):
-                #     result.append(result_entry)
-                # else:
-                #     print(f"Path doesn't exist: {img.as_posix()} (in csv {csv_path} line {i})")
+                img = dataset_path / img_path
+                result.append((img.as_posix(), label, None))
     return result
 
-def main():
-    base_lmdb_directory = Path("/home/hk-project-p0021769/hgf_twg7490/data/seanoe_uvp_lmdb_mixed")
-    os.makedirs(base_lmdb_directory, exist_ok=True)
+def main(args):
+    os.makedirs(args.lmdb_dir_name, exist_ok=True)
     
-    print(f"PROCESSING DATASET stored in {BASE_SEANOE_PATH.as_posix()}...")
+    print(f"PROCESSING DATASET stored in {args.dataset_path}...")
+    data = collect_files(args.dataset_path)
+    build_databases(data, args.lmdb_dir_name, extra_transformations=[remove_bottom_px(args.scalebar_pixels)])
 
-    data = collect_files("training.csv", "test.csv", "validation.csv", "unlabeled.csv")
-    build_databases(data, base_lmdb_directory, int(1e12))
+def get_args_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--dataset_path",
+        type=Path,
+        help="""Name of dataset to process.""",
+        default=Path("/home/hk-project-p0021769/hgf_vwg6996/data/seanoe_uvp")
+    )
+    parser.add_argument(
+        "--lmdb_dir_name", type=Path, help="Base lmdb dir name", default=Path("/home/hk-project-p0021769/hgf_grc7525/data/seanoe_uvp_lmdb_mixed")
+    )
+    parser.add_argument(
+        "--scalebar_pixels", type=int, help="Number of bottom pixels with scalebar that should be removed", default=32
+    )
+    return parser
+
 
 if __name__ == "__main__":
-    main()
+    args_parser = get_args_parser()
+    args = args_parser.parse_args()
+    sys.exit(main(args))
