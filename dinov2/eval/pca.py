@@ -273,8 +273,8 @@ def main():
     args = get_args_parser().parse_args()
 
     # Prepare datasets
-    train_dataset = make_dataset(dataset_str=args.train_dataset,transform=make_classification_eval_transform(resize_size=256, crop_size=224))
-    val_dataset = make_dataset(dataset_str=args.val_dataset,transform=make_classification_eval_transform(resize_size=256, crop_size=224))
+    train_dataset = make_dataset(dataset_str=args.train_dataset,transform=make_classification_eval_transform(resize_size=256, crop_size=224), with_targets=True)
+    val_dataset = make_dataset(dataset_str=args.val_dataset,transform=make_classification_eval_transform(resize_size=256, crop_size=224),with_targets=True)
 
     # Extract training and validation features with PCA
     train_features, train_labels = extract_pca_features(
