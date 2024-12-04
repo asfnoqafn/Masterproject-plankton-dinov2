@@ -42,7 +42,7 @@ def main(args):
     
     print(f"PROCESSING DATASET stored in {args.dataset_path}...")
     data = collect_files(args.dataset_path)
-    build_databases(data, args.lmdb_dir_name, extra_transformations=[remove_bottom_px(args.scalebar_pixels)])
+    build_databases(data, base_lmdb_directory=args.lmdb_dir_name, dataset_path=args.dataset_path, extra_transformations=[remove_bottom_px(args.scalebar_pixels)])
 
 def get_args_parser():
     parser = argparse.ArgumentParser()
