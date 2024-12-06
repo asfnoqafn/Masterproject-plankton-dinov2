@@ -15,6 +15,6 @@ PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/Masterproject-plankton-dinov2 t
  --config-file Masterproject-plankton-dinov2/dinov2/configs/eval/vits14_pretrain.yaml \
  --pretrained-weights="/home/hk-project-p0021769/hgf_grc7525/checkpoints/dinov2_vits14_pretrain.pth" --output-dir \
  /home/hk-project-p0021769/hgf_grc7525/output/ \
- --train-dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/data/eval/:extra=*" \
- --val-dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/data/eval/:extra=*" \
+ --train-dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/eval/:extra=*" \
+ --val-dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/eval/:extra=*" \
  --output-dir='/home/hk-project-p0021769/hgf_grc7525/output/'

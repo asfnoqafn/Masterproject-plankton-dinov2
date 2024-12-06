@@ -62,8 +62,8 @@ def main(args):
     os.makedirs(lmdb_dir, exist_ok=True)
     print(f"TOTAL #images {len(img_abspath)} FROM {args.dataset_path}")
 
-    lmdb_imgs_path = os.path.join(lmdb_dir , f"{args.dataset_name}_imgs")
-    lmdb_labels_path = os.path.join(lmdb_dir, f"{args.dataset_name}_labels")
+    lmdb_imgs_path = os.path.join(lmdb_dir , 'images')
+    lmdb_labels_path = os.path.join(lmdb_dir, 'labels')
     os.makedirs(lmdb_imgs_path, exist_ok=True)
     os.makedirs(lmdb_labels_path, exist_ok=True)
 
@@ -86,6 +86,10 @@ def main(args):
                 #print(f"Skipping {abs_path} due to size constraints.")
                 continue
 
+            # disallow one dimensional images
+            if height < 2 or width < 2:
+                continue
+
             class_name = os.path.basename(os.path.dirname(rel_path))
 
             img_key = rel_path.replace("/", "_")  # Replace slashes for safety
@@ -98,12 +102,6 @@ def main(args):
             # Save to LMDB
             txn_imgs.put(img_key_bytes, img_encoded)
             txn_labels.put(img_key_bytes, class_name.encode("utf-8"))
-
-    env_imgs.close()
-    env_labels.close()
-    print(f"Finished importing from {args.dataset_path} and subdirectories, saved at: {lmdb_imgs_path}")
-
-
 
     env_imgs.close()
     env_labels.close()

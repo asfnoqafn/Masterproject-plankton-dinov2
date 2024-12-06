@@ -122,6 +122,11 @@ def split_and_save_data(main_folder, output_folder, test_size=0.2):
     for _, label in label_data:
         label_str: str = label.decode("utf-8") # Assumes labels were stored as bytes
         label_str = label_str.lower()
+        label_str = label_str.replace(" ", "")
+        label_str = label_str.replace("_", "")
+        label_str = label_str.replace("-", "")
+        label_str = label_str.replace("'", "") # TODO ugly
+
         # matches = difflib.get_close_matches(label_str, label_map.keys()) 
         # Adds similarity matcher, UNTESTED and probably brkeaks classes like 'cyano a' and 'cyano b'
         if label_str not in label_map:

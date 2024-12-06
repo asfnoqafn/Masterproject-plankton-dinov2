@@ -14,6 +14,18 @@ import logging
 
 logger = logging.getLogger("dinov2")
 
+def tensor_to_python(obj):
+    if isinstance(obj, torch.Tensor):
+        if obj.numel() == 1:  # Convert single-value tensor to a Python scalar
+            return obj.item()
+        else:  # Convert multi-value tensor to a Python list
+            return obj.tolist()
+    elif isinstance(obj, dict):  # Recursively process dictionaries
+        return {key: tensor_to_python(value) for key, value in obj.items()}
+    elif isinstance(obj, list):  # Recursively process lists
+        return [tensor_to_python(item) for item in obj]
+    return obj  # Return the object as is if not a tensor
+
 def get_args_parser():
     parser = argparse.ArgumentParser(description="PCA-based evaluation")
     parser.add_argument("--train-dataset", type=str, required=True, help="Training dataset")
@@ -73,6 +85,94 @@ def extract_pca_features(dataset, batch_size, num_workers, num_components, devic
 
     print(f"PCA-reduced features shape: {all_features.shape}, labels shape: {all_labels.shape}.")
     return all_features, all_labels
+
+def eval_knn_pca_chunk(
+    train_features: torch.Tensor,
+    train_labels: torch.Tensor,
+    val_features: torch.Tensor,
+    val_labels: torch.Tensor,
+    nb_knn: list,
+    temperature: float,
+    n_per_class_list: list = [-1],
+    n_tries: int = 1,
+    device: str = "cuda",
+    output_dir: str = "./results",  # Directory to store logs
+):
+    import os
+    os.makedirs(output_dir, exist_ok=True)
+
+    print(f"Starting k-NN evaluation with PCA features on device {device}.")
+    train_features = train_features.to(device)
+    train_labels = train_labels.to(device)
+    val_features = val_features.to(device)
+    val_labels = val_labels.to(device)
+
+    num_classes = int(train_labels.max() + 1)
+    metric_collection = build_topk_accuracy_metric(
+        average_type=AccuracyAveraging.MEAN_ACCURACY,
+        num_classes=num_classes,
+    )
+    results_dict = {}
+    all_predictions = []  # To store predictions and actuals
+
+    for npc in n_per_class_list:
+        for t in range(n_tries):
+            if npc >= 0:
+                torch.manual_seed(t)
+                indices = []
+                for cls in range(num_classes):
+                    cls_indices = (train_labels == cls).nonzero(as_tuple=True)[0]
+                    sampled_indices = cls_indices[torch.randperm(len(cls_indices))[:npc]]
+                    indices.append(sampled_indices)
+                indices = torch.cat(indices)
+                sampled_train_features = train_features[indices]
+                sampled_train_labels = train_labels[indices]
+            else:
+                sampled_train_features = train_features
+                sampled_train_labels = train_labels
+
+            for k in nb_knn:
+                print(f"Evaluating k={k} neighbors for {npc} samples per class, try={t+1}...")
+
+                similarities = torch.mm(val_features, sampled_train_features.T)
+                topk_sims, topk_indices = similarities.topk(k, dim=1)
+                topk_labels = sampled_train_labels[topk_indices]
+                topk_sims = softmax(topk_sims / temperature, dim=1)
+                class_votes = torch.zeros(val_features.size(0), num_classes, device=device)
+                for i in range(k):
+                    class_votes.scatter_add_(1, topk_labels[:, i].unsqueeze(1), topk_sims[:, i].unsqueeze(1))
+
+                preds = class_votes.argmax(dim=1)
+                preds = preds.to(device)
+                val_labels = val_labels.to(device)
+
+                # Log predictions and actual labels
+                pred_actual_pairs = [{"prediction": p.item(), "actual": a.item()} for p, a in zip(preds, val_labels)]
+                all_predictions.extend(pred_actual_pairs)
+
+                # Metrics
+                accuracy = (preds == val_labels).float().mean().item()
+                print(f"k={k}, accuracy={accuracy:.4f}")
+
+                metric_key = (npc, t, k)
+                metrics = metric_collection.clone()
+                metrics.update(preds=class_votes, target=val_labels)
+                results_dict[metric_key] = metrics.compute()
+
+    # Save predictions and distribution logs
+    with open(f"{output_dir}/predictions.json", "w") as f:
+        json.dump(all_predictions, f, indent=4)
+
+    # Calculate and save overall distribution
+    pred_counts = {int(k): v for k, v in zip(*torch.unique(torch.tensor([x['prediction'] for x in all_predictions]), return_counts=True))}
+    actual_counts = {int(k): v for k, v in zip(*torch.unique(torch.tensor([x['actual'] for x in all_predictions]), return_counts=True))}
+
+    with open(f"{output_dir}/distribution.json", "w") as f:
+        json.dump({"predictions": pred_counts, "actuals": actual_counts}, f, indent=4)
+
+    print(f"Predictions and distribution saved in {output_dir}.")
+    return results_dict
+
 
 
 def eval_knn_pca(
@@ -169,11 +269,12 @@ def eval_knn_pca(
 
 
 def main():
+    print("Starting PCA..")
     args = get_args_parser().parse_args()
 
     # Prepare datasets
-    train_dataset = make_dataset(dataset_str=args.train_dataset,transform=make_classification_eval_transform(resize_size=256, crop_size=224))
-    val_dataset = make_dataset(dataset_str=args.val_dataset,transform=make_classification_eval_transform(resize_size=256, crop_size=224))
+    train_dataset = make_dataset(dataset_str=args.train_dataset,transform=make_classification_eval_transform(resize_size=256, crop_size=224), with_targets=True)
+    val_dataset = make_dataset(dataset_str=args.val_dataset,transform=make_classification_eval_transform(resize_size=256, crop_size=224),with_targets=True)
 
     # Extract training and validation features with PCA
     train_features, train_labels = extract_pca_features(
@@ -193,7 +294,7 @@ def main():
     )
 
     # Run k-NN evaluation
-    results_dict = eval_knn_pca(
+    results_dict = eval_knn_pca_chunk(
         train_features=train_features,
         train_labels=train_labels,
         val_features=val_features,
@@ -202,15 +303,17 @@ def main():
         temperature=args.temperature,
         n_per_class_list=args.n_per_class_list,
         n_tries=args.n_tries,
-        device="cuda"
+        device="cuda",
+        chunk_size=1000  # Process in chunks to avoid OOM
     )
-    
 
-    # Save results
+
+        # Convert results_dict to a JSON-serializable format
+    results_dict_str = {str(key): tensor_to_python(value) for key, value in results_dict.items()}
+
+    # Save as JSON
     with open(f"{args.output_dir}/pca_knn_results.json", "w") as f:
-        json.dump(results_dict, f, indent=4)
-    print(f"Results saved to {args.output_dir}/pca_knn_results.json")
-
+        json.dump(results_dict_str, f, indent=4)
 
 if __name__ == "__main__":
     main()
