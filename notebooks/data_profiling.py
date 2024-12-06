@@ -44,7 +44,7 @@ def open_and_measure_data(data_path, archive_type, threshold=-1):
                     heights.append(height)
 
 
-    if archive_type == 'zip':
+    elif archive_type == 'zip':
         folder_name = os.path.basename(data_path)
         with zipfile.ZipFile(data_path, 'r') as zip_file:
             image_files = [name for name in zip_file.namelist() if name.lower().endswith(('.png', '.jpg', '.jpeg'))]
@@ -71,6 +71,7 @@ def open_and_measure_data(data_path, archive_type, threshold=-1):
                     if width < 400 and height < 400:
                         widths.append(width)
                         heights.append(height)
+
     elif archive_type == 'file':
         for root, _, files in os.walk(data_path):
             for file in files:
