@@ -5,6 +5,7 @@ train:
   saveckp_freq: 10
   seed: 0
   num_workers: 8
+  num_nodes: 1
   OFFICIAL_EPOCH_LENGTH: 1250
   centering: "sinkhorn_knopp" # or "centering"
   cache_dataset: false

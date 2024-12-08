@@ -8,9 +8,10 @@ import json
 import logging
 import time
 from collections import defaultdict, deque
+from typing import List
 
 import torch
-
+import wandb
 import dinov2.distributed as distributed
 
 logger = logging.getLogger("dinov2")
@@ -224,3 +225,60 @@ class SmoothedValue:
             max=self.max,
             value=self.value,
         )
+
+
+def log_images_to_wandb(missclassified_images: List[dict]):
+    """
+    Log images to WandB with predicted and original labels.
+    
+    Args:
+        images (torch.Tensor): Batch of images (N, C, H, W).
+        predictions (list): Predicted labels for the batch.
+        labels (list): Ground-truth labels for the batch.
+        num_images (int): Number of images to log.
+    """
+    images_to_log = []
+    for image in missclassified_images:
+        img = image["image"].cpu().permute(1, 2, 0).numpy()  # Convert to HWC format
+        pred_label = image["predicted_label"]
+        true_label = image["true_label"]
+
+        # Create WandB image with caption
+        images_to_log.append(
+            wandb.Image(img, caption=f"Pred: {pred_label}, True: {true_label}")
+        )
+
+    # Log to WandB
+    wandb.log({"predictions": images_to_log})
+
+def get_missclassified_images_for_logging(data, labels, outputs, num_images_to_log=5):
+    misclassified_images = []
+    preds = torch.argmax(outputs, dim=1)
+    # Find misclassified images and store them
+    misclassified_indices = (preds != labels).nonzero(as_tuple=True)[0]
+    for idx in misclassified_indices[:num_images_to_log]:  # Limit to a number of images to log
+        misclassified_images.append({
+            "image": data[idx].cpu(),
+            "true_label": labels[idx].item(),
+            "predicted_label": preds[idx].item()
+        })
+    return misclassified_images
+
+def log_confusion_matrix_to_wandb(labels, outputs, class_labels):
+    """
+    Log confusion matrix to WandB.
+
+    Args:
+        confusion_matrix (torch.Tensor): Confusion matrix.
+        class_labels (list): List of class labels.
+    """
+    # Create confusion matrix plot
+    confusion_matrix_plot = wandb.plot.confusion_matrix(
+        probs=None,
+        y_true=labels,
+        preds=outputs,
+        class_names=class_labels,
+    )
+
+    # Log to WandB
+    wandb.log({"confusion_matrix": confusion_matrix_plot})

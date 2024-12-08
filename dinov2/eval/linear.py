@@ -10,7 +10,7 @@ import os
 import sys
 from functools import partial
 from typing import List, Optional
-
+import wandb
 import numpy as np
 import torch
 import torch.nn as nn
@@ -19,7 +19,7 @@ from fvcore.common.checkpoint import (
     PeriodicCheckpointer,
 )
 from torch.nn.parallel import DistributedDataParallel
-
+import dinov2.logging.helpers as logging_helpers
 import dinov2.distributed as distributed
 from dinov2.data import (
     SamplerType,
@@ -42,6 +42,7 @@ from dinov2.eval.utils import (
 from dinov2.logging import MetricLogger
 
 logger = logging.getLogger("dinov2")
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 
 def get_args_parser(
@@ -98,6 +99,36 @@ def get_args_parser(
         help="Number de Workers",
     )
     parser.add_argument(
+        "--optimizer-momentum",
+        type=float,
+        default=0.9,
+        help="Momentum for the linear classifier optimizer",
+    )
+    parser.add_argument(
+        "--n-last-blocks",
+        type=int,
+        default=4,
+        help="Number of blocks to use for the linear classifier",
+    )
+    parser.add_argument(
+        "--weight-decay",
+        type=float,
+        default=0.0,
+        help="Weight decay for the linear classifier",
+    )
+    parser.add_argument(
+        "--avg-pool",
+        type=bool,
+        default=True,
+        help="Whether to use average pooling for the linear classifier",
+    )
+    parser.add_argument(
+        "--num_nodes",
+        type=int,
+        default=1,
+        help="Set number of nodes used.",
+    )
+    parser.add_argument(
         "--epoch-length",
         type=int,
         help="Length of an epoch in number of iterations",
@@ -113,10 +144,15 @@ def get_args_parser(
         help="Number of iterations between two evaluations.",
     )
     parser.add_argument(
-        "--learning-rates",
-        nargs="+",
+        "--learning-rate",
         type=float,
-        help="Learning rates to grid search.",
+        help="Learning rate for the linear classifier.",
+    )
+    parser.add_argument(
+        "--use-nesterov",
+        type=bool,
+        default=True,
+        help="Whether to use Nesterov momentum",
     )
     parser.add_argument(
         "--no-resume",
@@ -162,21 +198,7 @@ def get_args_parser(
         epoch_length=1250,
         save_checkpoint_frequency=20,
         eval_period_iterations=1250,
-        learning_rates=[
-            1e-5,
-            2e-5,
-            5e-5,
-            1e-4,
-            2e-4,
-            5e-4,
-            1e-3,
-            2e-3,
-            5e-3,
-            1e-2,
-            2e-2,
-            5e-2,
-            0.1,
-        ],
+        learning_rate=5e-3,
         val_metric_type=MetricType.MEAN_ACCURACY,
         test_metric_types=None,
         classifier_fpath=None,
@@ -256,19 +278,6 @@ class LinearClassifier(nn.Module):
         return self.linear(output)
 
 
-class AllClassifiers(nn.Module):
-    def __init__(self, classifiers_dict):
-        super().__init__()
-        self.classifiers_dict = nn.ModuleDict()
-        self.classifiers_dict.update(classifiers_dict)
-
-    def forward(self, inputs):
-        return {k: v.forward(inputs) for k, v in self.classifiers_dict.items()}
-
-    def __len__(self):
-        return len(self.classifiers_dict)
-
-
 class LinearPostprocessor(nn.Module):
     def __init__(self, linear_classifier, class_mapping=None):
         super().__init__()
@@ -286,56 +295,78 @@ class LinearPostprocessor(nn.Module):
         }
 
 
-def scale_lr(learning_rates, batch_size):
-    return learning_rates * (batch_size * distributed.get_global_size()) / 256.0
+def scale_lr(learning_rate, batch_size):
+    return learning_rate * (batch_size * distributed.get_global_size()) / 256.0
 
+def log_images_to_wandb(missclassified_images: List[dict]):
+    """
+    Log images to WandB with predicted and original labels.
+    
+    Args:
+        images (torch.Tensor): Batch of images (N, C, H, W).
+        predictions (list): Predicted labels for the batch.
+        labels (list): Ground-truth labels for the batch.
+        num_images (int): Number of images to log.
+    """
+    images_to_log = []
+    for image in missclassified_images:
+        img = image["image"].cpu().permute(1, 2, 0).numpy()  # Convert to HWC format
+        pred_label = image["predicted_label"]
+        true_label = image["true_label"]
 
-def setup_linear_classifiers(
+        # Create WandB image with caption
+        images_to_log.append(
+            wandb.Image(img, caption=f"Pred: {pred_label}, True: {true_label}")
+        )
+
+    # Log to WandB
+    wandb.log({"predictions": images_to_log})
+
+def setup_linear_classifier(
     sample_output,
-    n_last_blocks_list,
-    learning_rates,
-    batch_size,
+    n_last_blocks,
+    avg_pool,
     num_classes=1000,
 ):
-    linear_classifiers_dict = nn.ModuleDict()
-    optim_param_groups = []
-    for n in n_last_blocks_list:
-        for avgpool in [False, True]:
-            for _lr in learning_rates:
-                lr = scale_lr(_lr, batch_size)
-                out_dim = create_linear_input(
-                    sample_output,
-                    use_n_blocks=n,
-                    use_avgpool=avgpool,
-                ).shape[1]
-                linear_classifier = LinearClassifier(
-                    out_dim,
-                    use_n_blocks=n,
-                    use_avgpool=avgpool,
-                    num_classes=num_classes,
-                )
-                linear_classifier = linear_classifier.cuda()
-                linear_classifiers_dict[f"classifier_{n}_blocks_avgpool_{avgpool}_lr_{lr:.5f}".replace(".", "_")] = (
-                    linear_classifier
-                )
-                optim_param_groups.append(
-                    {
-                        "params": linear_classifier.parameters(),
-                        "lr": lr,
-                    }
-                )
-
-    linear_classifiers = AllClassifiers(linear_classifiers_dict)
+    out_dim = create_linear_input(
+        sample_output,
+        use_n_blocks=n_last_blocks,
+        use_avgpool=avg_pool,
+    ).shape[1]
+    print("Output Dimension: ", out_dim)
+    linear_classifier = LinearClassifier(
+        out_dim,
+        use_n_blocks=n_last_blocks,
+        use_avgpool=avg_pool,
+        num_classes=num_classes,
+    )
+    linear_classifier = linear_classifier.cuda()
     if distributed.is_enabled():
-        linear_classifiers = nn.parallel.DistributedDataParallel(linear_classifiers)
+        linear_classifier = nn.parallel.DistributedDataParallel(linear_classifier)
+    return linear_classifier
 
-    return linear_classifiers, optim_param_groups
-
+def setup_optimizer(
+    model,
+    learning_rate,
+    weight_decay,
+    use_nesterov=True,
+    batch_size=256,
+    optimizer_momentum=0.9,
+):
+    scaled_learning_rate = scale_lr(learning_rate, batch_size)
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        lr=scaled_learning_rate,
+        momentum=optimizer_momentum,
+        weight_decay=weight_decay,
+        nesterov=use_nesterov,
+    )
+    return optimizer
 
 @torch.no_grad()
-def evaluate_linear_classifiers(
+def evaluate_linear_classifier(
     feature_model,
-    linear_classifiers,
+    linear_classifier,
     data_loader,
     metric_type,
     metrics_file_path,
@@ -343,60 +374,74 @@ def evaluate_linear_classifiers(
     iteration,
     prefixstring="",
     class_mapping=None,
-    best_classifier_on_val=None,
+    num_images_to_log=5,  # Number of misclassified images to log
 ):
-    logger.info("running validation !")
+    logger.info("Running validation...")
 
     num_classes = len(class_mapping) if class_mapping is not None else training_num_classes
+    class_mapping = np.array(class_mapping[:, 1], dtype=int) if class_mapping is not None else None
     metric = build_metric(metric_type, num_classes=num_classes)
-    postprocessors = {k: LinearPostprocessor(v, class_mapping) for k, v in linear_classifiers.classifiers_dict.items()}
-    metrics = {k: metric.clone() for k in linear_classifiers.classifiers_dict}
+    postprocessor = LinearPostprocessor(linear_classifier, class_mapping)
+    metrics = metric.clone()
 
     _, results_dict_temp = evaluate(
         feature_model,
         data_loader,
-        postprocessors,
+        postprocessor,
         metrics,
         torch.cuda.current_device(),
     )
 
-    logger.info("")
-    results_dict = {}
-    max_accuracy = 0
-    best_classifier = ""
-    for (
-        classifier_string,
-        metric,
-    ) in results_dict_temp.items():
-        metrics_to_print = {k: np.round(float(v.cpu()), 4) for k, v in metric.items()}
-        logger.info(f"{prefixstring} -- Classifier: {classifier_string} * {metrics_to_print}")
-        if (
-            best_classifier_on_val is None and metric["top-1"].item() > max_accuracy
-        ) or classifier_string == best_classifier_on_val:
-            max_accuracy = metric["top-1"].item()
-            best_classifier = classifier_string
+    # Log metrics for the single classifier
+    metrics_to_log = {k: np.round(v.float().cpu(), 4) for k, v in results_dict_temp.items()}
+    logger.info(f"{prefixstring} -- {metrics_to_log}")
+    
+    # Log metrics to WandB
+    wandb.log({f"{prefixstring}/{k}": v for k, v in metrics_to_log.items()})
 
-    results_dict["best_classifier"] = {
-        "name": best_classifier,
-        "accuracy": max_accuracy,
-    }
+    misclassified_images = []
+    all_preds = []
+    all_labels = []
 
-    logger.info(f"best classifier: {results_dict['best_classifier']}")
+    for data, labels in data_loader:
+        data = data.cuda(non_blocking=True)
+        labels = labels.cuda(non_blocking=True)
 
+        # Collect predictions and true labels
+        all_labels.extend(labels.cpu().numpy())
+        features = feature_model(data)
+        outputs = linear_classifier(features)
+        preds = torch.argmax(outputs, dim=1)
+        all_preds.extend(preds.cpu().numpy())
+
+        # Get misclassified images
+        misclassified_images.extend(
+            logging_helpers.get_missclassified_images_for_logging(data, labels, outputs, num_images_to_log)
+        )
+
+    # Log misclassified images to WandB
+    log_images_to_wandb(misclassified_images)
+
+    logging_helpers.log_confusion_matrix_to_wandb(all_labels, all_preds, class_mapping)
+    
+    # Save metrics to file
     if distributed.is_main_process():
         with open(metrics_file_path, "a") as f:
             f.write(f"iter: {iteration}\n")
-            for k, v in results_dict.items():
-                f.write(json.dumps({k: v}) + "\n")
-            f.write("\n")
+            for classifier_string, metrics in results_dict_temp.items():
+                # Convert tensors to lists if needed
+                if isinstance(metrics, torch.Tensor):
+                    metrics = metrics.cpu().numpy().tolist()  # Convert to a JSON-compatible format
+                f.write(json.dumps({classifier_string: metrics}) + "\n")
 
-    return results_dict
+    return results_dict_temp
+
 
 
 def eval_linear(
     *,
     feature_model,
-    linear_classifiers,
+    linear_classifier,
     train_data_loader,
     val_data_loader,
     metrics_file_path,
@@ -404,8 +449,8 @@ def eval_linear(
     scheduler,
     output_dir,
     max_iter,
-    checkpoint_period,  # In number of iter, creates a new file every period
-    running_checkpoint_period,  # Period to update main checkpoint file
+    checkpoint_period,
+    running_checkpoint_period,
     eval_period,
     metric_type,
     training_num_classes,
@@ -414,83 +459,69 @@ def eval_linear(
     val_class_mapping=None,
 ):
     checkpointer = Checkpointer(
-        linear_classifiers,
+        linear_classifier,
         output_dir,
         optimizer=optimizer,
         scheduler=scheduler,
     )
     start_iter = checkpointer.resume_or_load(classifier_fpath or "", resume=resume).get("iteration", -1) + 1
-
     periodic_checkpointer = PeriodicCheckpointer(checkpointer, checkpoint_period, max_iter=max_iter)
+
+    logger.info(f"Starting training from iteration {start_iter}")
+    metric_logger = MetricLogger(delimiter="  ", verbose=distributed.is_main_process())
     iteration = start_iter
-    logger.info("Starting training from iteration {}".format(start_iter))
-    metric_logger = MetricLogger(
-        delimiter="  ",
-        verbose=distributed.is_main_process(),
-    )
-    header = "Training"
 
-    for data, labels in metric_logger.log_every(
-        train_data_loader,
-        20,
-        header,
-        max_iter,
-        start_iter,
-    ):
-        data = data.cuda(non_blocking=True)
-        labels = labels.cuda(non_blocking=True)
+    for data, labels in metric_logger.log_every(train_data_loader, 20, "Training", max_iter, start_iter):
+        data, labels = data.cuda(non_blocking=True), labels.cuda(non_blocking=True)
 
+        # Forward pass
         features = feature_model(data)
-        outputs = linear_classifiers(features)
-        losses = {f"loss_{k}": nn.CrossEntropyLoss()(v, labels) for k, v in outputs.items()}
-        loss = sum(losses.values())
+        outputs = linear_classifier(features)
+        loss = nn.CrossEntropyLoss()(outputs, labels)
 
-        # compute the gradients
+        # Backward pass and optimization
         optimizer.zero_grad()
         loss.backward()
-
-        # step
         optimizer.step()
         scheduler.step()
 
-        # log
+        # Log metrics
         if iteration % 10 == 0:
             torch.cuda.synchronize()
-            metric_logger.update(loss=loss.item())
-            metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-            print("lr", optimizer.param_groups[0]["lr"])
+            loss_value = loss.item()
+            current_lr = optimizer.param_groups[0]["lr"]
+            metric_logger.update(loss=loss_value, lr=current_lr)
 
-        if iteration - start_iter > 5:
-            if iteration % running_checkpoint_period == 0:
-                torch.cuda.synchronize()
-                if distributed.is_main_process():
-                    logger.info("Checkpointing running_checkpoint")
-                    periodic_checkpointer.save(
-                        "running_checkpoint_linear_eval",
-                        iteration=iteration,
-                    )
-                torch.cuda.synchronize()
+            # WandB logging
+            wandb.log({"loss": loss_value, "lr": current_lr, "iteration": iteration})
+
+        # Periodic checkpointing
+        if iteration > start_iter + 5 and iteration % running_checkpoint_period == 0:
+            if distributed.is_main_process():
+                logger.info("Checkpointing running checkpoint")
+                periodic_checkpointer.save("running_checkpoint_linear_eval", iteration=iteration)
+
         periodic_checkpointer.step(iteration)
 
+        # Periodic evaluation
         if eval_period > 0 and (iteration + 1) % eval_period == 0 and iteration != max_iter - 1:
-            _ = evaluate_linear_classifiers(
+            evaluate_linear_classifier(
                 feature_model=feature_model,
-                linear_classifiers=remove_ddp_wrapper(linear_classifiers),
+                linear_classifier=remove_ddp_wrapper(linear_classifier),
                 data_loader=val_data_loader,
                 metrics_file_path=metrics_file_path,
-                prefixstring=f"ITER: {iteration}",
                 metric_type=metric_type,
                 training_num_classes=training_num_classes,
                 iteration=iteration,
                 class_mapping=val_class_mapping,
             )
-            torch.cuda.synchronize()
 
-        iteration = iteration + 1
+        iteration += 1
 
-    val_results_dict = evaluate_linear_classifiers(
+    # Final evaluation after training
+    val_results_dict = evaluate_linear_classifier(
         feature_model=feature_model,
-        linear_classifiers=remove_ddp_wrapper(linear_classifiers),
+        linear_classifier=remove_ddp_wrapper(linear_classifier),
         data_loader=val_data_loader,
         metrics_file_path=metrics_file_path,
         metric_type=metric_type,
@@ -498,12 +529,9 @@ def eval_linear(
         iteration=iteration,
         class_mapping=val_class_mapping,
     )
-    return (
-        val_results_dict,
-        feature_model,
-        linear_classifiers,
-        iteration,
-    )
+
+    return val_results_dict, feature_model, linear_classifier, iteration
+
 
 
 def make_eval_data_loader(test_dataset_str, batch_size, num_workers, metric_type):
@@ -526,7 +554,7 @@ def make_eval_data_loader(test_dataset_str, batch_size, num_workers, metric_type
 
 def test_on_datasets(
     feature_model,
-    linear_classifiers,
+    linear_classifier,
     test_dataset_strs,
     batch_size,
     num_workers,
@@ -551,9 +579,9 @@ def test_on_datasets(
             num_workers,
             metric_type,
         )
-        dataset_results_dict = evaluate_linear_classifiers(
+        dataset_results_dict = evaluate_linear_classifier(
             feature_model,
-            remove_ddp_wrapper(linear_classifiers),
+            remove_ddp_wrapper(linear_classifier),
             test_data_loader,
             metric_type,
             metrics_file_path,
@@ -561,7 +589,6 @@ def test_on_datasets(
             iteration,
             prefixstring="",
             class_mapping=class_mapping,
-            best_classifier_on_val=best_classifier_on_val,
         )
         results_dict[f"{test_dataset_str}_accuracy"] = 100.0 * dataset_results_dict["best_classifier"]["accuracy"]
     return results_dict
@@ -578,8 +605,13 @@ def run_eval_linear(
     num_workers,
     save_checkpoint_frequency,
     eval_period_iterations,
-    learning_rates,
+    learning_rate,
     autocast_dtype,
+    optimizer_momentum,
+    weight_decay,
+    n_last_blocks,
+    avg_pool,
+    use_nesterov,
     test_dataset_strs=None,
     resume=True,
     classifier_fpath=None,
@@ -589,96 +621,80 @@ def run_eval_linear(
     test_metric_types=None,
 ):
     seed = 0
-
-    if test_dataset_strs is None:
-        test_dataset_strs = [val_dataset_str]
-    if test_metric_types is None:
-        test_metric_types = [val_metric_type] * len(test_dataset_strs)
-    else:
-        assert len(test_metric_types) == len(test_dataset_strs)
+    test_dataset_strs = test_dataset_strs or [val_dataset_str]
+    test_metric_types = test_metric_types or [val_metric_type] * len(test_dataset_strs)
     assert len(test_dataset_strs) == len(test_class_mapping_fpaths)
 
     train_transform = make_classification_train_transform()
-    train_dataset = make_dataset(
-        dataset_str=train_dataset_str,
-        transform=train_transform,
-    )
-    training_num_classes = len(torch.unique(torch.Tensor(train_dataset.get_targets().astype(int))))
-    sampler_type = SamplerType.SHARDED_INFINITE
-    # sampler_type = SamplerType.INFINITE
+    train_dataset = make_dataset(dataset_str=train_dataset_str, transform=train_transform)
 
-    n_last_blocks_list = [1, 4]
-    n_last_blocks = max(n_last_blocks_list)
-    autocast_ctx = partial(
-        torch.cuda.amp.autocast,
-        enabled=True,
-        dtype=autocast_dtype,
-    )
+    # Determine number of classes
+    targets = torch.tensor(train_dataset.get_targets(), dtype=torch.int64)
+    training_num_classes = torch.unique(targets).max().item() + 1
+
+    # Setup feature extraction model
+    autocast_ctx = partial(torch.cuda.amp.autocast, enabled=True, dtype=autocast_dtype)
     feature_model = ModelWithIntermediateLayers(model, n_last_blocks, autocast_ctx)
     sample_output = feature_model(train_dataset[0][0].unsqueeze(0).cuda())
 
-    linear_classifiers, optim_param_groups = setup_linear_classifiers(
+    # Setup linear classifier and optimizer
+    linear_classifier = setup_linear_classifier(
         sample_output,
-        n_last_blocks_list,
-        learning_rates,
-        batch_size,
+        n_last_blocks,
+        avg_pool,
         training_num_classes,
     )
 
-    optimizer = torch.optim.SGD(optim_param_groups, momentum=0.9, weight_decay=0)
+    # Setup optimizer
+    optimizer = setup_optimizer(
+        model=linear_classifier,
+        learning_rate=learning_rate,
+        weight_decay=weight_decay,
+        use_nesterov=use_nesterov,
+        batch_size=batch_size,
+        optimizer_momentum=optimizer_momentum,
+    )
+
+    # Scheduler and checkpoint setup
     max_iter = epochs * epoch_length
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, max_iter, eta_min=0)
-    checkpointer = Checkpointer(
-        linear_classifiers,
-        output_dir,
-        optimizer=optimizer,
-        scheduler=scheduler,
-    )
+    checkpointer = Checkpointer(linear_classifier, output_dir, optimizer=optimizer, scheduler=scheduler)
     start_iter = checkpointer.resume_or_load(classifier_fpath or "", resume=resume).get("iteration", -1) + 1
+
+    # Data loaders
     train_data_loader = make_data_loader(
         dataset=train_dataset,
         batch_size=batch_size,
         num_workers=num_workers,
         shuffle=True,
         seed=seed,
-        sampler_type=sampler_type,
+        sampler_type=SamplerType.SHARDED_INFINITE,
         sampler_advance=start_iter,
         drop_last=True,
         persistent_workers=True,
     )
-    val_data_loader = make_eval_data_loader(
-        val_dataset_str,
-        batch_size,
-        num_workers,
-        val_metric_type,
-    )
+    val_data_loader = make_eval_data_loader(val_dataset_str, batch_size, num_workers, val_metric_type)
 
-    checkpoint_period = save_checkpoint_frequency * epoch_length
 
-    if val_class_mapping_fpath is not None:
-        logger.info(f"Using class mapping from {val_class_mapping_fpath}")
-        val_class_mapping = np.load(val_class_mapping_fpath)
-    else:
-        val_class_mapping = None
+    if(val_class_mapping_fpath.endswith(".json")):
+        # Class mapping
+        with open(val_class_mapping_fpath, 'r') as f:
+            data = json.load(f)
 
-    test_class_mappings = []
-    for class_mapping_fpath in test_class_mapping_fpaths:
-        if class_mapping_fpath is not None and class_mapping_fpath != "None":
-            logger.info(f"Using class mapping from {class_mapping_fpath}")
-            class_mapping = np.load(class_mapping_fpath)
-        else:
-            class_mapping = None
-        test_class_mappings.append(class_mapping)
+        # If you need it as a NumPy array (for example, for integer mapping):
+        val_class_mapping= np.array(list(data.items()))
+    else: 
+        val_class_mapping = np.load(val_class_mapping_fpath) if val_class_mapping_fpath else None
+    test_class_mappings = [
+        np.load(fpath) if fpath and fpath != "None" else None for fpath in test_class_mapping_fpaths
+    ]
+    print("Val class mapping: ", val_class_mapping)
 
+    # Evaluation
     metrics_file_path = os.path.join(output_dir, "results_eval_linear.json")
-    (
-        val_results_dict,
-        feature_model,
-        linear_classifiers,
-        iteration,
-    ) = eval_linear(
+    val_results_dict = eval_linear(
         feature_model=feature_model,
-        linear_classifiers=linear_classifiers,
+        linear_classifier=linear_classifier,
         train_data_loader=train_data_loader,
         val_data_loader=val_data_loader,
         metrics_file_path=metrics_file_path,
@@ -686,36 +702,34 @@ def run_eval_linear(
         scheduler=scheduler,
         output_dir=output_dir,
         max_iter=max_iter,
-        checkpoint_period=checkpoint_period,
+        checkpoint_period=save_checkpoint_frequency * epoch_length,
         running_checkpoint_period=epoch_length,
         eval_period=eval_period_iterations,
         metric_type=val_metric_type,
         training_num_classes=training_num_classes,
         resume=resume,
         val_class_mapping=val_class_mapping,
-        classifier_fpath=classifier_fpath,
     )
-    results_dict = {}
-    if len(test_dataset_strs) > 1 or test_dataset_strs[0] != val_dataset_str:
-        results_dict = test_on_datasets(
+
+    # Test on additional datasets
+    if test_dataset_strs != [val_dataset_str]:
+        test_on_datasets(
             feature_model,
-            linear_classifiers,
+            linear_classifier,
             test_dataset_strs,
             batch_size,
-            0,  # num_workers,
+            num_workers,
             test_metric_types,
             metrics_file_path,
             training_num_classes,
-            iteration,
-            val_results_dict["best_classifier"]["name"],
+            val_results_dict["iteration"],
             prefixstring="",
             test_class_mappings=test_class_mappings,
         )
-    results_dict["best_classifier"] = val_results_dict["best_classifier"]["name"]
-    results_dict[f"{val_dataset_str}_accuracy"] = 100.0 * val_results_dict["best_classifier"]["accuracy"]
-    logger.info("Test Results Dict " + str(results_dict))
 
-    return results_dict
+    logger.info(f"Validation Results: {val_results_dict}")
+    return val_results_dict
+
 
 
 def main(args):
@@ -731,9 +745,14 @@ def main(args):
         epochs=args.epochs,
         epoch_length=args.epoch_length,
         num_workers=args.num_workers,
+        n_last_blocks=args.n_last_blocks,
+        learning_rate=args.learning_rate,
+        optimizer_momentum=args.optimizer_momentum,
+        avg_pool=args.avg_pool,
+        weight_decay=args.weight_decay,
+        use_nesterov=args.use_nesterov,
         save_checkpoint_frequency=args.save_checkpoint_frequency,
         eval_period_iterations=args.eval_period_iterations,
-        learning_rates=args.learning_rates,
         autocast_dtype=autocast_dtype,
         resume=not args.no_resume,
         classifier_fpath=args.classifier_fpath,

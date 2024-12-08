@@ -53,7 +53,7 @@ class ModelWithIntermediateLayers(nn.Module):
 def evaluate(
     model: nn.Module,
     data_loader,
-    postprocessors: Dict[str, nn.Module],
+    postprocessor: nn.Module,
     metrics: Dict[str, MetricCollection],
     device: torch.device,
     criterion: Optional[nn.Module] = None,
@@ -89,7 +89,7 @@ def evaluate(
             metric_logger.update(loss=loss.item())
 
         for k, metric in metrics.items():
-            metric_inputs = postprocessors[k](outputs, targets)
+            metric_inputs = postprocessor(outputs, targets)
             metric.update(**metric_inputs)
 
     metric_logger.synchronize_between_processes()
