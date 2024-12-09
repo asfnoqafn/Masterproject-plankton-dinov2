@@ -9,6 +9,6 @@
 
 PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/Masterproject-plankton-dinov2
 torchrun Masterproject-plankton-dinov2/dinov2/data/dataset_creation/save_cpics_to_lmdb.py\
- --dataset_path="/home/hk-project-p0021769/hgf_grc7525/data/with_labels/ISIISNet/" \
- --lmdb_dir_name="/home/hk-project-p0021769/hgf_grc7525/data/lmdb_with_labels/ISIISNet/" \
- --min_size="0" --dataset_name="ISIISNet"
+ --dataset_path="/home/hk-project-p0021769/hgf_grc7525/data/with_labels/datasciencebowl/" \
+ --lmdb_dir_name="/home/hk-project-p0021769/hgf_grc7525/data/lmdb_without_labels/datasciencebowl/" \
+ --min_size="0" --extension=".jpg" --image_folder="test"
