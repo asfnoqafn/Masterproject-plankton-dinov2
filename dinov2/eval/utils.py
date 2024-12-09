@@ -2,13 +2,19 @@
 #
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
-
+from tensorboard.plugins import projector
+import google.protobuf.text_format as text_format
 import logging
-from typing import Dict, Optional
-
+from typing import Dict, Optional , List
+import os
 import torch
+import numpy as np
 from torch import nn
 from torchmetrics import MetricCollection
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+import wandb
+
 
 import dinov2.distributed as distributed
 from dinov2.data import (
@@ -20,6 +26,153 @@ from dinov2.logging import MetricLogger
 
 logger = logging.getLogger("dinov2")
 
+def save_embeddings(features, labels, output_dir, step=0, max_samples=100):
+    """
+    Save embeddings to a file for later analysis, optionally limiting the number of samples.
+    
+    Args:
+    features (torch.Tensor): Feature vectors to save
+    labels (torch.Tensor): Corresponding labels for the features
+    output_dir (str): Directory to save embeddings
+    step (int, optional): Training step or epoch for filename
+    max_samples (int, optional): Maximum number of samples to save
+    """
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # If features have more samples than max_samples, randomly sample
+    if len(features) > max_samples:
+        # Create random indices for sampling
+        indices = torch.randperm(len(features))[:max_samples]
+        features = features[indices]
+        labels = labels[indices]
+    
+    # Prepare data for saving
+    embeddings_data = {
+        'features': features.cpu().numpy(),
+        'labels': labels.cpu().numpy(),
+        'step': step
+    }
+    
+    # Save to a .npz file
+    save_path = os.path.join(output_dir, f'embeddings_step_{step}.npz')
+    np.savez(save_path, **embeddings_data)
+    print(f"Embeddings saved to {save_path}")
+    return save_path
+
+def visualize_embeddings(features, labels, output_dir, step=0, use_wandb=True, max_samples=100):
+    """
+    Visualize high-dimensional embeddings using t-SNE, with optional sample limiting.
+    
+    Args:
+    features (torch.Tensor): Feature vectors to visualize
+    labels (torch.Tensor): Corresponding labels for the features
+    output_dir (str): Directory to save visualization
+    step (int, optional): Training step or epoch for logging
+    use_wandb (bool, optional): Whether to log to Weights & Biases
+    max_samples (int, optional): Maximum number of samples to visualize
+    """
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # If features have more samples than max_samples, randomly sample
+    if len(features) > max_samples:
+        # Create random indices for sampling
+        indices = torch.randperm(len(features))[:max_samples]
+        features = features[indices]
+        labels = labels[indices]
+    
+    # Move features to CPU and convert to numpy
+    features_np = features.cpu().numpy()
+    labels_np = labels.cpu().numpy()
+    
+    # Reduce dimensionality using t-SNE
+    tsne = TSNE(n_components=2, random_state=42, perplexity=30)
+    features_2d = tsne.fit_transform(features_np)
+    
+    # Create a scatter plot
+    plt.figure(figsize=(10, 8))
+    scatter = plt.scatter(
+        features_2d[:, 0],
+        features_2d[:, 1],
+        c=labels_np,
+        cmap='viridis',
+        alpha=0.7
+    )
+    plt.colorbar(scatter, label='Class Labels')
+    plt.title(f't-SNE Visualization of Embeddings (Step {step}, {len(features)} samples)')
+    plt.xlabel('t-SNE Feature 1')
+    plt.ylabel('t-SNE Feature 2')
+    
+    # Save the plot
+    plot_path = os.path.join(output_dir, f'embeddings_tsne_step_{step}.png')
+    plt.savefig(plot_path)
+    plt.close()
+    
+    # Optionally log to Weights & Biases
+    if use_wandb and wandb.run is not None:
+        wandb.log({
+            f"Embedding Visualization (Step {step}, {len(features)} samples)": wandb.Image(plot_path),
+        })
+    
+    return features_2d
+
+
+
+def log_images_to_wandb(missclassified_images: List[dict]):
+    """
+    Log images to WandB with predicted and original labels.
+    
+    Args:
+        images (torch.Tensor): Batch of images (N, C, H, W).
+        predictions (list): Predicted labels for the batch.
+        labels (list): Ground-truth labels for the batch.
+        num_images (int): Number of images to log.
+    """
+    images_to_log = []
+    for image in missclassified_images:
+        img = image["image"].cpu().permute(1, 2, 0).numpy()  # Convert to HWC format
+        pred_label = image["predicted_label"]
+        true_label = image["true_label"]
+
+        # Create WandB image with caption
+        images_to_log.append(
+            wandb.Image(img, caption=f"Pred: {pred_label}, True: {true_label}")
+        )
+
+    # Log to WandB
+    wandb.log({"predictions": images_to_log})
+
+def get_missclassified_images_for_logging(data, labels, outputs, num_images_to_log=5):
+    misclassified_images = []
+    preds = torch.argmax(outputs, dim=1)
+    # Find misclassified images and store them
+    misclassified_indices = (preds != labels).nonzero(as_tuple=True)[0]
+    for idx in misclassified_indices[:num_images_to_log]:  # Limit to a number of images to log
+        misclassified_images.append({
+            "image": data[idx].cpu(),
+            "true_label": labels[idx].item(),
+            "predicted_label": preds[idx].item()
+        })
+    return misclassified_images
+
+def log_confusion_matrix_to_wandb(labels, outputs, class_labels):
+    """
+    Log confusion matrix to WandB.
+    Args:
+        confusion_matrix (torch.Tensor): Confusion matrix.
+        class_labels (list): List of class labels.
+    """
+    # Create confusion matrix plot
+    confusion_matrix_plot = wandb.plot.confusion_matrix(
+        probs=None,
+        y_true=labels,
+        preds=outputs,
+        class_names=class_labels,
+    )
+
+    # Log to WandB
+    wandb.log({"confusion_matrix": confusion_matrix_plot})
 
 class ModelWithNormalize(torch.nn.Module):
     def __init__(self, model):
@@ -236,6 +389,17 @@ class IncrementalPCAWrapper:
         self.num_components = num_components
         self.batch_size = batch_size
         self.ipca = IncrementalPCA(n_components=num_components, batch_size=batch_size)
+
+    def partial_fit(self, data: torch.Tensor):
+        """
+        Incrementally fit the IncrementalPCA model with new data batches.
+        :param data: Input data of shape (n_samples, n_features)
+        """
+        # IncrementalPCA expects numpy arrays, so convert tensor to numpy
+        data_np = data.cpu().numpy()
+        # Partially fit the model with new data
+        self.ipca.partial_fit(data_np)
+
 
     def fit(self, data: torch.Tensor):
         """

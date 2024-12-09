@@ -4,8 +4,8 @@
 #SBATCH --cpus-per-task=1
 #SBATCH -e /home/hk-project-p0021769/hgf_grc7525/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_grc7525/output/log_%j.out
-#SBATCH --time 00:40:00
-#SBATCH --partition=dev_cpuonly
+#SBATCH --time 01:40:00
+#SBATCH --partition=cpuonly
 
 PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/Masterproject-plankton-dinov2
 torchrun Masterproject-plankton-dinov2/dinov2/data/dataset_creation/train_test_split.py\

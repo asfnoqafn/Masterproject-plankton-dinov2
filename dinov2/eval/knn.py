@@ -12,7 +12,7 @@ import sys
 from functools import partial
 from typing import List, Optional
 import matplotlib.pyplot as plt
-from utils import PCA, IncrementalPCAWrapper
+from utils import PCA, IncrementalPCAWrapper, visualize_embeddings, save_embeddings
 import wandb
 import numpy as np
 import torch
@@ -121,6 +121,12 @@ def get_args_parser(
         help="Set number of nodes used.",
     )
     parser.add_argument(
+        "--tensorboard-log-dir",
+        type=str,
+        default="tensorboard/knn/",
+        help="Directory to save TensorBoard embedding projector logs"
+    )
+    parser.add_argument(
         "--output_dir",
         type=str,
         help="Output directory to write results and logs",
@@ -135,7 +141,6 @@ def get_args_parser(
         n_tries=1,
     )
     return parser
-
 
 class KnnModule(torch.nn.Module):
     """
@@ -316,7 +321,9 @@ class ModuleDictWithForward(torch.nn.ModuleDict):
 def plotting(features, labels, step=0):
     features = features.cpu()
     ipca = IncrementalPCAWrapper(num_components=2, batch_size=1024)  # Adjust batch size if needed
-    reduced_features = ipca.fit_transform(features)
+    ipca.fit(features)
+    reduced_features = ipca.transform(features)
+        
 
     plt.figure(figsize=(10, 8))
     scatter = plt.scatter(
@@ -349,6 +356,7 @@ def eval_knn(
     gather_on_cpu,
     n_per_class_list=[-1],
     n_tries=1,
+    tensorboard_log_dir=None,
 ):
     model = ModelWithNormalize(model)
 
@@ -360,6 +368,26 @@ def eval_knn(
         num_workers,
         gather_on_cpu=gather_on_cpu,
     )
+
+
+    embeddings_dir = os.path.join(tensorboard_log_dir, 'embeddings')
+        
+        # Visualize embeddings
+    visualize_embeddings(
+            train_features, 
+            train_labels, 
+            output_dir=embeddings_dir,
+            step=0  # or use a meaningful step/epoch number
+        )
+        
+        # Save embeddings for later analysis
+    save_embeddings(
+            train_features, 
+            train_labels, 
+            output_dir=embeddings_dir,
+            step=0  # or use a meaningful step/epoch number
+        )
+
     logger.info(f"Train features created, shape {train_features.shape}.")
     plotting(train_features, train_labels)
 
@@ -460,6 +488,7 @@ def eval_knn_with_model(
     num_workers=5,
     n_per_class_list=[-1],
     n_tries=1,
+    tensorboard_log_dir=None,
 ):
     transform = transform or make_classification_eval_transform()
 
@@ -474,6 +503,8 @@ def eval_knn_with_model(
         with_targets=True
     )
 
+    
+
     with torch.cuda.amp.autocast(dtype=autocast_dtype):
         results_dict_knn = eval_knn(
             model=model,
@@ -487,6 +518,7 @@ def eval_knn_with_model(
             gather_on_cpu=gather_on_cpu,
             n_per_class_list=n_per_class_list,
             n_tries=n_tries,
+            tensorboard_log_dir=tensorboard_log_dir,
         )
 
     results_dict, confmats_dict = {}, {}
@@ -554,6 +586,7 @@ def main(args):
         num_workers=args.num_workers,
         n_per_class_list=args.n_per_class_list,
         n_tries=args.n_tries,
+        tensorboard_log_dir=args.tensorboard_log_dir,
     )
     return 0
 
