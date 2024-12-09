@@ -6,6 +6,7 @@ import lmdb
 import io
 import zipfile
 import tarfile
+from collections import Counter
 
 def append_height_width_threshold(height, width, heights, widths):
     threshold = 400
@@ -17,7 +18,27 @@ def append_height_width(height, width, heights, widths):
     heights.append(height)
     widths.append(width)
 
+def profile_by_label(data_path, archive_type):
+    assert archive_type == 'lmdb', "archive_type needs to be lmdb"
+    env_labels = lmdb.open(data_path, readonly=True)
+    label_dict = {}
+    with env_labels.begin() as txn_labels:
+        
+        cursor_labels = txn_labels.cursor()
+        for (label_key, label) in cursor_labels:
+            label_str = int.from_bytes(label, byteorder="little") 
+            #label_dict[label_str] = label_dict.get(label_str, 0) + 1
+            if label_str not in label_dict.keys():
+                label_dict[label_str] = 1
+            else:
+                label_dict[label_str] += 1
+
+        # Output the resulting dictionary
+    print(len(label_dict))
+
+
 def open_and_measure_data(data_path, archive_type, threshold=-1):
+    lmdb_labels_path = "/home/hk-project-p0021769/hgf_col5747/data/plankton/-TRAIN_labels"
     heights = []
     widths = []
     num_images = 0
@@ -28,9 +49,12 @@ def open_and_measure_data(data_path, archive_type, threshold=-1):
         
         env_imgs = lmdb.open(data_path, readonly=True)
 
-        with env_imgs.begin() as txn_imgs:
+        with env_imgs.begin() as txn_imgs, env_labels.begin() as txn_labels:
             cursor_imgs = txn_imgs.cursor()
-        #  cursor_labels = txn_labels.cursor()        
+            
+            # label_dict = Counter(cursor_labels)
+            # print('label_dict:', label_dict)
+            
             for (img_key, img_value) in cursor_imgs:
                 img = Image.open(io.BytesIO(img_value))
 
@@ -117,4 +141,7 @@ def create_heatmap(widths, heights, num_images=-1, bins=100, folder_name=""):
     plt.yscale('log')
     plt.show()
 
-
+if __name__ == "__main__":
+    profile_by_label(
+        "/home/hk-project-p0021769/hgf_col5747/data/plankton/-TRAIN_imgs", "lmdb"
+    )
