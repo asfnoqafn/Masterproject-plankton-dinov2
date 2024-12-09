@@ -11,7 +11,9 @@ import re
 import sys
 from functools import partial
 from typing import List, Optional
-
+import matplotlib.pyplot as plt
+from utils import PCA, IncrementalPCAWrapper
+import wandb
 import numpy as np
 import torch
 from torch.nn.functional import one_hot, softmax
@@ -92,7 +94,7 @@ def get_args_parser(
     parser.add_argument(
         "--num-workers",
         type=int,
-        default=4,
+        default=19,
         help="Number of workers in DataLoader.",
     )
     parser.add_argument(
@@ -118,12 +120,17 @@ def get_args_parser(
         default=1,
         help="Set number of nodes used.",
     )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        help="Output directory to write results and logs",
+    )
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
         val_dataset_str="ImageNet:split=VAL",
         nb_knn=[10, 20, 100, 200],
         temperature=0.07,
-        batch_size=256,
+        batch_size=512,
         n_per_class_list=[-1],
         n_tries=1,
     )
@@ -257,10 +264,14 @@ def create_module_dict(
     train_features,
     train_labels,
 ):
+    print(f"Shape of train_labels: {train_labels.shape}")
+    print(f"Shape of train_features: {train_features.shape}")
     modules = {}
     mapping = create_class_indices_mapping(train_labels)
+    #print("mapping", mapping)
     for npc in n_per_class_list:
         if npc < 0:  # Only one try needed when using the full data
+            #print("npc", npc)
             full_module = module(
                 train_features=train_features,
                 train_labels=train_labels,
@@ -302,6 +313,29 @@ class ModuleDictWithForward(torch.nn.ModuleDict):
     def forward(self, *args, **kwargs):
         return {k: module(*args, **kwargs) for k, module in self._modules.items()}
 
+def plotting(features, labels, step=0):
+    features = features.cpu()
+    ipca = IncrementalPCAWrapper(num_components=2, batch_size=1024)  # Adjust batch size if needed
+    reduced_features = ipca.fit_transform(features)
+
+    plt.figure(figsize=(10, 8))
+    scatter = plt.scatter(
+        reduced_features[:, 0].numpy(),
+        reduced_features[:, 1].numpy(),
+        c=labels.cpu().numpy(),
+        cmap="tab10",  
+        alpha=0.7,
+    )
+    plt.colorbar(scatter, label="Class Labels")
+    plt.title("2D Visualization of Features")
+    plt.xlabel("Principal Component 1")
+    plt.ylabel("Principal Component 2")
+    
+    plot_path = f"plots/step_{step}_features.png"
+    plt.savefig(plot_path)
+    plt.close()
+    
+    wandb.log({"Feature Visualization": wandb.Image(plot_path)})
 
 def eval_knn(
     model,
@@ -327,6 +361,7 @@ def eval_knn(
         gather_on_cpu=gather_on_cpu,
     )
     logger.info(f"Train features created, shape {train_features.shape}.")
+    plotting(train_features, train_labels)
 
     val_dataloader = make_data_loader(
         dataset=val_dataset,
@@ -363,6 +398,7 @@ def eval_knn(
                 **postprocessors,
                 **{(n_per_class, t, k): DictKeysModule([n_per_class, t, k]) for k in knn_try.nb_knn},
             }
+            print(f"Output from postprocessor: {postprocessors}")
             metrics = {
                 **metrics,
                 **{
@@ -430,10 +466,12 @@ def eval_knn_with_model(
     train_dataset = make_dataset(
         dataset_str=train_dataset_str,
         transform=transform,
+        with_targets=True
     )
     val_dataset = make_dataset(
         dataset_str=val_dataset_str,
         transform=transform,
+        with_targets=True
     )
 
     with torch.cuda.amp.autocast(dtype=autocast_dtype):
@@ -464,10 +502,12 @@ def eval_knn_with_model(
                     metric_val = metric_val.item()
                     results_dict[f"{knn_} {metric_name}"] = metric_val
                     metric_log_msg += f"{metric_name}: {metric_val:.4f} "
+                    # Log metrics to wandb
+                    wandb.log({f"{knn_}_{metric_name}": metric_val})
                 if "confmat" not in metric_name:
                     logger.info(metric_log_msg)
 
-    # save in ckpt dir
+    # Save evaluation results and confusion matrices
     metrics_file_path = os.path.join(output_dir, "results_eval_knn.json")
     with open(metrics_file_path, "a") as f:
         for k, v in results_dict.items():
@@ -486,6 +526,8 @@ def eval_knn_with_model(
             os.path.join(confmat_file_path, f"knn_{knn_nb}"),
             v,
         )
+        # Log confusion matrices to wandb
+        wandb.log({f"Confusion Matrix KNN {knn_nb}": wandb.Table(dataframe=v)})
 
     if distributed.is_enabled():
         torch.distributed.barrier()
@@ -499,7 +541,7 @@ def main(args):
     print("args.output_dir", args.output_dir)
     eval_knn_with_model(
         model=model,
-        output_dir=args.output_dir_ckpt,
+        output_dir=args.output_dir,
         train_dataset_str=args.train_dataset_str,
         val_dataset_str=args.val_dataset_str,
         nb_knn=args.nb_knn,

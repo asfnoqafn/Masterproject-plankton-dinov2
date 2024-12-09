@@ -146,12 +146,12 @@ class SSLMetaArch(nn.Module):
         else:
             loss.backward()
 
-    def forward_backward(self, images, teacher_temp):
+    def forward_teacher_student(self, images, teacher_temp):
         n_global_crops = 2
         n_local_crops = self.cfg.crops.local_crops_number
         do_free_shapes = none_or_str(self.cfg.crops.free_shapes)
 
-        attn_mask_gc = attn_mask_gc = None
+        attn_mask_gc = attn_mask_lc = num_ch_list = local_crop_len = local_crop_dims = None
         if not images["collated_global_crops"].is_cuda:
             global_crops = images["collated_global_crops"].cuda(non_blocking=True)
             local_crops = images["collated_local_crops"].cuda(non_blocking=True)
@@ -161,18 +161,18 @@ class SSLMetaArch(nn.Module):
             masks_weight = images["masks_weight"].cuda(non_blocking=True)
             if exists(images["attn_mask_gc"]):
                 attn_mask_gc = images["attn_mask_gc"].cuda(non_blocking=True)
-            if exists(images["attn_mask_gc"]):
+            if exists(images["attn_mask_lc"]):
                 attn_mask_lc = images["attn_mask_lc"].cuda(non_blocking=True)
-
-            local_crop_len = images["local_crop_len"].cuda(non_blocking=True)
+            if exists(images["local_crop_len"]):
+                local_crop_len = images["local_crop_len"].cuda(non_blocking=True)
             local_patch_pos = images["local_patch_pos"]
             if exists(local_patch_pos) and isinstance(local_patch_pos, list):
                 for el in local_patch_pos:
                     for el2 in el:
                         el2 = el2.cuda(non_blocking=True)
-
-            local_crop_dims = images["local_crop_dims"].cuda(non_blocking=True)
-            num_ch_list = images["num_ch_list"]
+            if exists(images["local_crop_dims"]):
+                local_crop_dims = images["local_crop_dims"].cuda(non_blocking=True)
+            # num_ch_list = images["num_ch_list"]
         else:
             global_crops = images["collated_global_crops"]
             local_crops = images["collated_local_crops"]
@@ -185,7 +185,7 @@ class SSLMetaArch(nn.Module):
             local_crop_len = images["local_crop_len"]
             local_patch_pos = images["local_patch_pos"]
             local_crop_dims = images["local_crop_dims"]
-            num_ch_list = images["num_ch_list"]
+            # num_ch_list = images["num_ch_list"]
 
         # local_crops: b c p (n p)
         # print("ssl ", global_crops.shape, local_crops.shape)
@@ -387,7 +387,6 @@ class SSLMetaArch(nn.Module):
         if do_free_shapes:
             student_local_cls_tokens_after_head = []
             for i in range(n_local_crops):
-                print("cc", i, "/", n_local_crops)
                 student_local_cls_tokens_after_head.append(outputs_list.pop(0).squeeze())
         else:
             student_local_cls_tokens_after_head = outputs_list.pop(0).squeeze(0)
@@ -478,11 +477,12 @@ class SSLMetaArch(nn.Module):
             # accumulate loss
             loss_accumulator += self.ibot_loss_weight * ibot_patch_loss
 
+        return loss_accumulator, loss_dict
+
+    def backward(self, loss_accumulator):
         self.backprop_loss(loss_accumulator)
-
+        # TODO: Hangs here with > 1 GPUS, To FIX
         self.fsdp_synchronize_streams()
-
-        return loss_dict
 
     def fsdp_synchronize_streams(self):
         if self.need_to_synchronize_fsdp_streams:

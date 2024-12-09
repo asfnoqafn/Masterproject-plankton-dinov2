@@ -11,7 +11,6 @@ from typing import Optional
 
 import dinov2.distributed as distributed
 import wandb
-
 from .helpers import MetricLogger, SmoothedValue
 
 
@@ -117,6 +116,7 @@ def setup_logging(
 
         wandb.init(
             name=args.run_name,
+            entity="mp_aqqua",
             project=project,
             config=args,
             dir=output,

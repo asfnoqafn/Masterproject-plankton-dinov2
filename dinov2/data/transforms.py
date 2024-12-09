@@ -72,8 +72,8 @@ WHOI_DEFAULT_STD = 0.10176649
 
 
 def make_normalize_transform(
-    mean: Sequence[float] = WHOI_DEFAULT_MEAN,
-    std: Sequence[float] = WHOI_DEFAULT_STD,
+    mean: Sequence[float] = [WHOI_DEFAULT_MEAN],
+    std: Sequence[float] = [WHOI_DEFAULT_STD],
     use_kornia=False,
 ) -> Union[v2.Normalize, augmentation.Normalize]:
     if use_kornia:
@@ -89,8 +89,8 @@ def make_classification_train_transform(
     crop_size: int = 224,
     interpolation=v2.InterpolationMode.BICUBIC,
     hflip_prob: float = 0.5,
-    mean: Sequence[float] = WHOI_DEFAULT_MEAN,
-    std: Sequence[float] = WHOI_DEFAULT_STD,
+    mean: Sequence[float] = [WHOI_DEFAULT_MEAN],
+    std: Sequence[float] = [WHOI_DEFAULT_STD],
 ):
     transforms_list = [
         v2.RandomResizedCrop(
@@ -117,8 +117,8 @@ def make_classification_eval_transform(
     resize_size: int = 256,
     interpolation=v2.InterpolationMode.BICUBIC,
     crop_size: int = 224,
-    mean: Sequence[float] = WHOI_DEFAULT_MEAN,
-    std: Sequence[float] = WHOI_DEFAULT_STD,
+    mean: Sequence[float] = [WHOI_DEFAULT_MEAN],
+    std: Sequence[float] = [WHOI_DEFAULT_STD],
 ) -> v2.Compose:
     transforms_list = [
         v2.Resize(

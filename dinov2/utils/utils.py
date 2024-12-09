@@ -141,7 +141,7 @@ def load_pretrained_weights(
         logger.info(f"Take key {checkpoint_key} in provided checkpoint dict")
         state_dict = state_dict[checkpoint_key]
     # remove `module.` prefix
-    state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+    state_dict = {k.replace("module.", "").replace("_orig_mod.", ""): v for k, v in state_dict.items()}
     # remove `backbone.` prefix induced by multicrop wrapper
     state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
     if teacher_student_key == "teacher":
@@ -276,7 +276,7 @@ def has_batchnorms(model):
 
 
 def none_or_str(value):
-    if isinstance(value, str) and value.strip().lower() == "none":
+    if isinstance(value, str) and (value.strip().lower() == "none" or value.strip().lower() == "false"):
         return None
     return value
 
