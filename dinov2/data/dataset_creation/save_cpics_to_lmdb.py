@@ -3,6 +3,7 @@ import glob
 import json
 import os
 import sys
+from pathlib import Path
 
 import imageio.v3 as iio
 import lmdb
@@ -28,24 +29,21 @@ def load_img(img_path):
     return img
 
 
-def find_files(folder,  ext=None):
-    ext = '.png' if ext is None else ext
-    if ext[0] != '.':
-        ext = '.' + ext
-    relpath, abspath, subdirs = [], [], []
-    s = os.scandir(folder)
-    for entry in s:
-        if entry.is_dir():
-            subdirs.append(entry.name)
-        elif entry.name.endswith(ext):
-            relpath.append(entry.name)
-            abspath.append(os.path.abspath(entry.path))
+def find_files(folder, image_folder='imgs', extension='.png'):
+    if extension[0] != '.':
+        extension = '.' + extension
+    
+    image_folder_path = Path(folder) / image_folder
 
-    # add images from subfolders
-    for subdir in subdirs:
-        subdir_relpath, subdir_abspath = find_files(os.path.join(folder, subdir), ext=ext)
-        relpath += [os.path.join(subdir, f) for f in subdir_relpath]
-        abspath += subdir_abspath
+    abspath = list(image_folder_path.rglob(f'*{extension}'))
+
+    relpath = []
+    for path in abspath:
+        relpath.append(str(path.relative_to(image_folder_path)))
+
+    print(relpath[0], abspath[0])
+    print(relpath[1], abspath[1])
+    print(relpath[2], abspath[2])
 
     return relpath, abspath
 
@@ -54,7 +52,7 @@ def main(args):
     if not args.extension.startswith('.'):
         args.extension = '.' + args.extension
 
-    img_relpath, img_abspath = find_files(args.dataset_path, ext=args.extension)
+    img_relpath, img_abspath = find_files(args.dataset_path, image_folder=args.image_folder, extension=args.extension)
     
     img_relpath, img_abspath = zip(*sorted(zip(img_relpath, img_abspath)))
 
@@ -122,14 +120,12 @@ def get_args_parser():
         "--extension", type=str, help="Image extension for saving inside lmdb", default="png"
     )
     parser.add_argument(
-        "--dataset_name",
-        type=str,
-        help="""Name of outputfile.""",
-        default="dataset"
-    )
-    parser.add_argument(
         "--min_size", type=int, help="Minimum image size (width and height)", default=0
     )
+    parser.add_argument(
+        "--image_folder", type=str, help="Folder in the dataset that contains the label folders with the images", default='imgs'
+    )
+
 
     return parser
 
