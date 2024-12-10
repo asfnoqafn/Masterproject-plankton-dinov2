@@ -130,12 +130,6 @@ def build_lmdbs(args):
                 file=sys.stderr,
             )
             bad_bins.append(zip_filename)
-            processed_bins_dir["bad_bins"] = bad_bins
-            with open(processed_bins_path, "w") as f:
-                json.dump(
-                    processed_bins_dir,
-                    f,
-                )
             continue
 
         processed_bins.append(
@@ -164,6 +158,7 @@ def build_lmdbs(args):
             processed_bins_dir["total_images"] = (
                 total_images
             )
+            processed_bins_dir["bad_bins"] = bad_bins
             with open(processed_bins_path, "w") as f:
                 json.dump(
                     processed_bins_dir,
