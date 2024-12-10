@@ -18,7 +18,7 @@ notebooks/time_vs_num_workers_workstation.png
 notebooks/dataloader_benchmark_results_10000_gpuTrue/time_vs_num_workers_workstation.png
 
 *.csv
-*.png
+*.png !docs/images/*.png
 *.jpg
 
 logs/log.txt
@@ -27,6 +27,9 @@ logs/
 notebooks/test_nb.ipynb
 .DS_Store
 notebooks/test_nb.ipynb
+checkpoints/
+
+output_dir/
 notebooks/*.jpg
 notebooks/seg_examples_Quickshift.jpg
 notebooks/seg_examples_Felzenschwalb.jpg

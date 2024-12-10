@@ -5,7 +5,9 @@
 
 # References:
 #   https://github.com/facebookresearch/dino/blob/master/vision_transformer.py
-#   https://github.com/rwightman/pytorch-image-models/tree/master/timm/layers/patch_embed.py
+#   https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/DINO/Visualize_self_attention_of_DINO.ipynb (dinov1)
+#   https://github.com/facebookresearch/dino/blob/main/visualize_attention.py (dinov1 code provided attention visualization)
+
 
 import logging
 import os
@@ -91,9 +93,12 @@ class Block(nn.Module):
 
         self.sample_drop_ratio = drop_path
 
-    def forward(self, x: Tensor, attn_mask: Tensor = None) -> Tensor:
+    def forward(self, x: Tensor, attn_mask: Tensor = None, return_attention: bool = False) -> Tensor:
         def attn_residual_func(x: Tensor, attn_mask: Tensor = None) -> Tensor:
             return self.ls1(self.attn(self.norm1(x), attn_mask=attn_mask))
+
+        if return_attention:
+            return self.attn(self.norm1(x), return_attn=True)
 
         def ffn_residual_func(x: Tensor) -> Tensor:
             return self.ls2(self.mlp(self.norm2(x)))

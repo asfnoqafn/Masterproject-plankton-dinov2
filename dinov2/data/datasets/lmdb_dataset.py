@@ -11,6 +11,7 @@ _TargetLMDBDataset = int
 
 # TODO: Fix inheritance logic
 class LMDBDataset(ImageNet):
+
     Target = _TargetLMDBDataset
     lmdb_handles = {}
 
@@ -113,6 +114,7 @@ class LMDBDataset(ImageNet):
                 lmdb_cursor = lmdb_txn_labels.cursor()
             else:
                 lmdb_cursor = lmdb_txn_imgs.cursor()
+
             for key, value in lmdb_cursor:
                 entry = dict()
                 if use_labels:

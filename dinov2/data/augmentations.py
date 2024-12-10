@@ -257,6 +257,7 @@ class DataAugmentationDINO(object):
             global_transfo1_extra = GaussianBlur(p=1.0)
 
             solarize_threshold = 0.5
+            solarize_threshold = 0.5
             global_transfo2_extra = v2.Compose(
                 [
                     GaussianBlur(p=0.1),
@@ -630,19 +631,10 @@ class DataAugmentationDINO(object):
         im2_base = self.geometric_augmentation_global(image_global)
         global_crop_2 = self.global_transfo2(im2_base)
 
-        output["global_crops_vis"] = [
-            global_crop_1,
-            global_crop_2,
-        ]
-        global_crops = torch.cat(
-            [
-                self.crop_to_patches(global_crop_1),
-                self.crop_to_patches(global_crop_2),
-            ],
-            dim=0,
-        )  # (2 b) c (n p) p
-        nb_gc_patches = (global_crops.shape[2] / self.patch_size) * 2
-        output["global_crops"] = global_crops
+        output["global_crops"] = [global_crop_1, global_crop_2]
+
+        # global crops for teacher:
+        output["global_crops_teacher"] = [global_crop_1, global_crop_2]
 
         # local crops:
         if self.do_seg_crops is not None:
