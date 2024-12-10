@@ -17,7 +17,7 @@ import wandb
 import numpy as np
 import torch
 from torch.nn.functional import one_hot, softmax
-from PIL import Image
+from PIL import Image, ImageOps
 import io
 from tensorboardX import SummaryWriter
 from tensorboard.plugins import projector
@@ -129,7 +129,7 @@ def get_args_parser(
     parser.add_argument(
         "--tensorboard-log-dir",
         type=str,
-        default="tensorboard/knn/",
+        default=None,
         help="Directory to save TensorBoard embedding projector logs"
     )
     parser.add_argument(
@@ -405,42 +405,65 @@ def eval_knn(
 
         torch.save({'embeddings': embedding_tensor}, embeddings_dir + '/embeddings.pt')
 
+        
         if save_images:
             train_images = []
-            for i in range(len(train_dataset)):
+            for i in range(100):
                 image_data = train_dataset.get_image_data(i)
                 image = Image.open(io.BytesIO(image_data)).convert("RGB")
-                train_images.append(ToTensor()(image))  # Convert PIL image to tensor# Currently broken
+
+                target_size = (224, 224)
+                max_side = max(image.size)  # Find the larger dimension (height or width)
+
+                # Resize image to fit within the target size while keeping the aspect ratio
+                scale_factor = target_size[0] / max_side
+                resized_image = image.resize(
+                    (int(image.width * scale_factor), int(image.height * scale_factor)),
+                    Image.ANTIALIAS
+                )
+                padding = (
+                    (target_size[0] - resized_image.width) // 2,  # Left
+                    (target_size[1] - resized_image.height) // 2,  # Top
+                    (target_size[0] - resized_image.width + 1) // 2,  # Right
+                    (target_size[1] - resized_image.height + 1) // 2  # Bottom
+                )
+                padded_image = ImageOps.expand(resized_image, border=padding, fill=0) # Fill with black
+
+                # Convert the padded image to tensor format (C, H, W)
+                tensor_image = ToTensor()(padded_image)  # Converts to shape (3, H, W)
+                train_images.append(tensor_image)
+
+            # Stack tensors into a single batch tensor
+            train_images = torch.stack(train_images)  # Shape: (N, 3, 224, 224)
 
             images_dir = os.path.join(embeddings_dir, "images")
             os.makedirs(images_dir, exist_ok=True)
 
             image_paths = []
             for i, img in enumerate(train_images):
+                # Convert tensor back to PIL image for saving
+                pil_image = Image.fromarray((img.permute(1, 2, 0).numpy() * 255).astype(np.uint8))  # (H, W, C)
                 image_path = os.path.join(images_dir, f"image_{i}.png")
-                save_image(img, image_path)
+                pil_image.save(image_path)
                 image_paths.append(image_path)
 
             embedding.sprite.image_path = os.path.relpath(images_dir, embeddings_dir)
-            embedding.sprite.single_image_dim.extend([train_images[0].shape[-2], train_images[0].shape[-1]])
-        
-        projector.visualize_embeddings(embeddings_dir, config)
+            embedding.sprite.single_image_dim.extend([224, 224])
 
         # Log embeddings to TensorBoard
         writer = SummaryWriter(log_dir=embeddings_dir)
         writer.add_embedding(
             mat=embedding_tensor,
-            label_img=train_images if save_images else None,
+            label_img=train_images,  # Tensor of shape (N, 3, 224, 224)
             metadata=train_labels.cpu().tolist(),
             global_step=0
         )
         writer.close()
-
         print(f"Embeddings saved to {embeddings_dir}")
+
         if save_images:
             print(f"Raw images saved to {images_dir}")
 
-        print(f"Train features created, shape: {train_features.shape}")
 
     logger.info(f"Train features created, shape {train_features.shape}.")
 
