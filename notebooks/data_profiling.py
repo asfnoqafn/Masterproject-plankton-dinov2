@@ -7,13 +7,14 @@ import io
 import zipfile
 import tarfile
 from collections import Counter
+import json
 
 def append_height_width_threshold(height, width, heights, widths):
     threshold = 400
     if width < threshold and height < threshold:
         heights.append(height)
         widths.append(width)
-    
+
 def append_height_width(height, width, heights, widths):
     heights.append(height)
     widths.append(width)
@@ -22,19 +23,28 @@ def profile_by_label(data_path, archive_type):
     assert archive_type == 'lmdb', "archive_type needs to be lmdb"
     env_labels = lmdb.open(data_path, readonly=True)
     label_dict = {}
+    with open("/Users/Johann/Masterproject-plankton-dinov2/data/plankton/-TEST_label_map.json", "r") as f:
+        class_map = json.load(f)
     with env_labels.begin() as txn_labels:
-        
+
         cursor_labels = txn_labels.cursor()
         for (label_key, label) in cursor_labels:
             label_str = int.from_bytes(label, byteorder="little") 
-            #label_dict[label_str] = label_dict.get(label_str, 0) + 1
+            # print(label_key, label)
+            
+            # label_dict[label_str] = label_dict.get(label_str, 0) + 1
             if label_str not in label_dict.keys():
                 label_dict[label_str] = 1
             else:
                 label_dict[label_str] += 1
 
+    label_dict_str = {}
+
+    for key in label_dict.keys():
+        label_dict_str[class_map[str(key)]] = label_dict[key]
+
         # Output the resulting dictionary
-    print(len(label_dict))
+    print(label_dict_str)
 
 
 def open_and_measure_data(data_path, archive_type, threshold=-1):
@@ -49,7 +59,7 @@ def open_and_measure_data(data_path, archive_type, threshold=-1):
         
         env_imgs = lmdb.open(data_path, readonly=True)
 
-        with env_imgs.begin() as txn_imgs, env_labels.begin() as txn_labels:
+        with env_imgs.begin() as txn_imgs:
             cursor_imgs = txn_imgs.cursor()
             
             # label_dict = Counter(cursor_labels)
@@ -143,5 +153,6 @@ def create_heatmap(widths, heights, num_images=-1, bins=100, folder_name=""):
 
 if __name__ == "__main__":
     profile_by_label(
-        "/home/hk-project-p0021769/hgf_col5747/data/plankton/-TRAIN_imgs", "lmdb"
+        "/Users/Johann/Masterproject-plankton-dinov2/data/plankton/-VAL_labels",
+        "lmdb",
     )
