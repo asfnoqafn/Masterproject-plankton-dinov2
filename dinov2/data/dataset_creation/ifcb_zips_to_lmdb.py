@@ -2,12 +2,11 @@ import argparse
 import json
 import os
 import sys
-from zipfile import ZipFile
+from zipfile import BadZipFile, ZipFile
 
 import imageio.v3 as iio
 import lmdb
 import numpy as np
-from tqdm import tqdm
 
 MAP_SIZE_IMG = int(1e12)  # 1TB
 MAP_SIZE_META = int(1e8)  # 100MB
@@ -38,16 +37,52 @@ def load_img(img_path):
     return img
 
 
-def get_all_zips(ifcb_path, processed_bins):
+def get_all_zips(ifcb_path, excluded_bins):
     zips = []
     for zip_filename in os.listdir(ifcb_path):
         if (
             zip_filename.endswith(".zip")
-            and zip_filename not in processed_bins
+            and zip_filename not in excluded_bins
         ):
             zips.append(zip_filename)
-    return zips
+    return sorted(zips)
 
+def save_zip_to_lmdb(zip_filename, txn, number_of_filtered_images, total_images, total_images_in_chunk):
+    zip_filepath = os.path.join(
+            args.ifcb_path, zip_filename
+        )
+    print(f"currently processing: {zip_filepath}")
+    with ZipFile(zip_filepath) as zf:
+        for image_relpath in zf.namelist():
+            if "__MACOSX" in image_relpath:
+                continue
+            if image_relpath.endswith(".png"):
+                image_path = os.path.join(zip_filepath, image_relpath)
+                try:
+                    image = load_img(
+                        zf.read(image_relpath)
+                    )
+                except Exception as e:
+                    print(
+                        f"Error loading image {image_path}: {e}. Skipping...",
+                        file=sys.stderr,
+                    )
+                    number_of_filtered_images += 1
+                    continue
+
+                img_key = os.path.join(zip_filename, image_relpath).replace("/", "_")  # Replace slashes for safety
+                img_key_bytes = img_key.encode("utf-8")
+
+                # Load and encode the image
+                img_encoded = iio.imwrite(
+                    "<bytes>", image, extension=".png"
+                )
+
+                # Save to LMDB
+                txn.put(img_key_bytes, img_encoded)
+                total_images += 1
+                total_images_in_chunk += 1
+    return number_of_filtered_images, total_images, total_images_in_chunk
 
 def build_lmdbs(args):
     lmdb_dir = os.path.abspath(args.lmdb_dir_name)
@@ -57,27 +92,25 @@ def build_lmdbs(args):
     number_of_filtered_images = 0
     total_images_in_chunk = 0
     try:
-        processed_bins_dir = json.load(
-            open(
-                processed_bins_path,
-                "r",
-            )
-        )
+        with open(processed_bins_path, "r") as f:
+            processed_bins_dir = json.load(f)
     except (json.JSONDecodeError, FileNotFoundError):
         processed_bins_dir = {
-            "processed_bins": list(),
+            "processed_bins": [],
+            "bad_bins": [],
             "total_images": 0,
         }
     finally:
         processed_bins = processed_bins_dir[
             "processed_bins"
         ]
+        bad_bins = processed_bins_dir["bad_bins"] if "bad_bins" in processed_bins_dir else []
         total_images = processed_bins_dir["total_images"]
         prior_total_images = processed_bins_dir[
             "total_images"
         ]
 
-    zips = get_all_zips(args.ifcb_path, processed_bins)
+    zips = get_all_zips(args.ifcb_path, processed_bins + bad_bins)
 
     lmdb_imgs_path = os.path.join(
         lmdb_dir,
@@ -89,46 +122,22 @@ def build_lmdbs(args):
     txn = env.begin(write=True)
     for zip_filename in zips:
         # open next zip-file and wirte images to lmdb
-        zip_filepath = os.path.join(
-            args.ifcb_path, zip_filename
-        )
-        with ZipFile(zip_filepath) as zf:
-            for image_relpath in tqdm(zf.namelist()):
-                if "__MACOSX" in image_relpath:
-                    continue
-                if image_relpath.endswith(".png"):
-                    image_path = os.path.join(
-                        zip_filepath, image_relpath
-                    )
+        try:
+            number_of_filtered_images, total_images, total_images_in_chunk = save_zip_to_lmdb(zip_filename, txn, number_of_filtered_images, total_images, total_images_in_chunk)
+        except BadZipFile:
+            print(
+                f"Error loading zip file {zip_filename}: BadZipFile. Skipping...",
+                file=sys.stderr,
+            )
+            bad_bins.append(zip_filename)
+            processed_bins_dir["bad_bins"] = bad_bins
+            with open(processed_bins_path, "w") as f:
+                json.dump(
+                    processed_bins_dir,
+                    f,
+                )
+            continue
 
-                    try:
-                        image = load_img(
-                            zf.read(image_relpath)
-                        )
-                    except Exception as e:
-                        print(
-                            f"Error loading image {image_path}: {e}. Skipping...",
-                            file=sys.stderr,
-                        )
-                        number_of_filtered_images += 1
-                        continue
-
-                    img_key = os.path.join(
-                        zip_filename, image_relpath
-                    ).replace(
-                        "/", "_"
-                    )  # Replace slashes for safety
-                    img_key_bytes = img_key.encode("utf-8")
-
-                    # Load and encode the image
-                    img_encoded = iio.imwrite(
-                        "<bytes>", image, extension=".png"
-                    )
-
-                    # Save to LMDB
-                    txn.put(img_key_bytes, img_encoded)
-                    total_images += 1
-                    total_images_in_chunk += 1
         processed_bins.append(
             zip_filename
         )  # bin is processed, so add it to processed list
@@ -140,7 +149,7 @@ def build_lmdbs(args):
             txn.commit()
             env.close()
             print(
-                f"Finished importing from {args.ifcb_path} and subdirectories, saved at: {lmdb_imgs_path}"
+                f"Finished importing from {args.ifcb_path}, saved at: {lmdb_imgs_path}"
             )
             lmdb_imgs_path = os.path.join(
                 lmdb_dir,
@@ -148,19 +157,18 @@ def build_lmdbs(args):
             )
             total_images_in_chunk = 0
             # dump json, since all imgs of processed bins are saved to lmdb
+
             processed_bins_dir["processed_bins"] = (
                 processed_bins
             )
             processed_bins_dir["total_images"] = (
                 total_images
             )
-            json.dump(
-                processed_bins_dir,
-                open(
-                    processed_bins_path,
-                    "w",
-                ),
-            )
+            with open(processed_bins_path, "w") as f:
+                json.dump(
+                    processed_bins_dir,
+                    f,
+                )
 
             if zip_filename != zips[-1]:
                 # open new lmdb
