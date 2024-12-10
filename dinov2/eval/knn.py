@@ -17,6 +17,12 @@ import wandb
 import numpy as np
 import torch
 from torch.nn.functional import one_hot, softmax
+from PIL import Image
+import io
+from tensorboardX import SummaryWriter
+from tensorboard.plugins import projector
+from torchvision.utils import save_image
+from torchvision.transforms import ToTensor
 
 import dinov2.distributed as distributed
 from dinov2.data import (
@@ -131,12 +137,17 @@ def get_args_parser(
         type=str,
         help="Output directory to write results and logs",
     )
+    parser.add_argument(
+        "--save_images",
+        action="store_true",
+        help="Flag to save raw images for TensorBoard Embedding Projector",
+    )   
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
         val_dataset_str="ImageNet:split=VAL",
         nb_knn=[10, 20, 100, 200],
         temperature=0.07,
-        batch_size=512,
+        batch_size=256,
         n_per_class_list=[-1],
         n_tries=1,
     )
@@ -327,8 +338,8 @@ def plotting(features, labels, step=0):
 
     plt.figure(figsize=(10, 8))
     scatter = plt.scatter(
-        reduced_features[:, 0].numpy(),
-        reduced_features[:, 1].numpy(),
+        reduced_features[:, 0].cpu().numpy(),
+        reduced_features[:, 1].cpu().numpy(),
         c=labels.cpu().numpy(),
         cmap="tab10",  
         alpha=0.7,
@@ -357,6 +368,7 @@ def eval_knn(
     n_per_class_list=[-1],
     n_tries=1,
     tensorboard_log_dir=None,
+    save_images=False,
 ):
     model = ModelWithNormalize(model)
 
@@ -370,26 +382,72 @@ def eval_knn(
     )
 
 
-    embeddings_dir = os.path.join(tensorboard_log_dir, 'embeddings')
+    # Retrieve images from LMDB dataset
+
+
+    if tensorboard_log_dir is not None:
+        wandb_run_name = wandb.run.name if wandb.run else "default_run"
+        wandb_log_dir = os.path.join(tensorboard_log_dir, wandb_run_name)
+        embeddings_dir = os.path.join(wandb_log_dir, 'embeddings')
+        os.makedirs(embeddings_dir, exist_ok=True)
+
+        metadata_path = os.path.join(embeddings_dir, 'metadata.tsv')
+        unique_labels = np.unique(train_labels.cpu().numpy())
+        with open(metadata_path, 'w') as f:
+            for label in unique_labels:
+                f.write(f"{label}\n")
+
+        embedding_tensor = torch.tensor(train_features.cpu().numpy())
+        config = projector.ProjectorConfig()
+        embedding = config.embeddings.add()
+        embedding.tensor_name = 'embeddings'
+        embedding.metadata_path = 'metadata.tsv'
+
+        torch.save({'embeddings': embedding_tensor}, embeddings_dir + '/embeddings.pt')
+
+        if save_images:
+            train_images = []
+            for i in range(len(train_dataset)):
+                image_data = train_dataset.get_image_data(i)
+                image = Image.open(io.BytesIO(image_data)).convert("RGB")
+                train_images.append(ToTensor()(image))  # Convert PIL image to tensor# Currently broken
+
+            images_dir = os.path.join(embeddings_dir, "images")
+            os.makedirs(images_dir, exist_ok=True)
+
+            image_paths = []
+            for i, img in enumerate(train_images):
+                image_path = os.path.join(images_dir, f"image_{i}.png")
+                save_image(img, image_path)
+                image_paths.append(image_path)
+
+            embedding.sprite.image_path = os.path.relpath(images_dir, embeddings_dir)
+            embedding.sprite.single_image_dim.extend([train_images[0].shape[-2], train_images[0].shape[-1]])
         
-        # Visualize embeddings
-    visualize_embeddings(
-            train_features, 
-            train_labels, 
-            output_dir=embeddings_dir,
-            step=0  # or use a meaningful step/epoch number
+        projector.visualize_embeddings(embeddings_dir, config)
+
+        # Log embeddings to TensorBoard
+        writer = SummaryWriter(log_dir=embeddings_dir)
+        writer.add_embedding(
+            mat=embedding_tensor,
+            label_img=train_images if save_images else None,
+            metadata=train_labels.cpu().tolist(),
+            global_step=0
         )
-        
-        # Save embeddings for later analysis
-    save_embeddings(
-            train_features, 
-            train_labels, 
-            output_dir=embeddings_dir,
-            step=0  # or use a meaningful step/epoch number
-        )
+        writer.close()
+
+        print(f"Embeddings saved to {embeddings_dir}")
+        if save_images:
+            print(f"Raw images saved to {images_dir}")
+
+        print(f"Train features created, shape: {train_features.shape}")
 
     logger.info(f"Train features created, shape {train_features.shape}.")
-    plotting(train_features, train_labels)
+
+
+
+    logger.info(f"Train features created, shape {train_features.shape}.")
+    #plotting(train_features, train_labels) #broken
 
     val_dataloader = make_data_loader(
         dataset=val_dataset,
@@ -489,6 +547,7 @@ def eval_knn_with_model(
     n_per_class_list=[-1],
     n_tries=1,
     tensorboard_log_dir=None,
+    save_images=False,
 ):
     transform = transform or make_classification_eval_transform()
 
@@ -502,8 +561,6 @@ def eval_knn_with_model(
         transform=transform,
         with_targets=True
     )
-
-    
 
     with torch.cuda.amp.autocast(dtype=autocast_dtype):
         results_dict_knn = eval_knn(
@@ -519,6 +576,7 @@ def eval_knn_with_model(
             n_per_class_list=n_per_class_list,
             n_tries=n_tries,
             tensorboard_log_dir=tensorboard_log_dir,
+            save_images=save_images,
         )
 
     results_dict, confmats_dict = {}, {}
@@ -587,6 +645,7 @@ def main(args):
         n_per_class_list=args.n_per_class_list,
         n_tries=args.n_tries,
         tensorboard_log_dir=args.tensorboard_log_dir,
+        save_images=args.save_images,
     )
     return 0
 
