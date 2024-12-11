@@ -17,4 +17,4 @@ PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/repo/Masterproject-plankton-din
  /home/hk-project-p0021769/hgf_grc7525/output/ \
  --train-dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/plankton/:extra=*" \
  --val-dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/plankton/:extra=*" \
- --output-dir='/home/hk-project-p0021769/hgf_grc7525/output/'
+ --output-dir='/home/hk-project-p0021769/hgf_grc7525/output/' --tensorboard-log-dir='/home/hk-project-p0021769/hgf_grc7525/tensorboard/' --save_images
