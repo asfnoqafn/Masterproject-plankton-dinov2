@@ -355,56 +355,30 @@ def plotting(features, labels, step=0):
     
     wandb.log({"Feature Visualization": wandb.Image(plot_path)})
 
-def eval_knn(
-    model,
-    train_dataset,
-    val_dataset,
-    accuracy_averaging,
-    nb_knn,
-    temperature,
-    batch_size,
-    num_workers,
-    gather_on_cpu,
-    n_per_class_list=[-1],
-    n_tries=1,
-    tensorboard_log_dir=None,
-    save_images=False,
-):
-    model = ModelWithNormalize(model)
 
-    logger.info("Extracting features for train set...")
-    train_features, train_labels = extract_features(
-        model,
-        train_dataset,
-        batch_size,
-        num_workers,
-        gather_on_cpu=gather_on_cpu,
-    )
+def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, train_dataset, save_images):
+    
+    wandb_run_name = wandb.run.name if wandb.run else "default_run"
+    wandb_log_dir = os.path.join(tensorboard_log_dir, wandb_run_name)
+    embeddings_dir = os.path.join(wandb_log_dir, 'embeddings')
+    os.makedirs(embeddings_dir, exist_ok=True)
 
+    metadata_path = os.path.join(embeddings_dir, 'metadata.tsv')
+    unique_labels = np.unique(train_labels.cpu().numpy())
+    with open(metadata_path, 'w') as f:
+        for label in unique_labels:
+            f.write(f"{label}\n")
 
-    if tensorboard_log_dir is not None:
-        wandb_run_name = wandb.run.name if wandb.run else "default_run"
-        wandb_log_dir = os.path.join(tensorboard_log_dir, wandb_run_name)
-        embeddings_dir = os.path.join(wandb_log_dir, 'embeddings')
-        os.makedirs(embeddings_dir, exist_ok=True)
+    embedding_tensor = torch.tensor(train_features.cpu().numpy())
+    config = projector.ProjectorConfig()
+    embedding = config.embeddings.add()
+    embedding.tensor_name = 'embeddings'
+    embedding.metadata_path = 'metadata.tsv'
 
-        metadata_path = os.path.join(embeddings_dir, 'metadata.tsv')
-        unique_labels = np.unique(train_labels.cpu().numpy())
-        with open(metadata_path, 'w') as f:
-            for label in unique_labels:
-                f.write(f"{label}\n")
+    torch.save({'embeddings': embedding_tensor}, embeddings_dir + '/embeddings.pt')
 
-        embedding_tensor = torch.tensor(train_features.cpu().numpy())
-        config = projector.ProjectorConfig()
-        embedding = config.embeddings.add()
-        embedding.tensor_name = 'embeddings'
-        embedding.metadata_path = 'metadata.tsv'
-
-        torch.save({'embeddings': embedding_tensor}, embeddings_dir + '/embeddings.pt')
-
-        
+    if save_images:
         max_sprite_images = 256
-
         sprite_images = []
         sprite_labels = []
         sprite_indices = []
@@ -457,44 +431,74 @@ def eval_knn(
             pil_image.save(image_path)
             image_paths.append(image_path)
 
-        # Prepare embedding configuration
-        config = projector.ProjectorConfig()
-        embedding = config.embeddings.add()
-        embedding.tensor_name = 'embeddings'
-        embedding.metadata_path = 'metadata.tsv'
-        embedding.sprite.image_path = os.path.relpath(images_dir, embeddings_dir)
-        embedding.sprite.single_image_dim.extend([224, 224])
-
-
-        writer = SummaryWriter(log_dir=embeddings_dir)
-        selected_embedding_tensor = embedding_tensor[sprite_indices]
-
-        # Log embeddings to TensorBoard
-        writer = SummaryWriter(log_dir=embeddings_dir)
-        writer.add_embedding(
-            mat=selected_embedding_tensor,  # Use only embeddings for sprite images
-            label_img=sprite_images,
-            metadata=train_labels[sprite_indices].cpu().tolist(),  # Corresponding labels
-            global_step=0
-        )
-        writer.close()
-
         print("embedding_tensor shape:", embedding_tensor.shape)
         print("sprite_images shape:", sprite_images.shape)
         print("sprite_indices:", len(sprite_indices))
 
+    # Prepare embedding configuration
+    config = projector.ProjectorConfig()
+    embedding = config.embeddings.add()
+    embedding.tensor_name = 'embeddings'
+    embedding.metadata_path = 'metadata.tsv'
+    embedding.sprite.image_path = os.path.relpath(images_dir, embeddings_dir)
+    embedding.sprite.single_image_dim.extend([224, 224])
 
 
-        # Optional: Save metadata for more detailed inspection
-        metadata_path = os.path.join(embeddings_dir, 'metadata.tsv')
-        with open(metadata_path, 'w') as f:
-            f.write("index\tlabel\tis_sprite\n")
-            
-            for i in range(len(train_labels)):
-                is_sprite = 1 if i in sprite_indices else 0
-                f.write(f"{i}\t{train_labels[i].item()}\t{is_sprite}\n")
+    writer = SummaryWriter(log_dir=embeddings_dir)
+    selected_embedding_tensor = embedding_tensor[sprite_indices]
+
+    # Log embeddings to TensorBoard
+    writer = SummaryWriter(log_dir=embeddings_dir)
+    writer.add_embedding(
+        mat=selected_embedding_tensor,  # Use only embeddings for sprite images
+        label_img=sprite_images if save_images else None,
+        metadata=train_labels[sprite_indices].cpu().tolist() if save_images else train_labels.cpu.tolist(),  # Corresponding labels
+        global_step=0
+    )
+    writer.close()
+
+    #metadata_path = os.path.join(embeddings_dir, 'metadata.tsv')
+    #with open(metadata_path, 'w') as f:
+    #    f.write("index\tlabel\tis_sprite\n")
+    #   
+    #    for i in range(len(train_labels)):
+    #       is_sprite = 1 if i in sprite_indices else 0
+    #       f.write(f"{i}\t{train_labels[i].item()}\t{is_sprite}\n")
 
 
+
+
+
+def eval_knn(
+    model,
+    train_dataset,
+    val_dataset,
+    accuracy_averaging,
+    nb_knn,
+    temperature,
+    batch_size,
+    num_workers,
+    gather_on_cpu,
+    n_per_class_list=[-1],
+    n_tries=1,
+    tensorboard_log_dir=None,
+    save_images=False,
+):
+    model = ModelWithNormalize(model)
+
+    logger.info("Extracting features for train set...")
+    train_features, train_labels = extract_features(
+        model,
+        train_dataset,
+        batch_size,
+        num_workers,
+        gather_on_cpu=gather_on_cpu,
+    )
+
+
+    if tensorboard_log_dir is not None:
+
+        4
     logger.info(f"Train features created, shape {train_features.shape}.")
     #plotting(train_features, train_labels) #broken
 

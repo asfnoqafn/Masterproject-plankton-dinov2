@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-gpu=19
 #SBATCH -e /home/hk-project-p0021769/hgf_grc7525/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_grc7525/output/log_%j.out
-#SBATCH --time 04:ß0:00
+#SBATCH --time 04:00:00
 #SBATCH --partition=dev_accelerated
 N_GPUS=1
 N_CPUS=19
