@@ -12,12 +12,18 @@ import sys
 from functools import partial
 from typing import List, Optional
 import matplotlib.pyplot as plt
-from utils import PCA, IncrementalPCAWrapper
+from utils import PCA, IncrementalPCAWrapper, visualize_embeddings, save_embeddings
 import wandb
 import numpy as np
 import torch
 from torch.nn.functional import one_hot, softmax
-
+from PIL import Image, ImageOps
+import io
+from tensorboardX import SummaryWriter
+from tensorboard.plugins import projector
+from torchvision.utils import save_image
+from torchvision.transforms import ToTensor
+import torch.nn.functional as F
 import dinov2.distributed as distributed
 from dinov2.data import (
     SamplerType,
@@ -121,21 +127,31 @@ def get_args_parser(
         help="Set number of nodes used.",
     )
     parser.add_argument(
+        "--tensorboard-log-dir",
+        type=str,
+        default=None,
+        help="Directory to save TensorBoard embedding projector logs"
+    )
+    parser.add_argument(
         "--output_dir",
         type=str,
         help="Output directory to write results and logs",
     )
+    parser.add_argument(
+        "--save_images",
+        action="store_true",
+        help="Flag to save raw images for TensorBoard Embedding Projector",
+    )   
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
         val_dataset_str="ImageNet:split=VAL",
         nb_knn=[10, 20, 100, 200],
         temperature=0.07,
-        batch_size=512,
+        batch_size=256,
         n_per_class_list=[-1],
         n_tries=1,
     )
     return parser
-
 
 class KnnModule(torch.nn.Module):
     """
@@ -316,12 +332,14 @@ class ModuleDictWithForward(torch.nn.ModuleDict):
 def plotting(features, labels, step=0):
     features = features.cpu()
     ipca = IncrementalPCAWrapper(num_components=2, batch_size=1024)  # Adjust batch size if needed
-    reduced_features = ipca.fit_transform(features)
+    ipca.fit(features)
+    reduced_features = ipca.transform(features)
+        
 
     plt.figure(figsize=(10, 8))
     scatter = plt.scatter(
-        reduced_features[:, 0].numpy(),
-        reduced_features[:, 1].numpy(),
+        reduced_features[:, 0].cpu().numpy(),
+        reduced_features[:, 1].cpu().numpy(),
         c=labels.cpu().numpy(),
         cmap="tab10",  
         alpha=0.7,
@@ -349,6 +367,8 @@ def eval_knn(
     gather_on_cpu,
     n_per_class_list=[-1],
     n_tries=1,
+    tensorboard_log_dir=None,
+    save_images=False,
 ):
     model = ModelWithNormalize(model)
 
@@ -360,8 +380,123 @@ def eval_knn(
         num_workers,
         gather_on_cpu=gather_on_cpu,
     )
+
+
+    if tensorboard_log_dir is not None:
+        wandb_run_name = wandb.run.name if wandb.run else "default_run"
+        wandb_log_dir = os.path.join(tensorboard_log_dir, wandb_run_name)
+        embeddings_dir = os.path.join(wandb_log_dir, 'embeddings')
+        os.makedirs(embeddings_dir, exist_ok=True)
+
+        metadata_path = os.path.join(embeddings_dir, 'metadata.tsv')
+        unique_labels = np.unique(train_labels.cpu().numpy())
+        with open(metadata_path, 'w') as f:
+            for label in unique_labels:
+                f.write(f"{label}\n")
+
+        embedding_tensor = torch.tensor(train_features.cpu().numpy())
+        config = projector.ProjectorConfig()
+        embedding = config.embeddings.add()
+        embedding.tensor_name = 'embeddings'
+        embedding.metadata_path = 'metadata.tsv'
+
+        torch.save({'embeddings': embedding_tensor}, embeddings_dir + '/embeddings.pt')
+
+        
+        max_sprite_images = 256
+
+        sprite_images = []
+        sprite_labels = []
+        sprite_indices = []
+
+        class_counts = {}
+        for label in train_labels:
+            class_label = label.item()
+            class_counts[class_label] = class_counts.get(class_label, 0) + 1
+
+        # Calculate sampling probabilities to maintain original distribution
+        total_images = len(train_labels)
+        sampling_ratios = {}
+        for label, count in class_counts.items():
+            class_proportion = count / total_images
+            class_sprite_images = max(1, int(max_sprite_images * class_proportion))
+            sampling_ratios[label] = min(class_sprite_images, count)
+
+        for label, count in sampling_ratios.items():
+            label_indices = torch.where(train_labels == label)[0]
+            
+            if len(label_indices) > count:
+                sampled_indices = torch.randperm(len(label_indices))[:count]
+                label_indices = label_indices[sampled_indices]
+            
+            for idx in label_indices:
+                image_data = train_dataset.get_image_data(idx)
+                image = Image.open(io.BytesIO(image_data)).convert("RGB")
+                
+                target_size = (224, 224)
+                resized_image = image.resize(target_size, Image.LANCZOS)
+                
+                assert resized_image.size == target_size, "Image resizing failed!"
+                
+                tensor_image = ToTensor()(resized_image)
+                sprite_images.append(tensor_image)
+                sprite_labels.append(label)
+                sprite_indices.append(idx)
+
+        sprite_images = torch.stack(sprite_images)
+        sprite_labels = torch.tensor(sprite_labels)
+
+        images_dir = os.path.join(embeddings_dir, "images")
+        os.makedirs(images_dir, exist_ok=True)
+
+        # Save sprite images
+        image_paths = []
+        for i, img in enumerate(sprite_images):
+            pil_image = Image.fromarray((img.permute(1, 2, 0).numpy() * 255).astype(np.uint8))  # (H, W, C)
+            image_path = os.path.join(images_dir, f"image_{i}.png")
+            pil_image.save(image_path)
+            image_paths.append(image_path)
+
+        # Prepare embedding configuration
+        config = projector.ProjectorConfig()
+        embedding = config.embeddings.add()
+        embedding.tensor_name = 'embeddings'
+        embedding.metadata_path = 'metadata.tsv'
+        embedding.sprite.image_path = os.path.relpath(images_dir, embeddings_dir)
+        embedding.sprite.single_image_dim.extend([224, 224])
+
+
+        writer = SummaryWriter(log_dir=embeddings_dir)
+        selected_embedding_tensor = embedding_tensor[sprite_indices]
+
+        # Log embeddings to TensorBoard
+        writer = SummaryWriter(log_dir=embeddings_dir)
+        writer.add_embedding(
+            mat=selected_embedding_tensor,  # Use only embeddings for sprite images
+            label_img=sprite_images,
+            metadata=train_labels[sprite_indices].cpu().tolist(),  # Corresponding labels
+            global_step=0
+        )
+        writer.close()
+
+        print("embedding_tensor shape:", embedding_tensor.shape)
+        print("sprite_images shape:", sprite_images.shape)
+        print("sprite_indices:", len(sprite_indices))
+
+
+
+        # Optional: Save metadata for more detailed inspection
+        metadata_path = os.path.join(embeddings_dir, 'metadata.tsv')
+        with open(metadata_path, 'w') as f:
+            f.write("index\tlabel\tis_sprite\n")
+            
+            for i in range(len(train_labels)):
+                is_sprite = 1 if i in sprite_indices else 0
+                f.write(f"{i}\t{train_labels[i].item()}\t{is_sprite}\n")
+
+
     logger.info(f"Train features created, shape {train_features.shape}.")
-    plotting(train_features, train_labels)
+    #plotting(train_features, train_labels) #broken
 
     val_dataloader = make_data_loader(
         dataset=val_dataset,
@@ -460,6 +595,8 @@ def eval_knn_with_model(
     num_workers=5,
     n_per_class_list=[-1],
     n_tries=1,
+    tensorboard_log_dir=None,
+    save_images=False,
 ):
     transform = transform or make_classification_eval_transform()
 
@@ -487,6 +624,8 @@ def eval_knn_with_model(
             gather_on_cpu=gather_on_cpu,
             n_per_class_list=n_per_class_list,
             n_tries=n_tries,
+            tensorboard_log_dir=tensorboard_log_dir,
+            save_images=save_images,
         )
 
     results_dict, confmats_dict = {}, {}
@@ -554,6 +693,8 @@ def main(args):
         num_workers=args.num_workers,
         n_per_class_list=args.n_per_class_list,
         n_tries=args.n_tries,
+        tensorboard_log_dir=args.tensorboard_log_dir,
+        save_images=args.save_images,
     )
     return 0
 
