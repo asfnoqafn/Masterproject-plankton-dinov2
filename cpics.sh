@@ -12,3 +12,10 @@ torchrun Masterproject-plankton-dinov2/dinov2/data/dataset_creation/save_cpics_t
  --dataset_path="/home/hk-project-p0021769/hgf_grc7525/data/with_labels/datasciencebowl/" \
  --lmdb_dir_name="/home/hk-project-p0021769/hgf_grc7525/data/lmdb_without_labels/datasciencebowl/" \
  --min_size="0" --extension=".jpg" --image_folder="test"
+
+
+
+python3 dinov2/data/dataset_creation/convert.py\
+ --dataset_path="/home/hk-project-p0021769/hgf_auh3910/own_data/ISIISNet/" \
+ --lmdb_path="/home/hk-project-p0021769/hgf_auh3910/own_data/ISIISNet_lmdb/" \
+ --min_size="0" --extension=".jpg" --image_folder="imgs"

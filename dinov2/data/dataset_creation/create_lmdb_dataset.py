@@ -1,17 +1,28 @@
 import json
 import os
 import sys
+import argparse
+import shutil
+import lmdb
+import uuid
+import imageio.v3 as iio
+import numpy as np
 from enum import Enum
 from pathlib import Path
 from typing import Callable
-
-import imageio.v3 as iio
-import lmdb
-import numpy as np
 from tqdm import tqdm
 
 MAP_SIZE_IMG = int(1e12)  # 1TB
 MAP_SIZE_META = int(1e8)  # 100MB
+
+IMAGE_SUFFIXES = (
+    ".jpg",
+    ".JPG",
+    ".jpeg",
+    ".JPEG",
+    ".png",
+    ".PNG",
+)
 
 Image_Transformation = Callable[[np.ndarray], np.ndarray]
 
@@ -60,17 +71,33 @@ def _create_lmdb(
         Transaction: The transaction for interacting with the lmdb. (changes need to be committed)
     """
 
-    lmdb_path = os.path.join(
-        dataset_lmdb_dir,
-        f"{name}",
-    )
+    lmdb_path = str(dataset_lmdb_dir / f"{name}")
     os.makedirs(lmdb_path, exist_ok=True)
     env = lmdb.open(lmdb_path, map_size=map_size)
     txn = env.begin(write=True)
     return env, txn
 
 
-def _write_databases(unlabeled_images_lmdb, labeled_images_lmdb, labels_lmdb, metadata_lmdb, data, dataset_path: Path, extra_transformations: list[Image_Transformation] = []):
+def _delete_lmdb(dataset_lmdb_dir: Path):
+    lmdb_path = str(dataset_lmdb_dir)
+    shutil.rmtree(lmdb_path)
+
+
+def get_image_dimensions(img_path):
+    img = iio.imread(img_path, pilmode='RGB')
+    return img.shape[:2] # Returns (height, width)
+
+
+def _write_databases(
+    unlabeled_images_lmdb,
+    labeled_images_lmdb,
+    labels_lmdb,
+    metadata_lmdb,
+    data,
+    min_size: int = 0,
+    extra_transformations: list[Image_Transformation] = [],
+    extension: str = '.png'
+):
     """
     Writes all three databases (images, labels, metadata) simulataniously
     Parameters:
@@ -85,12 +112,21 @@ def _write_databases(unlabeled_images_lmdb, labeled_images_lmdb, labels_lmdb, me
     env_labels, txn_labels = labels_lmdb
     env_metadata, txn_metadata = metadata_lmdb
 
+    if not extension.startswith('.'):
+        extension = '.' + extension
 
     number_of_filtered_images = 0
     for image_path, label, metadata in tqdm(data):
-        rel_path = os.path.relpath(image_path, dataset_path.as_posix())
-        img_key = rel_path.replace("/", "_")
-        img_key_bytes = img_key.encode("utf-8")
+        img_key_bytes = uuid.uuid4().bytes
+
+        height, width = get_image_dimensions(image_path)
+
+        if height < min_size and width < min_size:
+            continue
+
+        # disallow one dimensional images
+        if height < 2 or width < 2:
+            continue
 
         try:
             uint8_image = _load_image(image_path, extra_transformations=extra_transformations)
@@ -98,7 +134,7 @@ def _write_databases(unlabeled_images_lmdb, labeled_images_lmdb, labels_lmdb, me
             print(f"Error loading image {image_path}: {e}. Skipping...", file=sys.stderr)
             number_of_filtered_images += 1
             continue
-        image_jpg_encoded = iio.imwrite("<bytes>", uint8_image, extension=".png")
+        image_jpg_encoded = iio.imwrite("<bytes>", uint8_image, extension=extension)
 
         if label is not None:
             txn_labeled_images.put(img_key_bytes, image_jpg_encoded)
@@ -118,16 +154,30 @@ def _write_databases(unlabeled_images_lmdb, labeled_images_lmdb, labels_lmdb, me
     txn_labels.commit()
     txn_metadata.commit()
 
-    env_unlabeled_images.close()
-    env_labeled_images.close()
-    env_labels.close() 
-    env_metadata.close()
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--dataset_path", type=str, help="""Name of dataset to process.""",
+    )
+    parser.add_argument(
+        "--lmdb_path", type=str, help="Output lmdb directory"
+    )
+    parser.add_argument(
+        "--extension", type=str, help="Image extension for saving inside lmdb", default="png"
+    )
+    parser.add_argument(
+        "--min_size", type=int, help="Minimum image size (width and height)", default=0
+    )
+    parser.add_argument(
+        "--image_folder", type=str, help="Folder in the dataset that contains the label folders with the images", default='imgs'
+    )
+
+    return parser.parse_args()
 
 
 def build_databases(
     data: list,
-    base_lmdb_directory: Path,
-    dataset_path: Path, # used for getting relative path
     map_size_img: int = MAP_SIZE_IMG,
     map_size_meta: int = MAP_SIZE_META,
     extra_transformations: list[Image_Transformation] = [],
@@ -139,6 +189,8 @@ def build_databases(
         base_lmdb_directory (Path): The directory to store the lmdb files in
         map_size (int): The memory allocated for lmdb creation
     """
+
+    args = get_args()
 
     number_of_images = len(data)
     number_of_images_with_labels = sum(1 for item in data if item[1] != None)
@@ -152,26 +204,52 @@ def build_databases(
     print(f'{number_of_images_without_labels} <- number of images without labels')
 
     unlabeled_images_lmdb = _create_lmdb(
-        base_lmdb_directory,
-        name=f'unlabled_{_DataType.IMAGES.value}_{number_of_images_without_labels}',
+        Path(args.lmdb_path),
+        name=f'unlabled_{_DataType.IMAGES.value}_{number_of_images_without_labels}imgs',
         map_size=map_size_img,
     )
     labeled_images_lmdb = _create_lmdb(
-        base_lmdb_directory,
-        name=f'labled_{_DataType.IMAGES.value}_{number_of_images_with_labels}',
+        Path(args.lmdb_path),
+        name=f'labled_{_DataType.IMAGES.value}_{number_of_images_with_labels}imgs',
         map_size=map_size_img,
     )
     labels_lmdb = _create_lmdb(
-        base_lmdb_directory,
-        name=f'{_DataType.LABELS.value}_{number_of_images_with_labels}',
+        Path(args.lmdb_path),
+        name=f'{_DataType.LABELS.value}_{number_of_images_with_labels}imgs',
         map_size=map_size_meta,
     )
     metadata_lmdb = _create_lmdb(
-        base_lmdb_directory,
-        name=f'{_DataType.METADATA.value}_{number_of_images_with_metadata}',
+        Path(args.lmdb_path),
+        name=f'{_DataType.METADATA.value}_{number_of_images_with_metadata}imgs',
         map_size=map_size_meta,
     )
 
-    _write_databases(unlabeled_images_lmdb, labeled_images_lmdb, labels_lmdb, metadata_lmdb, data, dataset_path=dataset_path, extra_transformations=extra_transformations)
+    _write_databases(
+        unlabeled_images_lmdb,
+        labeled_images_lmdb,
+        labels_lmdb,
+        metadata_lmdb,
+        data,
+        min_size=args.min_size,
+        extra_transformations=extra_transformations,
+        extension=args.extension
+    )
     
-    print(f"FINISHED DATASET SAVED AT: {base_lmdb_directory}")
+    print('removing empty datasets')
+
+    if number_of_images_without_labels == 0:
+        _delete_lmdb(Path(unlabeled_images_lmdb[0].path()))
+    
+    if number_of_images_with_labels == 0:
+        _delete_lmdb(Path(labeled_images_lmdb[0].path()))
+        _delete_lmdb(Path(labels_lmdb[0].path()))
+    
+    if number_of_images_with_metadata == 0:
+        _delete_lmdb(Path(metadata_lmdb[0].path()))
+
+    unlabeled_images_lmdb[0].close()
+    labeled_images_lmdb[0].close()
+    labels_lmdb[0].close() 
+    metadata_lmdb[0].close()
+    
+    print(f"FINISHED DATASET SAVED AT: {args.lmdb_path}")
