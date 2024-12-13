@@ -15,15 +15,6 @@ from tqdm import tqdm
 MAP_SIZE_IMG = int(1e12)  # 1TB
 MAP_SIZE_META = int(1e8)  # 100MB
 
-IMAGE_SUFFIXES = (
-    ".jpg",
-    ".JPG",
-    ".jpeg",
-    ".JPEG",
-    ".png",
-    ".PNG",
-)
-
 Image_Transformation = Callable[[np.ndarray], np.ndarray]
 
 class _DataType(Enum):
@@ -158,9 +149,6 @@ def _write_databases(
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--dataset_path", type=str, help="""Name of dataset to process.""",
-    )
-    parser.add_argument(
         "--lmdb_path", type=str, help="Output lmdb directory"
     )
     parser.add_argument(
@@ -169,11 +157,9 @@ def get_args():
     parser.add_argument(
         "--min_size", type=int, help="Minimum image size (width and height)", default=0
     )
-    parser.add_argument(
-        "--image_folder", type=str, help="Folder in the dataset that contains the label folders with the images", default='imgs'
-    )
 
-    return parser.parse_args()
+    args, _ = parser.parse_known_args()
+    return args
 
 
 def build_databases(
