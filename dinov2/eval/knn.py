@@ -92,7 +92,7 @@ def get_args_parser(
     parser.add_argument(
         "--num-workers",
         type=int,
-        default=4,
+        default=19,
         help="Number of workers in DataLoader.",
     )
     parser.add_argument(
@@ -118,12 +118,17 @@ def get_args_parser(
         default=1,
         help="Set number of nodes used.",
     )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        help="Output directory to write results and logs",
+    )
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
         val_dataset_str="ImageNet:split=VAL",
         nb_knn=[10, 20, 100, 200],
         temperature=0.07,
-        batch_size=256,
+        batch_size=512,
         n_per_class_list=[-1],
         n_tries=1,
     )
@@ -257,10 +262,14 @@ def create_module_dict(
     train_features,
     train_labels,
 ):
+    print(f"Shape of train_labels: {train_labels.shape}")
+    print(f"Shape of train_features: {train_features.shape}")
     modules = {}
     mapping = create_class_indices_mapping(train_labels)
+    #print("mapping", mapping)
     for npc in n_per_class_list:
         if npc < 0:  # Only one try needed when using the full data
+            #print("npc", npc)
             full_module = module(
                 train_features=train_features,
                 train_labels=train_labels,
@@ -363,6 +372,7 @@ def eval_knn(
                 **postprocessors,
                 **{(n_per_class, t, k): DictKeysModule([n_per_class, t, k]) for k in knn_try.nb_knn},
             }
+            print(f"Output from postprocessor: {postprocessors}")
             metrics = {
                 **metrics,
                 **{
@@ -499,7 +509,7 @@ def main(args):
     print("args.output_dir", args.output_dir)
     eval_knn_with_model(
         model=model,
-        output_dir=args.output_dir_ckpt,
+        output_dir=args.output_dir,
         train_dataset_str=args.train_dataset_str,
         val_dataset_str=args.val_dataset_str,
         nb_knn=args.nb_knn,

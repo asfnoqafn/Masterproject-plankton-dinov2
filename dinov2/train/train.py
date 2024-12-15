@@ -265,7 +265,6 @@ def do_train(cfg, model, resume=False):
     fp16_scaler = model.fp16_scaler  # for mixed precision training
 
     # setup optimizer
-
     optimizer = build_optimizer(cfg, model.get_params_groups())
     (
         lr_schedule,
@@ -331,9 +330,14 @@ def do_train(cfg, model, resume=False):
     if (
         cfg.crops.use_ch_patch_embed
     ):  # use normal num tokens for mask, and multiply by in_chans for the rest
+        print(
+            f"Number of tokens {n_tokens} * {model.student.backbone.in_chans} = {n_tokens * model.student.backbone.in_chans}"
+        )
         n_tokens *= model.student.backbone.in_chans
-    print(f"Number of tokens {n_tokens}")
-
+    else:
+        print(
+            f"Number of tokens {n_tokens}, in_chans {model.student.backbone.in_chans}"
+        )
     # setup data loader
     dataset = make_dataset(
         dataset_str=cfg.train.dataset_path,
@@ -351,7 +355,7 @@ def do_train(cfg, model, resume=False):
         "shuffle": True,
         "seed": start_iter,  # TODO: Fix this -- cfg.train.seed
         "sampler_type": sampler_type,
-        "sampler_advance": 0,  # TODO(qas): fix this -- start_iter * cfg.train.batch_size_per_gpu,
+        "sampler_advance": 0,  # TODO(qas): Fix this -- start_iter * cfg.train.batch_size_per_gpu,
         "drop_last": True,
     }
     data_loader = make_data_loader(collate_fn=collate_fn_cpu, **dl_kwargs)
@@ -409,7 +413,21 @@ def do_train(cfg, model, resume=False):
 
             data = utils.data_to_cuda(data)
 
-        current_batch_size = data["collated_global_crops"].shape[0] / 2
+        if cfg.crops.use_variable_channels:
+            nb_diff_ch_nbs = len(
+                [k for k in data.keys() if "collated_global_crops" in k]
+            )
+            current_batch_size = (
+                sum(
+                    [
+                        data["collated_global_crops" + str(i)].shape[0]
+                        for i in range(nb_diff_ch_nbs)
+                    ]
+                )
+                / 2
+            )
+        else:
+            current_batch_size = data["collated_global_crops"].shape[0] / 2
         tot_nb_seen_samples += (
             current_batch_size * distributed.get_global_size()
         )  # to get effective batch size
@@ -426,7 +444,46 @@ def do_train(cfg, model, resume=False):
 
         # compute losses
         optimizer.zero_grad(set_to_none=True)
-        loss_dict = model.forward_backward(data, teacher_temp=teacher_temp)
+        # TODO iter for each el if data['collated_global_crops'] is a list in forward backward
+        if not cfg.crops.use_variable_channels:
+            loss_accumulator, loss_dict = model.forward_teacher_student(
+                data, teacher_temp=teacher_temp
+            )
+        else:
+            loss_dict = dict()
+            loss_accumulator = 0
+            for i in range(nb_diff_ch_nbs):
+                data["collated_global_crops"] = data["collated_global_crops" + str(i)]
+                data["collated_local_crops"] = data["collated_local_crops" + str(i)]
+                data["collated_masks"] = data["collated_masks" + str(i)]
+                data["mask_indices_list"] = data["mask_indices_list" + str(i)]
+                data["masks_weight"] = data["masks_weight" + str(i)]
+                data["upperbound"] = data["upperbound" + str(i)]
+                data["n_masked_patches"] = data["n_masked_patches" + str(i)]
+
+                partial_loss_accumulator, partial_loss_dict = (
+                    model.forward_teacher_student(
+                        data,
+                        teacher_temp=teacher_temp,
+                    )
+                )
+                loss_accumulator += partial_loss_accumulator
+                if i == 0:
+                    loss_dict = partial_loss_dict
+                else:
+                    loss_dict = {
+                        k: v1 + v2
+                        for k, v1, v2 in zip(
+                            partial_loss_dict.keys(),
+                            loss_dict.values(),
+                            partial_loss_dict.values(),
+                        )
+                    }
+            loss_dict = {k: v / nb_diff_ch_nbs for k, v in loss_dict.items()}
+
+        # torch.distributed.all_reduce(loss_accumulator)
+        # Think it should be here, but cause hang
+        model.backward(loss_accumulator)
 
         # clip gradients
         if fp16_scaler is not None:

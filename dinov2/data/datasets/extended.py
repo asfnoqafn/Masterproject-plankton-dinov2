@@ -27,7 +27,6 @@ class ExtendedVisionDataset(VisionDataset):
         raise NotImplementedError
 
     def __getitem__(self, index: int) -> Union[Tuple[Any, Any], torch.Tensor, Image.Image]:
-        num_channels = 3  # base number
         img_bytes = self.get_image_data(index)
         if isinstance(img_bytes, list):  # image
             image = [torch.from_numpy(iio.imread(ch_bytes, index=None)) for ch_bytes in img_bytes]
@@ -37,12 +36,7 @@ class ExtendedVisionDataset(VisionDataset):
             try:
                 # have to copy bc stream not writeable
                 image = torch.frombuffer(np.copy(img_bytes), dtype=torch.uint8)
-
-                if "plankton" in str(self.root):
-                    image = decode_image(image, ImageReadMode.RGB)
-                else:
-                    image_size = int(np.sqrt(image.shape[0] / num_channels))
-                    image = image.reshape(num_channels, image_size, image_size)
+                image = decode_image(image, ImageReadMode.RGB)
                 image = (image / 255.0).to(torch.float32)
             except Exception as e:
                 print(e)
