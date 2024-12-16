@@ -188,6 +188,16 @@ def get_args_parser(
         type=str,
         help="Path to a file containing a mapping to adjust classifier outputs",
     )
+    parser.add_argument(
+        "--log-missclassified-images",
+        type=bool,
+        help="This flag enables logging of misclassified images to WandB",
+    )
+    parser.add_argument(
+        "--log-confusion-matrix",
+        type=bool,
+        help="This flag enables logging of the confusion matrix to WandB",
+    )
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
         val_dataset_str="ImageNet:split=VAL",
@@ -298,29 +308,6 @@ class LinearPostprocessor(nn.Module):
 def scale_lr(learning_rate, batch_size):
     return learning_rate * (batch_size * distributed.get_global_size()) / 256.0
 
-def log_images_to_wandb(missclassified_images: List[dict]):
-    """
-    Log images to WandB with predicted and original labels.
-    
-    Args:
-        images (torch.Tensor): Batch of images (N, C, H, W).
-        predictions (list): Predicted labels for the batch.
-        labels (list): Ground-truth labels for the batch.
-        num_images (int): Number of images to log.
-    """
-    images_to_log = []
-    for image in missclassified_images:
-        img = image["image"].cpu().permute(1, 2, 0).numpy()  # Convert to HWC format
-        pred_label = image["predicted_label"]
-        true_label = image["true_label"]
-
-        # Create WandB image with caption
-        images_to_log.append(
-            wandb.Image(img, caption=f"Pred: {pred_label}, True: {true_label}")
-        )
-
-    # Log to WandB
-    wandb.log({"predictions": images_to_log})
 
 def setup_linear_classifier(
     sample_output,
@@ -333,7 +320,6 @@ def setup_linear_classifier(
         use_n_blocks=n_last_blocks,
         use_avgpool=avg_pool,
     ).shape[1]
-    print("Output Dimension: ", out_dim)
     linear_classifier = LinearClassifier(
         out_dim,
         use_n_blocks=n_last_blocks,
@@ -374,14 +360,13 @@ def evaluate_linear_classifier(
     iteration,
     prefixstring="",
     class_mapping=None,
-    num_images_to_log=5,  # Number of misclassified images to log
 ):
     logger.info("Running validation...")
 
     num_classes = len(class_mapping) if class_mapping is not None else training_num_classes
-    class_mapping = np.array(class_mapping[:, 1], dtype=int) if class_mapping is not None else None
+    num_class_mapping = np.array(class_mapping[:, 1], dtype=int) if class_mapping is not None else None
     metric = build_metric(metric_type, num_classes=num_classes)
-    postprocessor = LinearPostprocessor(linear_classifier, class_mapping)
+    postprocessor = LinearPostprocessor(linear_classifier, num_class_mapping)
     metrics = metric.clone()
 
     _, results_dict_temp = evaluate(
@@ -399,30 +384,6 @@ def evaluate_linear_classifier(
     # Log metrics to WandB
     wandb.log({f"{prefixstring}/{k}": v for k, v in metrics_to_log.items()})
 
-    misclassified_images = []
-    all_preds = []
-    all_labels = []
-
-    for data, labels in data_loader:
-        data = data.cuda(non_blocking=True)
-        labels = labels.cuda(non_blocking=True)
-
-        # Collect predictions and true labels
-        all_labels.extend(labels.cpu().numpy())
-        features = feature_model(data)
-        outputs = linear_classifier(features)
-        preds = torch.argmax(outputs, dim=1)
-        all_preds.extend(preds.cpu().numpy())
-
-        # Get misclassified images
-        misclassified_images.extend(
-            logging_helpers.get_missclassified_images_for_logging(data, labels, outputs, num_images_to_log)
-        )
-
-    # Log misclassified images to WandB
-    log_images_to_wandb(misclassified_images)
-
-    logging_helpers.log_confusion_matrix_to_wandb(all_labels, all_preds, class_mapping)
     
     # Save metrics to file
     if distributed.is_main_process():
@@ -457,6 +418,9 @@ def eval_linear(
     resume=True,
     classifier_fpath=None,
     val_class_mapping=None,
+    num_images_to_log=20,  # Number of misclassified images to log
+    log_missclassified_images=False,
+    log_confusion_matrix=False,
 ):
     checkpointer = Checkpointer(
         linear_classifier,
@@ -529,6 +493,34 @@ def eval_linear(
         iteration=iteration,
         class_mapping=val_class_mapping,
     )
+
+    # added part for logging misclassified images and confusion matrix
+    misclassified_images = []
+    all_preds = []
+    all_labels = []
+
+    for data, labels in val_data_loader:
+        data = data.cuda(non_blocking=True)
+        labels = labels.cuda(non_blocking=True)
+
+        # Collect predictions and true labels
+        all_labels.extend(labels.cpu().numpy())
+        features = feature_model(data)
+        outputs = linear_classifier(features)
+        preds = torch.argmax(outputs, dim=1)
+        all_preds.extend(preds.cpu().numpy())
+
+        # Get misclassified images
+        misclassified_images.extend(
+            logging_helpers.get_missclassified_images_for_logging(data, labels, outputs, num_images_to_log)
+        )
+
+    # Log misclassified images to WandB
+    if(log_missclassified_images):
+        logging_helpers.log_images_to_wandb(misclassified_images, class_map=val_class_mapping)
+
+    if(log_confusion_matrix):
+        logging_helpers.log_confusion_matrix_to_wandb(all_labels, all_preds, val_class_mapping)
 
     return val_results_dict, feature_model, linear_classifier, iteration
 
@@ -619,6 +611,8 @@ def run_eval_linear(
     test_class_mapping_fpaths=[None],
     val_metric_type=MetricType.MEAN_ACCURACY,
     test_metric_types=None,
+    log_missclassified_images=False,
+    log_confusion_matrix=False,
 ):
     seed = 0
     test_dataset_strs = test_dataset_strs or [val_dataset_str]
@@ -709,6 +703,9 @@ def run_eval_linear(
         training_num_classes=training_num_classes,
         resume=resume,
         val_class_mapping=val_class_mapping,
+        num_images_to_log=50,
+        log_missclassified_images=log_missclassified_images,
+        log_confusion_matrix=log_confusion_matrix,
     )
 
     # Test on additional datasets
@@ -760,6 +757,8 @@ def main(args):
         test_metric_types=args.test_metric_types,
         val_class_mapping_fpath=args.val_class_mapping_fpath,
         test_class_mapping_fpaths=args.test_class_mapping_fpaths,
+        log_missclassified_images=args.log_missclassified_images,
+        log_confusion_matrix=args.log_confusion_matrix,
     )
     return 0
 
