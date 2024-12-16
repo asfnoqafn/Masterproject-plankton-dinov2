@@ -66,7 +66,10 @@ def _parse_dataset_str(dataset_str: str):
             "do_short_run",
         )
         kwargs[key] = value
-
+        print("key:")
+        print(key)
+        print("value:")
+        print(value)
     if "split" in kwargs:
         kwargs["split"] = ImageNet.Split[kwargs["split"]]
     if name == "ImageNet":
@@ -112,7 +115,7 @@ def make_dataset(
         The created dataset.
     """
     logger.info(f'using dataset: "{dataset_str}"')
-
+    print(f'using dataset: "{dataset_str}"')
     class_, kwargs = _parse_dataset_str(dataset_str)
     print("Dataset kwargs", kwargs)
     dataset = class_(

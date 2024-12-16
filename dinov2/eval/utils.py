@@ -206,12 +206,13 @@ class ModelWithIntermediateLayers(nn.Module):
 def evaluate(
     model: nn.Module,
     data_loader,
-    postprocessors: Dict[str, nn.Module],
+    postprocessor: nn.Module,
     metrics: Dict[str, MetricCollection],
     device: torch.device,
     criterion: Optional[nn.Module] = None,
 ):
     model.eval()
+
     if criterion is not None:
         criterion.eval()
 
@@ -222,18 +223,26 @@ def evaluate(
         delimiter="  ",
         verbose=distributed.is_main_process(),
     )
+    logger.info(f"Metrics inputs: {metrics.keys()}")
+    for k, metric in metrics.items():
+        logger.info(f"{k}: {metric}")
     header = "Test:"
+    print("header")
+
 
     for samples, targets, *_ in metric_logger.log_every(data_loader, 10, header):
+        print("samples",samples.shape)
+ 
         # outputs is tuple of tuple 4 x (torch.Size([B, 2B, 384]), torch.Size([B, 384]))
         outputs = model(samples.to(device))
         targets = targets.to(device)
+        print("target",targets.shape)
         if criterion is not None:
             loss = criterion(outputs, targets)
             metric_logger.update(loss=loss.item())
 
         for k, metric in metrics.items():
-            metric_inputs = postprocessors[k](outputs, targets)
+            metric_inputs = postprocessor(outputs, targets)
             metric.update(**metric_inputs)
 
     metric_logger.synchronize_between_processes()
@@ -292,6 +301,7 @@ def extract_features_with_dataloader(model, data_loader, sample_count, gather_on
         samples = samples.cuda(non_blocking=True)
         labels_rank = labels_rank.cuda(non_blocking=True)
         index = index.cuda(non_blocking=True)
+        #print("cuda index", index)
         features_rank = model(samples).float()
 
         # init storage feature matrix

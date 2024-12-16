@@ -8,11 +8,16 @@ import json
 import logging
 import time
 from collections import defaultdict, deque
+from typing import List
 
 import torch
-
+import wandb
 import dinov2.distributed as distributed
-
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
+import numpy as np
 logger = logging.getLogger("dinov2")
 
 
@@ -224,3 +229,59 @@ class SmoothedValue:
             max=self.max,
             value=self.value,
         )
+
+
+def log_images_to_wandb(missclassified_images: List[dict], class_map=None):
+    """
+    Log images to WandB with predicted and original labels.
+    
+    Args:
+        missclassified_images (list): List of dictionaries containing image, predicted label, and true label.
+        class_map (dict): Dictionary mapping class indices to class names.
+    """
+    images_to_log = []
+    for image in missclassified_images:
+        print(f"Image size: {image['image'].shape}")
+        img = image["image"].cpu().permute(1, 2, 0).numpy()  # Convert to HWC format
+        pred_label = class_map[image["predicted_label"]] if class_map is not None else image["predicted_label"]
+        true_label = class_map[image["true_label"]] if class_map is not None else image["true_label"]
+
+        # Create WandB image with caption
+        images_to_log.append(
+            wandb.Image(img, caption=f"Pred: {pred_label}, True: {true_label}")
+        )
+
+    # Log to WandB
+    wandb.log({"predictions": images_to_log})
+
+def get_missclassified_images_for_logging(data, labels, outputs, num_images_to_log=5):
+    misclassified_images = []
+    preds = torch.argmax(outputs, dim=1)
+    # Find misclassified images and store them
+    misclassified_indices = (preds != labels).nonzero(as_tuple=True)[0]
+    for idx in misclassified_indices[:num_images_to_log]:
+        misclassified_images.append({
+            "image": data[idx].cpu(),
+            "true_label": labels[idx].item(),
+            "predicted_label": preds[idx].item(),
+        })
+    return misclassified_images
+
+def log_confusion_matrix_to_wandb(labels, outputs, class_labels):
+    # Compute confusion matrix
+    cm = confusion_matrix(labels, outputs, labels=np.arange(len(class_labels)))
+
+    # Create a heatmap with seaborn
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=False, fmt="d", cmap="Blues", xticklabels=class_labels, yticklabels=class_labels, norm=LogNorm(), cbar_kws={'shrink': 0.75} )
+    plt.xticks(rotation=90, fontsize=6)  # Smaller, rotated x-axis labels
+    plt.yticks(rotation=0, fontsize=6)   # Smaller y-axis labels
+    plt.xlabel("Predicted", fontsize=8)
+    plt.ylabel("Actual", fontsize=8)
+    plt.title("Confusion Matrix", fontsize=10)
+
+    # Save the plot as an image and log it to WandB
+    plt.tight_layout()
+    plt.savefig("confusion_matrix.png", dpi=300)
+    wandb.log({"confusion_matrix": wandb.Image("confusion_matrix.png")})
+    plt.close()
