@@ -1,12 +1,12 @@
 #!/bin/sh
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:4
 #SBATCH --nodes=1
 #SBATCH --cpus-per-gpu=19
 #SBATCH -e /home/hk-project-p0021769/hgf_rth0695/output/slurm_output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_rth0695/output/slurm_output/log_%j.out
 #SBATCH --time 10:00:00
 #SBATCH --partition=accelerated
-N_GPUS=1
+N_GPUS=4
 N_CPUS=19
 echo $SLURM_JOB_ID
 

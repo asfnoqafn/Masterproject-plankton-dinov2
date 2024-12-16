@@ -1,7 +1,6 @@
 train:
   batch_size_per_gpu: 256
-  dataset_path: LMDBDataset:split=ALL:root=/fast/AG_Kainmueller/plankton/data/WHOI/preprocessed/preprocessed_lmdb/:extra=*
-  output_dir: '/home/hk-project-p0021769/rth_0695/output/'
+  output_dir: '/home/hk-project-p0021769/hgf_rth0695/output/'
   saveckp_freq: 10
   seed: 0
   num_workers: 8

@@ -530,7 +530,6 @@ def make_eval_data_loader(test_dataset_str, batch_size, num_workers, metric_type
     test_dataset = make_dataset(
         dataset_str=test_dataset_str,
         transform=make_classification_eval_transform(),
-        with_targets=True
     )
     test_data_loader = make_data_loader(
         dataset=test_dataset,
@@ -624,7 +623,6 @@ def run_eval_linear(
     train_dataset = make_dataset(
         dataset_str=train_dataset_str,
         transform=train_transform,
-        with_targets=True
     )
     training_num_classes = len(torch.unique(torch.Tensor(train_dataset.get_targets().astype(int))))
     sampler_type = SamplerType.SHARDED_INFINITE
@@ -676,7 +674,6 @@ def run_eval_linear(
         persistent_workers=True,
     )
     val_data_loader = make_eval_data_loader(val_dataset_str, batch_size, num_workers, val_metric_type)
-
 
     if(val_class_mapping_fpath.endswith(".json")):
         # Class mapping
