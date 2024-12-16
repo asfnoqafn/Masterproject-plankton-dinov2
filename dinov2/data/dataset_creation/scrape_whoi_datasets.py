@@ -49,7 +49,7 @@ def download_zip(driver, soup, output_path):
 def click_next(driver, bin_name):
     try:
         button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.ID, "next-bin")))
+            EC.element_to_be_clickable((By.ID, "previous-bin")))
         driver.execute_script("arguments[0].scrollIntoView(true);", button)
         driver.execute_script("arguments[0].click();", button)
         return True
