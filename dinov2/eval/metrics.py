@@ -82,64 +82,65 @@ def build_topk_accuracy_metric(
             top_k=k,
             num_classes=int(num_classes),
             average=average_type.value,
-        )
+        ).to(torch.device("cuda:0"))
         for k in ks
     }
+    print("device", torch.cuda.current_device())
 
     metrics["precision_ma"] = Precision(
         task="multiclass",
         average="macro",
         num_classes=num_classes,
         top_k=1,
-    )
+    ).to(torch.cuda.current_device())
     metrics["precision_mi"] = Precision(
         task="multiclass",
         average="micro",
         num_classes=num_classes,
         top_k=1,
-    )
+    ).to(torch.cuda.current_device())
     metrics["recall_ma"] = Recall(
         task="multiclass",
         average="macro",
         num_classes=num_classes,
         top_k=1,
-    )
+    ).to(torch.cuda.current_device())
     metrics["recall_mi"] = Recall(
         task="multiclass",
         average="micro",
         num_classes=num_classes,
         top_k=1,
-    )
+    ).to(torch.cuda.current_device())
     metrics["auroc"] = AUROC(
         task="multiclass",
         average="macro",
         num_classes=num_classes,
-    )
+    ).to(torch.cuda.current_device())
     metrics["ap"] = AveragePrecision(
         task="multiclass",
         average="macro",
         num_classes=num_classes,
-    )
+    ).to(torch.cuda.current_device())
     metrics["f1_ma"] = F1Score(
         task="multiclass",
         average="macro",
         num_classes=num_classes,
         top_k=1,
-    )
+    ).to(torch.cuda.current_device())
     metrics["f1_mi"] = F1Score(
         task="multiclass",
         average="micro",
         num_classes=num_classes,
         top_k=1,
-    )
-    metrics["confmat"] = ConfusionMatrix(task="multiclass", num_classes=num_classes)
+    ).to(torch.cuda.current_device())
+    #metrics["confmat"] = ConfusionMatrix(task="multiclass", num_classes=num_classes).to(torch.cuda.current_device())
 
-    return MetricCollection(metrics)
+    return MetricCollection(metrics).to(torch.cuda.current_device())
 
 
 def build_topk_imagenet_real_accuracy_metric(num_classes: int, ks: tuple = (1, 5)):
     metrics: Dict[str, Metric] = {f"top-{k}": ImageNetReaLAccuracy(top_k=k, num_classes=int(num_classes)) for k in ks}
-    return MetricCollection(metrics)
+    return MetricCollection(metrics).to(torch.cuda.current_device())
 
 
 class ImageNetReaLAccuracy(Metric):
@@ -163,6 +164,8 @@ class ImageNetReaLAccuracy(Metric):
         # target [B, A]
         # preds_oh [B, D] with 0 and 1
         # select top K highest probabilities, use one hot representation
+        print("device", target.device)
+        print("device: preds", preds.device)
         preds_oh = select_topk(preds, self.top_k)
         # target_oh [B, D + 1] with 0 and 1
         target_oh = torch.zeros(
@@ -170,6 +173,7 @@ class ImageNetReaLAccuracy(Metric):
             device=target.device,
             dtype=torch.int32,
         )
+        
         target = target.long()
         # for undefined targets (-1) use a fake value `num_classes`
         target[target == -1] = self.num_classes

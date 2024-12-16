@@ -1,6 +1,5 @@
 import glob
 import os
-from enum import Enum
 from typing import Optional
 
 import lmdb
@@ -10,54 +9,30 @@ from dinov2.data.datasets import ImageNet
 
 _TargetLMDBDataset = int
 
-
-class _SplitLMDBDataset(Enum):
-    TRAIN = "train"
-    VAL = "val"
-    TEST = "test"  # NOTE: torchvision does not support the test split
-    ALL = "all"
-
-
 # TODO: Fix inheritance logic
 class LMDBDataset(ImageNet):
     Target = _TargetLMDBDataset
-    Split = _SplitLMDBDataset
     lmdb_handles = {}
 
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
         lmdb_txn = self._lmdb_txns[entry["lmdb_imgs_file"]]
-        #print(entry["index"])
         image_data = lmdb_txn.get(entry["index"]) # we dont need to encode since new script already saves encoded img
-        #print("image_data", image_data.dtype)
         return image_data
 
     def get_target(self, index: int) -> Optional[Target]:
-        if self.split in [
-            _SplitLMDBDataset.TEST,
-            _SplitLMDBDataset.ALL,
-        ]:
-            print("I shouldnt be here")
+        if not self.with_targets:
             return None
-        else:
-            entries = self._get_entries()
-            if True:
-                class_index = entries[index]["class_id"]
-                #print(class_index)
-                return int(class_index)
-            else:
-                return None
-
-    def get_class_ids(self) -> np.ndarray:
-        self._get_entries()
-        return self._class_ids
+        entries = self._get_entries()
+        class_index = entries[index].get("class_id")
+        return int(class_index) if class_index is not None else None
 
     @property
     def _entries_path(self) -> str:
         if self.root.endswith("TRAIN") or self.root.endswith("VAL"):  # if we have a single file
             return self.root + "_*"
         elif self._split.value.upper() == "ALL":
-            return self.root
+            return os.path.join(self.root, "**")
         else:
             return os.path.join(
                 self.root,
@@ -75,11 +50,15 @@ class LMDBDataset(ImageNet):
             self._load_extra(self._entries_path)
         assert self._entries is not None
         return self._entries
+    
+    def get_class_ids(self) -> np.ndarray:
+        self._get_entries()
+        return self._class_ids
 
     def _load_extra(self, extra_path: str):
         extra_full_path = self._get_extra_full_path(extra_path)
         print("extra_full_path", extra_full_path)
-        file_list = glob.glob(extra_full_path)
+        file_list = glob.glob(extra_full_path, recursive=True)
 
         file_list_labels = sorted([el for el in file_list if el.endswith("labels")])
         print("Datasets labels file list: ", file_list_labels)
@@ -95,12 +74,10 @@ class LMDBDataset(ImageNet):
             file_list_labels = file_list_labels[:1]
             file_list_imgs = file_list_imgs[:1]
 
-        if len(file_list_labels) > 0:
-            lists_to_iterate = zip(file_list_labels, file_list_imgs)
-        else:
-            lists_to_iterate = file_list_imgs
+        use_labels = len(file_list_labels) > 0 and self.with_targets
+        lists_to_iterate = zip(file_list_labels, file_list_imgs) if use_labels else file_list_imgs
         for iter_obj in lists_to_iterate:
-            if len(file_list_labels) > 0:
+            if use_labels:
                 lmdb_path_labels, lmdb_path_imgs = iter_obj
                 lmdb_env_labels = lmdb.open(
                     lmdb_path_labels,
@@ -132,36 +109,20 @@ class LMDBDataset(ImageNet):
             # save img tcxn from which to get labels later
             self._lmdb_txns[lmdb_path_imgs] = lmdb_txn_imgs
 
-            if len(file_list_labels) > 0:
+            if use_labels:
                 lmdb_cursor = lmdb_txn_labels.cursor()
             else:
                 lmdb_cursor = lmdb_txn_imgs.cursor()
             for key, value in lmdb_cursor:
                 entry = dict()
-                if len(file_list_labels) > 0:
-                    #print("value", value)
-                    #print("value decode", int.from_bytes(value, byteorder="little"))
+                if use_labels:
                     entry["class_id"] = int.from_bytes(value, byteorder="little")
-                    #print("class_id", entry["class_id"])
-                    entry["index"] = key
-                else:
-                    print("i shouldnt be here")
+                entry["index"] = key
                 entry["lmdb_imgs_file"] = lmdb_path_imgs
 
                 accumulated.append(entry)
                 global_idx += 1
-
-            #if self.do_short_run:
-            #    accumulated = [el for el in accumulated if el["class_id"] < 5]
-            # free up resources
             lmdb_cursor.close()
-            if lmdb_env_labels is not None:
-                lmdb_env_labels.close()
-
-        if self.with_targets:
-            class_ids = [el["class_id"] for el in accumulated]
-            print(f"#unique_class_ids: {self._split}, {len(set(class_ids))}")
-            self._class_ids = class_ids
 
         self._entries = accumulated
 

@@ -530,6 +530,7 @@ def make_eval_data_loader(test_dataset_str, batch_size, num_workers, metric_type
     test_dataset = make_dataset(
         dataset_str=test_dataset_str,
         transform=make_classification_eval_transform(),
+        with_targets=True
     )
     test_data_loader = make_data_loader(
         dataset=test_dataset,
@@ -620,7 +621,14 @@ def run_eval_linear(
     assert len(test_dataset_strs) == len(test_class_mapping_fpaths)
 
     train_transform = make_classification_train_transform()
-    train_dataset = make_dataset(dataset_str=train_dataset_str, transform=train_transform)
+    train_dataset = make_dataset(
+        dataset_str=train_dataset_str,
+        transform=train_transform,
+        with_targets=True
+    )
+    training_num_classes = len(torch.unique(torch.Tensor(train_dataset.get_targets().astype(int))))
+    sampler_type = SamplerType.SHARDED_INFINITE
+    # sampler_type = SamplerType.INFINITE
 
     # Determine number of classes
     targets = torch.tensor(train_dataset.get_targets(), dtype=torch.int64)

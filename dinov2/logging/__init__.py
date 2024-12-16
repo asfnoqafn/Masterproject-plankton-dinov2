@@ -11,7 +11,6 @@ from typing import Optional
 
 import dinov2.distributed as distributed
 import wandb
-
 from .helpers import MetricLogger, SmoothedValue
 
 
