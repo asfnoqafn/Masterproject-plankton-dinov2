@@ -143,6 +143,16 @@ def get_bin_data(csv_path, output_dir: str, max_bins: Optional[int] = None, star
         bins = bins[:max_bins]
     return bins
 
+def download_metadata_csv(dataset: str, api_path: str, output_dir: str):
+    url = f"{api_path}/api/export_metadata/{dataset}"
+    logging.info(f"Downloading metadata CSV from {url}")
+    response = requests.get(url, stream=True)
+    response.raise_for_status()
+    output_path = os.path.join(output_dir, f"{dataset}.csv")
+    with open(output_path, 'wb') as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+    return output_path
 
 def download_multiple_zips(bins, api_path, output_dir, max_workers=5):
     """
@@ -177,7 +187,8 @@ def download_multiple_zips(bins, api_path, output_dir, max_workers=5):
 
 def main(args):
     os.makedirs(args.output_dir, exist_ok=True)
-    bins = get_bin_data(args.csv_path, output_dir=args.output_dir, start_bin=args.start_bin, blacklisted_sample_types=args.blacklisted_sample_types.split(","), blacklisted_tags=args.blacklisted_tags.split(","), max_bins=args.max_bins)  # gets all bins not present in the folder
+    csv_path = args.csv_path if args.csv_path is not None else download_metadata_csv(args.dataset, args.api_path, args.output_dir)
+    bins = get_bin_data(csv_path=csv_path, output_dir=args.output_dir, start_bin=args.start_bin, blacklisted_sample_types=args.blacklisted_sample_types.split(","), blacklisted_tags=args.blacklisted_tags.split(","), max_bins=args.max_bins)  # gets all bins not present in the folder
 
     download_multiple_zips(bins=bins, api_path=args.api_path, output_dir=args.output_dir, max_workers=args.num_workers)
 
@@ -185,13 +196,17 @@ def main(args):
 def get_args_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--csv_path", type=str, help="Path to the CSV file containing the URLs.", default="/Users/Johann/masterproject/ifcb/mvco.csv"
-    )
-    parser.add_argument(
         "--output_dir", type=str, help="Path to the dataset we download the images to.", default="/Users/Johann/masterproject/ifcb_api"
     )
     parser.add_argument(
         "--api_path", type=str, help="Path to api to download from", default="https://ifcb-data.whoi.edu"
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--csv_path", type=str, help="Path to the CSV file containing the URLs."
+    )
+    group.add_argument(
+        "--dataset", type=str, help="Dataset to download the CSV file from.",  default="mvco"
     )
     parser.add_argument(
         "--num_workers", type=int, help="Number of workers to use for concurrent downloads.", default=4
