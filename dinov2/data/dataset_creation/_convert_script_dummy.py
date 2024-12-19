@@ -11,29 +11,26 @@ IMAGE_SUFFIXES = (
 )
 
 
-def get_args():
+def add_args(parser: argparse.ArgumentParser):
     """
-    Get all the additional arguments the script needs. The help won't be shown when running convert.py --help.
+    Add all the additional arguments the script needs.
     """
-    
-    parser = argparse.ArgumentParser()
+
     parser.add_argument("--unlabeled_folders", type=str, help='Comma separated list of folders that contain unlabeled data', default='')
     parser.add_argument("--image_folder", type=str, help="Folder in the dataset that contains the label folders with the images", default='imgs')
 
-    args, _ = parser.parse_known_args()
-    return args
 
-
-def collect_files(dataset_path: Path):
+def collect_files(dataset_path: Path, parser: argparse.ArgumentParser):
     """
     Collect all files in the dataset.
     Parameters:
         dataset_path (Path): The path to the dataset.
+        parser(ArgumentParser): A parser with all arguments in it
     Returns:
         list: A list of tuples (image_path: str, label: str, metadata_json: str).
     """
     
-    args = get_args()
+    args, _ = parser.parse_known_args()
 
     result = []
 

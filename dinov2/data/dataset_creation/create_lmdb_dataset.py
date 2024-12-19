@@ -80,10 +80,10 @@ def get_image_dimensions(img_path):
 
 
 def _write_databases(
-    unlabeled_images_lmdb,
-    labeled_images_lmdb,
-    labels_lmdb,
-    metadata_lmdb,
+    txn_unlabeled_images,
+    txn_labeled_images,
+    txn_labels,
+    txn_metadata,
     data,
     min_size: int = 0,
     extra_transformations: list[Image_Transformation] = [],
@@ -92,16 +92,12 @@ def _write_databases(
     """
     Writes all three databases (images, labels, metadata) simulataniously
     Parameters:
-        images_lmdb (tuple): Enironment and transaction of the image database
-        labels_lmdb (tuple): Enironment and transaction of the label database
-        metadata_lmdb (tuple): Enironment and transaction of the metadata database
+        txn_unlabeled_images (lmdb.Transaction): Transaction of the unlabeled image database
+        txn_labeled_images (lmdb.Transaction): Transaction of the image database
+        txn_labels (lmdb.Transaction): Transaction of the label database
+        txn_metadata (lmdb.Transaction): Transaction of the metadata database
         data (list): List of tuples of image path strings and label strings (or None) and metadata dicts (or None)
     """
-
-    env_unlabeled_images, txn_unlabeled_images = unlabeled_images_lmdb
-    env_labeled_images, txn_labeled_images = labeled_images_lmdb
-    env_labels, txn_labels = labels_lmdb
-    env_metadata, txn_metadata = metadata_lmdb
 
     if not extension.startswith('.'):
         extension = '.' + extension
@@ -146,24 +142,18 @@ def _write_databases(
     txn_metadata.commit()
 
 
-def get_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--lmdb_path", type=str, help="Output lmdb directory"
-    )
-    parser.add_argument(
-        "--extension", type=str, help="Image extension for saving inside lmdb", default="png"
-    )
-    parser.add_argument(
-        "--min_size", type=int, help="Minimum image size (width and height)", default=0
-    )
+def add_args(parser: argparse.ArgumentParser):
+    """
+    Add all the additional arguments the script needs.
+    """
 
-    args, _ = parser.parse_known_args()
-    return args
+    parser.add_argument("--extension", type=str, help="Image extension for saving inside lmdb", default="png")
+    parser.add_argument("--min_size", type=int, help="Minimum image size (width and height)", default=0)
 
 
 def build_databases(
     data: list,
+    parser: argparse.ArgumentParser,
     map_size_img: int = MAP_SIZE_IMG,
     map_size_meta: int = MAP_SIZE_META,
     extra_transformations: list[Image_Transformation] = [],
@@ -176,7 +166,7 @@ def build_databases(
         map_size (int): The memory allocated for lmdb creation
     """
 
-    args = get_args()
+    args, _ = parser.parse_known_args()
 
     number_of_images = len(data)
     number_of_images_with_labels = sum(1 for item in data if item[1] != None)
@@ -210,11 +200,16 @@ def build_databases(
         map_size=map_size_meta,
     )
 
+    env_unlabeled_images, txn_unlabeled_images = unlabeled_images_lmdb
+    env_labeled_images, txn_labeled_images = labeled_images_lmdb
+    env_labels, txn_labels = labels_lmdb
+    env_metadata, txn_metadata = metadata_lmdb
+
     _write_databases(
-        unlabeled_images_lmdb,
-        labeled_images_lmdb,
-        labels_lmdb,
-        metadata_lmdb,
+        txn_unlabeled_images,
+        txn_labeled_images,
+        txn_labels,
+        txn_metadata,
         data,
         min_size=args.min_size,
         extra_transformations=extra_transformations,
@@ -224,18 +219,18 @@ def build_databases(
     print('removing empty datasets')
 
     if number_of_images_without_labels == 0:
-        _delete_lmdb(Path(unlabeled_images_lmdb[0].path()))
+        _delete_lmdb(Path(env_unlabeled_images.path()))
     
     if number_of_images_with_labels == 0:
-        _delete_lmdb(Path(labeled_images_lmdb[0].path()))
-        _delete_lmdb(Path(labels_lmdb[0].path()))
+        _delete_lmdb(Path(env_labeled_images.path()))
+        _delete_lmdb(Path(env_labels.path()))
     
     if number_of_images_with_metadata == 0:
-        _delete_lmdb(Path(metadata_lmdb[0].path()))
+        _delete_lmdb(Path(env_metadata.path()))
 
-    unlabeled_images_lmdb[0].close()
-    labeled_images_lmdb[0].close()
-    labels_lmdb[0].close() 
-    metadata_lmdb[0].close()
+    env_unlabeled_images.close()
+    env_labeled_images.close()
+    env_labels.close() 
+    env_metadata.close()
     
     print(f"FINISHED DATASET SAVED AT: {args.lmdb_path}")

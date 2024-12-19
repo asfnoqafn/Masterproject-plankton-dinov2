@@ -2,20 +2,34 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH -e /home/hk-project-p0021769/hgf_grc7525/output/log_%j.err
-#SBATCH --output /home/hk-project-p0021769/hgf_grc7525/output/log_%j.out
-#SBATCH --time 00:40:00
+#SBATCH -e /home/hk-project-p0021769/hgf_auh3910/output/log_%j.err
+#SBATCH --output /home/hk-project-p0021769/hgf_auh3910/output/log_%j.out
+#SBATCH --time 00:10:00
 #SBATCH --partition=dev_cpuonly
 
-PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/Masterproject-plankton-dinov2
-torchrun Masterproject-plankton-dinov2/dinov2/data/dataset_creation/save_cpics_to_lmdb.py\
- --dataset_path="/home/hk-project-p0021769/hgf_grc7525/data/with_labels/datasciencebowl/" \
- --lmdb_dir_name="/home/hk-project-p0021769/hgf_grc7525/data/lmdb_without_labels/datasciencebowl/" \
- --min_size="0" --extension=".jpg" --image_folder="test"
+# name of the folder inside the tar
+DATASET_NAME=ISIISNet_subset 
 
+# tar file not compressed!
+DATASET_TAR=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ISIISNet_subset.tar
 
+# output folder in the workspace
+LMDB_FOLDER=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ISIISNet_subset_lmdb
 
-python3 dinov2/data/dataset_creation/convert.py\
- --dataset_path="/home/hk-project-p0021769/hgf_auh3910/own_data/ISIISNet/" \
- --lmdb_path="/home/hk-project-p0021769/hgf_auh3910/own_data/ISIISNet_lmdb/" \
- --min_size="0" --extension=".jpg" --image_folder="imgs"
+# the github repo
+REPOSITORY_PATH=/home/hk-project-p0021769/hgf_auh3910/repos/Masterproject-plankton-dinov2
+
+source ~/.bashrc
+micromamba activate dinov2
+
+export PYTHONPATH=$PYTHONPATH:$REPOSITORY_PATH
+
+tar -C $TMPDIR/ -xf $DATASET_TAR
+echo $(ls $TMPDIR)
+
+torchrun $REPOSITORY_PATH/dinov2/data/dataset_creation/convert.py\
+ --dataset_path="$TMPDIR/$DATASET_NAME" \
+ --lmdb_path="$TMPDIR/result" \
+ --min_size="0" --extension=".png" --image_folder="imgs"
+
+rsync -a $TMPDIR/result/ $LMDB_FOLDER
