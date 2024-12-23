@@ -47,11 +47,9 @@ def get_all_zips(ifcb_path, excluded_bins):
             zips.append(zip_filename)
     return sorted(zips)
 
-def save_zip_to_lmdb(zip_filename, txn, number_of_filtered_images, total_images, total_images_in_chunk):
-    zip_filepath = os.path.join(
-            args.ifcb_path, zip_filename
-        )
-    print(f"currently processing: {zip_filepath}")
+
+def save_zip_to_lmdb(zip_filename, txn, total_images):
+    zip_filepath = os.path.join(args.ifcb_path, zip_filename)
     with ZipFile(zip_filepath) as zf:
         for image_relpath in zf.namelist():
             if "__MACOSX" in image_relpath:
@@ -67,7 +65,6 @@ def save_zip_to_lmdb(zip_filename, txn, number_of_filtered_images, total_images,
                         f"Error loading image {image_path}: {e}. Skipping...",
                         file=sys.stderr,
                     )
-                    number_of_filtered_images += 1
                     continue
 
                 img_key = os.path.join(zip_filename, image_relpath).replace("/", "_")  # Replace slashes for safety
@@ -81,8 +78,8 @@ def save_zip_to_lmdb(zip_filename, txn, number_of_filtered_images, total_images,
                 # Save to LMDB
                 txn.put(img_key_bytes, img_encoded)
                 total_images += 1
-                total_images_in_chunk += 1
-    return number_of_filtered_images, total_images, total_images_in_chunk
+    return total_images
+
 
 def build_lmdbs(args):
     lmdb_dir = os.path.abspath(args.lmdb_dir_name)
@@ -117,6 +114,20 @@ def build_lmdbs(args):
         f"startid_{total_images}_images",
     )
     os.makedirs(lmdb_imgs_path, exist_ok=True)
+
+    build_lmdb(zips, lmdb_imgs_path, processed_bins, bad_bins, total_images, total_images_in_chunk)
+
+    if number_of_filtered_images > 0:
+        print(
+            f"Filtered {number_of_filtered_images} images"
+        )
+
+    print(
+        f"TOTAL #images {total_images - prior_total_images} FROM {args.ifcb_path}"
+    )
+
+
+def build_lmdb(q, lmdb_imgs_path, processed_bins, bad_bins, total_images, total_images_in_chunk):
 
     env = lmdb.open(lmdb_imgs_path, map_size=MAP_SIZE_IMG)
     txn = env.begin(write=True)
@@ -172,15 +183,6 @@ def build_lmdbs(args):
                     lmdb_imgs_path, map_size=MAP_SIZE_IMG
                 )
                 txn = env.begin(write=True)
-
-    if number_of_filtered_images > 0:
-        print(
-            f"Filtered {number_of_filtered_images} images"
-        )
-
-    print(
-        f"TOTAL #images {total_images - prior_total_images} FROM {args.ifcb_path}"
-    )
 
 
 def get_args_parser():
