@@ -24,6 +24,7 @@ from dinov2.layers import (
     PatchEmbed,
     PatchEmbedPerChannel,
     SwiGLUFFNFused,
+    GrayscalePatchEmbed,
 )
 from dinov2.layers import (
     NestedTensorBlock as Block,
@@ -133,13 +134,13 @@ class DinoVisionTransformer(nn.Module):
             print(f"---- Using PatchEmbedPerChannel, with {in_chans} channels ----")
             embed_layer = PatchEmbedPerChannel
         else:
-            embed_layer = PatchEmbed
+            embed_layer = GrayscalePatchEmbed if in_chans == 1 else PatchEmbed
 
         if isinstance(in_chans, int):
             self.patch_embed = embed_layer(
                 img_size=img_size,
                 patch_size=patch_size,
-                in_chans=in_chans,
+                #in_chans=in_chans,
                 embed_dim=embed_dim,
             )
             num_patches = self.patch_embed.num_patches
@@ -416,6 +417,7 @@ class DinoVisionTransformer(nn.Module):
         # b c w h OR b c p (n p)
         # TODO: Problem: is using np p as w h --> aspect ratio severly distorted....
         b, c, w, h = x.size()
+        print("b c w h _ channels", b, c, w, h)
         if isinstance(
             self.patch_embed, dict
         ):  # here we have one tokenizer for each nb channels

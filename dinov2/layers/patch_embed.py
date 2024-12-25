@@ -11,6 +11,7 @@ from typing import Callable, Optional, Tuple, Union
 
 import torch.nn as nn
 from torch import Tensor
+import torch
 
 
 def make_2tuple(x):
@@ -88,6 +89,86 @@ class PatchEmbed(nn.Module):
     def flops(self) -> float:
         Ho, Wo = self.patches_resolution
         flops = Ho * Wo * self.embed_dim * self.in_chans * (self.patch_size[0] * self.patch_size[1])
+        if self.norm is not None:
+            flops += Ho * Wo * self.embed_dim
+        return flops
+
+
+
+class GrayscalePatchEmbed(nn.Module):
+    """
+    2D grayscale image to patch embedding with channel adaptation
+    """
+    def __init__(
+        self,
+        img_size: Union[int, Tuple[int, int]] = 224,
+        patch_size: Union[int, Tuple[int, int]] = 16,
+        embed_dim: int = 768,
+        norm_layer: Optional[Callable] = None,
+        flatten_embedding: bool = True,
+        freeze_projection: bool = True
+    ) -> None:
+        super().__init__()
+
+        image_HW = make_2tuple(img_size)
+        patch_HW = make_2tuple(patch_size)
+        patch_grid_size = (
+            image_HW[0] // patch_HW[0],
+            image_HW[1] // patch_HW[1],
+        )
+
+        self.img_size = image_HW
+        self.patch_size = patch_HW
+        self.patches_resolution = patch_grid_size
+        self.num_patches = patch_grid_size[0] * patch_grid_size[1]
+        self.embed_dim = embed_dim
+        self.flatten_embedding = flatten_embedding
+
+        
+        self.channel_adapt = nn.Conv2d(1, 3, 1, bias=False)
+        self.channel_adapt.weight.data = torch.tensor([
+            [[0.299]], [[0.587]], [[0.114]]
+        ])
+        
+        # Main patch embedding (frozen by default)
+        self.proj = nn.Conv2d(
+            3,  # Now takes output from channel_adapt
+            embed_dim,
+            kernel_size=patch_HW,
+            stride=patch_HW,
+        )
+        
+        if freeze_projection:
+            for param in self.proj.parameters():
+                param.requires_grad = False
+                
+        self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
+
+    def forward(self, x: Tensor) -> Tensor:
+        _, _, H, W = x.shape
+        patch_H, patch_W = self.patch_size
+
+        assert H % patch_H == 0, f"Input image height {H} is not a multiple of patch height {patch_H}"
+        assert W % patch_W == 0, f"Input image width {W} is not a multiple of patch width: {patch_W}"
+        
+        # Apply channel adaptation
+        x = self.channel_adapt(x)
+        # Rest of the forward pass remains the same hopefully
+        x = self.proj(x)
+        H_p, W_p = x.size(2), x.size(3)
+        x = x.flatten(2).transpose(1, 2)
+        x = self.norm(x)
+        if not self.flatten_embedding:
+            x = x.reshape(-1, H_p, W_p, self.embed_dim)
+
+        return x
+
+    def flops(self) -> float:
+        Ho, Wo = self.patches_resolution
+        # Add channel adaptation FLOPs
+        flops = Ho * Wo * 3  # 1x1 conv from 1 to 3 channels
+        # Original projection FLOPs
+        flops += Ho * Wo * self.embed_dim * 3 * (self.patch_size[0] * self.patch_size[1])
         if self.norm is not None:
             flops += Ho * Wo * self.embed_dim
         return flops

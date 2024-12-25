@@ -72,7 +72,7 @@ train:
   use_torch_compile: true
   do_profiling: false
   augmentations: "kornia_gpu"
-  in_chans: 3
+  in_chans: 1
   do_debug: false
 student:
   arch: vit_small
