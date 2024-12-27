@@ -71,6 +71,10 @@ def download_bin(bin: Bin, api_path: str, output_dir: str, q: Queue[str], includ
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
             os.rename(download_path, output_path)
+
+            if filename.endswith(".zip"):
+                q.put(filename)
+                logging.info(f"Added {filename} to queue.")
         except requests.HTTPError as e:
             if file_to_download == "_features.csv" and response.status_code == 404:
                 # features file is not available for all bins
@@ -101,7 +105,6 @@ def download_bin(bin: Bin, api_path: str, output_dir: str, q: Queue[str], includ
     if zip_failed:
         raise failed_files[0][1]
     else:
-        q.put(filename)
         return failed_files
 
 
@@ -209,9 +212,9 @@ log_queue = multiprocessing.Queue()
 # Function to setup logging inside each worker
 
 
-def setup_logging(queue):
+def setup_logging(queue: Queue):
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
 
     # Create a QueueHandler to send log messages to the queue
     queue_handler = logging.handlers.QueueHandler(queue)
@@ -220,22 +223,28 @@ def setup_logging(queue):
     return logger
 
 
-def listener(queue):
+def listener(queue: Queue):
     logger = logging.getLogger()
     handler = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
     # Continuously listen for log messages from the queue
     while True:
         try:
             record = queue.get()
-            if record is None:  # Poison pill means shutdown
+            if record is None:  # We send this as a sentinel to tell the listener to quit.
                 break
-            logger.handle(record)
+            logger.handle(record)  # No level or filter logic applied - just do it!
         except Exception:
             continue
+
+
+def init_log_queue(queue: multiprocessing.Queue):
+    global log_queue
+    log_queue = queue
 
 
 def download_zips_and_build_lmdbs(bins: list[Bin], api_path: str, output_dir: str, lmdb_dir: str, num_api_workers: int, num_lmdb_workers: int, chunk_size: int):
@@ -243,6 +252,7 @@ def download_zips_and_build_lmdbs(bins: list[Bin], api_path: str, output_dir: st
     bin_queue: Queue[str] = m.Queue()
     lock = m.Lock()
     lmdb_counter = m.Value('i', 0)
+    lmdb_counter_lock = m.Lock()
 
     listener_process = multiprocessing.Process(target=listener, args=(log_queue,))
     listener_process.start()
@@ -251,16 +261,9 @@ def download_zips_and_build_lmdbs(bins: list[Bin], api_path: str, output_dir: st
         lmdb_dir, "processed_bins.json"
     )
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=num_api_workers) as thread_pool, concurrent.futures.ProcessPoolExecutor(max_workers=num_lmdb_workers) as process_pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_api_workers) as thread_pool, concurrent.futures.ProcessPoolExecutor(max_workers=num_lmdb_workers, initializer=init_log_queue, initargs=(log_queue,)) as process_pool:
         future_to_bin = {thread_pool.submit(download_bin, bin, api_path, output_dir, bin_queue): bin for bin in bins}
-        process_futures = {process_pool.submit(lmdb_builder, bin_queue, lock, lmdb_counter, log_queue, lmdb_dir, processed_bins_path, chunk_size, output_dir): i for i in range(num_lmdb_workers)}
-
-        for future in concurrent.futures.as_completed(process_futures):
-            i = process_futures[future]
-            try:
-                logging.info(f"Futures {i} completed: {future.result()}")
-            except Exception as e:
-                logging.error(f"Error building lmdb: {e}")
+        process_futures = {process_pool.submit(lmdb_builder, bin_queue, lock, lmdb_counter, lmdb_dir, processed_bins_path, chunk_size, output_dir, lmdb_counter_lock): i for i in range(num_lmdb_workers)}
 
         # Process completed downloads
         for future in concurrent.futures.as_completed(future_to_bin):
@@ -321,17 +324,20 @@ def lmdb_builder(
     bin_queue: Queue,
     lock: threading.Lock,
     lmdb_counter: ValueProxy[int],
-    log_queue: multiprocessing.Queue,
+    # log_queue: multiprocessing.Queue,
     lmdb_dir: str,
     processed_bins_path: str,
     chunk_size: int,
-    bin_output_dir: str
+    bin_output_dir: str,
+    lmdb_counter_lock: threading.Lock,
 ) -> None:
     while True:
-        lmdb_counter.value += 1
         logger = setup_logging(log_queue)
-        logger.info(f"Started building LMDB #{lmdb_counter.value}")
-        build_lmdb(bin_queue, lock, lmdb_counter, lmdb_dir, processed_bins_path, chunk_size, bin_output_dir, logger)
+        with lmdb_counter_lock:
+            lmdb_counter.value += 1
+            lmdb_count = lmdb_counter.value
+        logger.info(f"Started building LMDB #{lmdb_count}")
+        build_lmdb(bin_queue, lock, lmdb_count, lmdb_dir, processed_bins_path, chunk_size, bin_output_dir, logger)
 
 
 def save_zip_to_lmdb(zip_filename, txn, bin_output_dir):
@@ -368,19 +374,20 @@ def save_zip_to_lmdb(zip_filename, txn, bin_output_dir):
     return total_images
 
 
-def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_counter: ValueProxy[int], lmdb_dir: str, processed_bins_path: str, chunk_size: int, bin_output_dir: str, logger: logging.Logger) -> None:
-    lmdb_imgs_path = os.path.join(lmdb_dir, f"{lmdb_counter.value}_images")
+def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir: str, processed_bins_path: str, chunk_size: int, bin_output_dir: str, logger: logging.Logger) -> None:
+    lmdb_imgs_path = os.path.join(lmdb_dir, f"{lmdb_count}_images")
     total_images = 0
     bad_bins = []
     processed_bins = []
     # open lmdb
-    env = lmdb.open(lmdb_imgs_path, map_size=int(1e12))
+    env: lmdb.Environment = lmdb.open(lmdb_imgs_path, map_size=int(1e12))
 
     with env.begin(write=True) as txn:
         while total_images < chunk_size:
-            zip_filename = bin_queue.get(block=True, timeout=10)
+            zip_filename = bin_queue.get(block=True, timeout=60)
             # open next zip-file and write images to lmdb
             try:
+                logger.info(f"Reading zip file {os.path.join(bin_output_dir, zip_filename)} from queue...")
                 total_images += save_zip_to_lmdb(zip_filename=zip_filename, txn=txn, bin_output_dir=bin_output_dir)
             except Exception as e:
                 logger.error(
@@ -395,11 +402,16 @@ def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_counter: ValueProxy[
 
     # dump json, since all imgs of processed bins are saved to lmdb
     with lock:
-        with open(processed_bins_path, "r") as f:
-            state = json.load(f)
-        state["total_images"] += total_images if state.get("total_images") is not None else 0
-        state["processed_bins"] += processed_bins if state.get("processed_bins") is not None else []
-        state["bad_bins"] += bad_bins if state.get("bad_bins") is not None else []
+        if not os.path.exists(processed_bins_path):
+            with open(processed_bins_path, "w") as f:
+                state = {"total_images": 0, "processed_bins": [], "bad_bins": []}
+                json.dump(state, f)
+        else:
+            with open(processed_bins_path, "r") as f:
+                state: dict = json.load(f)
+        state["total_images"] = total_images + state.get("total_images", 0)
+        state["processed_bins"] = processed_bins + state.get("processed_bins", [])
+        state["bad_bins"] = bad_bins + state.get("bad_bins", [])
         with open(processed_bins_path, "w") as f:
             json.dump(state, f)
 
@@ -439,7 +451,7 @@ def get_args_parser():
     parser.add_argument(
         "--num_api_workers", type=int, help="Number of workers (threads) to use for concurrent downloads.", default=4
     )
-    parser.add_argument("--num_lmdb_workers", type=int, help="Number of workers (processes) to use for lmdb creation.", default=2)
+    parser.add_argument("--num_lmdb_workers", type=int, help="Number of workers (processes) to use for lmdb creation.", default=1)
     parser.add_argument(
         "--include_bin_metadata", type=bool, help="Whether to include the bin metadata in the download.", default=False
     )
@@ -469,9 +481,9 @@ def get_args_parser():
 
 
 if __name__ == "__main__":
-    # args_parser = get_args_parser()
-    # args = args_parser.parse_args()
-    # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    args_parser = get_args_parser()
+    args = args_parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    # sys.exit(main(args))
-    test_lmdb_builder()
+    sys.exit(main(args))
+    # test_lmdb_builder()
