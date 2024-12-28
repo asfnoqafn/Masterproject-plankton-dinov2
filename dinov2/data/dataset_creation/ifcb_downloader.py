@@ -9,6 +9,7 @@ import os
 import sys
 import threading
 from dataclasses import dataclass
+from datetime import datetime
 from multiprocessing.managers import ValueProxy
 from pathlib import Path
 from queue import Queue
@@ -59,7 +60,8 @@ def download_bin(bin: Bin, api_path: str, output_dir: str, q: Queue[str], includ
             url_and_path = url + file_to_download
 
             # Extract filename from the URL or headers
-            filename = f"{bin.sample_time}_{url_and_path.split('/')[-1]}"
+            parsed_time = datetime.fromisoformat(bin.sample_time)
+            filename = f"{parsed_time.strftime('%Y-%m-%d_%H-%M-%S')}_{url_and_path.split('/')[-1]}"
             output_path = os.path.join(output_dir, filename)
             download_path = f"{output_path}.download"
 
@@ -226,7 +228,7 @@ def setup_logging(queue: Queue):
 def listener(queue: Queue):
     logger = logging.getLogger()
     handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s -  %(processName)-10s %(name)s -  %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
@@ -240,7 +242,6 @@ def listener(queue: Queue):
             logger.handle(record)  # No level or filter logic applied - just do it!
         except Exception:
             continue
-
 
 def init_log_queue(queue: multiprocessing.Queue):
     global log_queue
@@ -330,9 +331,10 @@ def lmdb_builder(
     chunk_size: int,
     bin_output_dir: str,
     lmdb_counter_lock: threading.Lock,
+    # worker_configurer
 ) -> None:
+    logger = setup_logging(log_queue)
     while True:
-        logger = setup_logging(log_queue)
         with lmdb_counter_lock:
             lmdb_counter.value += 1
             lmdb_count = lmdb_counter.value
@@ -449,9 +451,9 @@ def get_args_parser():
         "--dataset", type=str, help="Dataset to download the CSV file/bins from.", default="mvco"
     )
     parser.add_argument(
-        "--num_api_workers", type=int, help="Number of workers (threads) to use for concurrent downloads.", default=4
+        "--num_api_workers", type=int, help="Number of workers (threads) to use for concurrent downloads.", default=16
     )
-    parser.add_argument("--num_lmdb_workers", type=int, help="Number of workers (processes) to use for lmdb creation.", default=1)
+    parser.add_argument("--num_lmdb_workers", type=int, help="Number of workers (processes) to use for lmdb creation.", default=8)
     parser.add_argument(
         "--include_bin_metadata", type=bool, help="Whether to include the bin metadata in the download.", default=False
     )
