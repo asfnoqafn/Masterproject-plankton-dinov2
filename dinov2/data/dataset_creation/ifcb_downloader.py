@@ -68,6 +68,7 @@ def download_bin(bin: Bin, api_path: str, output_dir: str, q: Queue[str], includ
 
             # Save the file to disk
             with open(download_path, 'wb') as f:
+                # website crashed with higher chunk size, so we use 8192, not sure if it was our fault or just bad timing. In the past a chunk size of 8192 worked fine.
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
             os.rename(download_path, output_path)
@@ -471,13 +472,13 @@ def main(args):
 def get_args_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--bin_output_dir", type=str, help="Path to the dataset we download the images to.", default="/Users/Johann/masterproject/ifcb_api"
+        "--bin_output_dir", type=str, help="Path to the dataset we download the images to.", default="/hkfs/work/workspace/scratch/hgf_grc7525-nick/data/ifcb"
     )
     parser.add_argument(
         "--lmdb_output_dir",
         type=str,
         help="Path to the directory to save the lmdb files.",
-        default="ifcb",
+        default="/hkfs/work/workspace/scratch/hgf_grc7525-nick/data/lmdb_without_labels/IFCB_downloader",
     )
     parser.add_argument(
         "--tmp_dir",
@@ -499,7 +500,7 @@ def get_args_parser():
         "--num_api_workers", type=int, help="Number of workers (threads) to use for concurrent downloads.", default=16
     )
     parser.add_argument(
-        "--num_lmdb_workers", type=int, help="Number of workers (processes) to use for lmdb creation.", default=8
+        "--num_lmdb_workers", type=int, help="Number of workers (processes) to use for lmdb creation.", default=4
     )
     parser.add_argument(
         "--include_bin_metadata", type=bool, help="Whether to include the bin metadata in the download.", default=True
@@ -524,7 +525,7 @@ def get_args_parser():
         "--chunk_size",
         type=int,
         help="Size to chunk images into different lmdbs",
-        default=2_000_000,
+        default=1_000_000,
     )
     return parser
 
