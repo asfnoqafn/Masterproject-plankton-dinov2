@@ -12,9 +12,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from multiprocessing.managers import ValueProxy
 from pathlib import Path
-from queue import Queue
+from queue import Empty, Queue
 from typing import Optional
+import uuid
 from zipfile import ZipFile
+import shutil
 
 import imageio.v3 as iio
 import lmdb
@@ -214,7 +216,7 @@ log_queue = multiprocessing.Queue()
 # Function to setup logging inside each worker
 
 
-def setup_logging(queue: Queue):
+def setup_logging(queue: multiprocessing.Queue):
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 
@@ -248,7 +250,14 @@ def init_log_queue(queue: multiprocessing.Queue):
     log_queue = queue
 
 
-def download_zips_and_build_lmdbs(bins: list[Bin], api_path: str, output_dir: str, lmdb_dir: str, num_api_workers: int, num_lmdb_workers: int, chunk_size: int):
+def download_zips_and_build_lmdbs(bins: list[Bin], 
+                                  api_path: str, 
+                                  output_dir: str, 
+                                  lmdb_dir: str, 
+                                  num_api_workers: int, 
+                                  num_lmdb_workers: int, 
+                                  chunk_size: int, 
+                                  tmp_dir: Optional[str] = None):
     m = multiprocessing.Manager()
     bin_queue: Queue[str] = m.Queue()
     lock = m.Lock()
@@ -264,7 +273,7 @@ def download_zips_and_build_lmdbs(bins: list[Bin], api_path: str, output_dir: st
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_api_workers) as thread_pool, concurrent.futures.ProcessPoolExecutor(max_workers=num_lmdb_workers, initializer=init_log_queue, initargs=(log_queue,)) as process_pool:
         future_to_bin = {thread_pool.submit(download_bin, bin, api_path, output_dir, bin_queue): bin for bin in bins}
-        process_futures = {process_pool.submit(lmdb_builder, bin_queue, lock, lmdb_counter, lmdb_dir, processed_bins_path, chunk_size, output_dir, lmdb_counter_lock): i for i in range(num_lmdb_workers)}
+        process_futures = {process_pool.submit(lmdb_builder, bin_queue, lock, lmdb_counter, lmdb_dir, processed_bins_path, chunk_size, output_dir, lmdb_counter_lock, tmp_dir): i for i in range(num_lmdb_workers)}
 
         # Process completed downloads
         for future in concurrent.futures.as_completed(future_to_bin):
@@ -281,24 +290,33 @@ def download_zips_and_build_lmdbs(bins: list[Bin], api_path: str, output_dir: st
         logging.info(f"Finished downloading {len(bins)} bins.")
 
     log_queue.put(None)
+
+    for future in concurrent.futures.as_completed(process_futures):
+        try:
+            future.result()
+        except Empty as e:
+            logging.info(f"Process finished. Queue is empty: {e}")
+        except Exception as e:
+            logging.error(f"Process crashed. Error building lmdb: {e}")
+
     listener_process.join()
 
 
-def test_lmdb_builder():
-    m = multiprocessing.Manager()
-    bin_queue = m.Queue()
-    lock = m.Lock()
-    lmdb_counter = m.Value('i', 0)
-    lmdb_dir = "/Users/Johann/masterproject/ifcb_lmdb"
-    processed_bins_path = os.path.join(
-        lmdb_dir, "processed_bins.json"
-    )
-    bin_output_dir = "/Users/Johann/masterproject/ifcb_zips"
-# /Users/Johann/masterproject/ifcb_zips/D20241209T145839_IFCB127.zip
-    chunk_size = 10
-    for zipfile in ["D20241210T085035_IFCB127.zip", "D20241210T084351_IFCB127.zip", "D20241210T085717_IFCB127.zip"]:
-        bin_queue.put(zipfile)
-    lmdb_builder(bin_queue, lock, lmdb_counter, log_queue, lmdb_dir, processed_bins_path, chunk_size, bin_output_dir)
+# def test_lmdb_builder():
+#     m = multiprocessing.Manager()
+#     bin_queue = m.Queue()
+#     lock = m.Lock()
+#     lmdb_counter = m.Value('i', 0)
+#     lmdb_dir = "/Users/Johann/masterproject/ifcb_lmdb"
+#     processed_bins_path = os.path.join(
+#         lmdb_dir, "processed_bins.json"
+#     )
+#     bin_output_dir = "/Users/Johann/masterproject/ifcb_zips"
+# # /Users/Johann/masterproject/ifcb_zips/D20241209T145839_IFCB127.zip
+#     chunk_size = 10
+#     for zipfile in ["D20241210T085035_IFCB127.zip", "D20241210T084351_IFCB127.zip", "D20241210T085717_IFCB127.zip"]:
+#         bin_queue.put(zipfile)
+#     lmdb_builder(bin_queue, lock, lmdb_counter, lmdb_dir, processed_bins_path, chunk_size, bin_output_dir, lmdb_counter_lock)
 
 
 
@@ -331,6 +349,7 @@ def lmdb_builder(
     chunk_size: int,
     bin_output_dir: str,
     lmdb_counter_lock: threading.Lock,
+    tmp_dir: Optional[str] = None,
     # worker_configurer
 ) -> None:
     logger = setup_logging(log_queue)
@@ -338,8 +357,8 @@ def lmdb_builder(
         with lmdb_counter_lock:
             lmdb_counter.value += 1
             lmdb_count = lmdb_counter.value
-        logger.info(f"Started building LMDB #{lmdb_count}")
-        build_lmdb(bin_queue, lock, lmdb_count, lmdb_dir, processed_bins_path, chunk_size, bin_output_dir, logger)
+        logger.info(f"Started building LMDB #{lmdb_count:03}")
+        build_lmdb(bin_queue, lock, lmdb_count, lmdb_dir, processed_bins_path, chunk_size, bin_output_dir, logger, tmp_dir)
 
 
 def save_zip_to_lmdb(zip_filename, txn, bin_output_dir):
@@ -362,8 +381,7 @@ def save_zip_to_lmdb(zip_filename, txn, bin_output_dir):
                     )
                     continue
 
-                img_key = os.path.join(zip_filename, image_relpath).replace("/", "_")  # Replace slashes for safety
-                img_key_bytes = img_key.encode("utf-8")
+                img_key_bytes = uuid.uuid4().bytes
 
                 # Load and encode the image
                 img_encoded = iio.imwrite(
@@ -376,13 +394,15 @@ def save_zip_to_lmdb(zip_filename, txn, bin_output_dir):
     return total_images
 
 
-def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir: str, processed_bins_path: str, chunk_size: int, bin_output_dir: str, logger: logging.Logger) -> None:
-    lmdb_imgs_path = os.path.join(lmdb_dir, f"{lmdb_count}_images")
+def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir: str, processed_bins_path: str, chunk_size: int, bin_output_dir: str, logger: logging.Logger, tmp_dir: Optional[str] = None) -> None:
+    lmdb_name = f"{lmdb_count:03}_images"
+    lmdb_path = os.path.join(lmdb_dir, lmdb_name)
+    tmp_lmdb_path = os.path.join(tmp_dir, lmdb_name) if tmp_dir is not None else None
     total_images = 0
     bad_bins = []
     processed_bins = []
     # open lmdb
-    env: lmdb.Environment = lmdb.open(lmdb_imgs_path, map_size=int(1e12))
+    env: lmdb.Environment = lmdb.open(tmp_lmdb_path if tmp_lmdb_path is not None else lmdb_path, map_size=int(1e12))
 
     with env.begin(write=True) as txn:
         while total_images < chunk_size:
@@ -390,7 +410,9 @@ def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir
             # open next zip-file and write images to lmdb
             try:
                 logger.info(f"Reading zip file {os.path.join(bin_output_dir, zip_filename)} from queue...")
-                total_images += save_zip_to_lmdb(zip_filename=zip_filename, txn=txn, bin_output_dir=bin_output_dir)
+                num_images = save_zip_to_lmdb(zip_filename=zip_filename, txn=txn, bin_output_dir=bin_output_dir)
+                total_images += num_images
+                logger.info(f"Added {num_images} images from {zip_filename} to {lmdb_name}")
             except Exception as e:
                 logger.error(
                     f"Error loading zip file {zip_filename}: {e}. Skipping...",
@@ -400,7 +422,14 @@ def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir
 
             processed_bins.append(zip_filename)  # bin is processed, so add it to processed list
     env.close()
-    logger.info(f"Saved new lmdb at: {lmdb_imgs_path}")
+
+    if tmp_lmdb_path is not None:
+        try:
+            shutil.move(tmp_lmdb_path, lmdb_path)
+        except Exception as e:
+            logger.error(f"Error moving lmdb from {tmp_lmdb_path} to {lmdb_path}: {e}")
+            pass
+    logger.info(f"Saved new lmdb at: {lmdb_path}")
 
     # dump json, since all imgs of processed bins are saved to lmdb
     with lock:
@@ -426,7 +455,7 @@ def main(args):
     bins = get_bin_data(csv_path=csv_path, output_dir=args.bin_output_dir, start_bin=args.start_bin, blacklisted_sample_types=args.blacklisted_sample_types.split(","), blacklisted_tags=args.blacklisted_tags.split(","), max_bins=args.max_bins)  # gets all bins not present in the folder
 
     # download bins and add path to zipfile in queue
-    download_zips_and_build_lmdbs(bins=bins, api_path=args.api_path, output_dir=args.bin_output_dir, lmdb_dir=args.lmdb_output_dir, num_api_workers=args.num_api_workers, num_lmdb_workers=args.num_lmdb_workers, chunk_size=args.chunk_size)
+    download_zips_and_build_lmdbs(bins=bins, api_path=args.api_path, output_dir=args.bin_output_dir, lmdb_dir=args.lmdb_output_dir, num_api_workers=args.num_api_workers, num_lmdb_workers=args.num_lmdb_workers, chunk_size=args.chunk_size, tmp_dir=args.tmp_dir)
 
 
 def get_args_parser():
@@ -439,6 +468,12 @@ def get_args_parser():
         type=str,
         help="Path to the directory to save the lmdb files.",
         default="ifcb",
+    )
+    parser.add_argument(
+        "--tmp_dir",
+        type=str,
+        help="Path to $TMPDIR to save temporary lmdb files if used",
+         default=None,
     )
     parser.add_argument(
         "--api_path", type=str, help="Path to api to download from", default="https://ifcb-data.whoi.edu"
@@ -455,7 +490,7 @@ def get_args_parser():
     )
     parser.add_argument("--num_lmdb_workers", type=int, help="Number of workers (processes) to use for lmdb creation.", default=8)
     parser.add_argument(
-        "--include_bin_metadata", type=bool, help="Whether to include the bin metadata in the download.", default=False
+        "--include_bin_metadata", type=bool, help="Whether to include the bin metadata in the download.", default=True
     )
     parser.add_argument(
         "--include_features", type=bool, help="Whether to include the features file in the download.", default=True
