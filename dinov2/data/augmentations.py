@@ -95,43 +95,44 @@ class DataAugmentationDINO(object):
                 local_crops_size,
                 local_crops_size,
             )
-
             if self.use_native_res:
-                self.random_crop = augmentation.RandomCrop(
-                    global_crops_size,
-                    resample=Resample.BILINEAR.name,
-                    same_on_batch=False,
-                    p=1.0,
-                    keepdim=False,
-                )
-                self.geometric_augmentation_global = augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0)
+                assert 0 == 1, "Not implemented"
+            # if self.use_native_res:
+            #     self.random_crop = augmentation.RandomCrop(
+            #         global_crops_size,
+            #         resample=Resample.BILINEAR.name,
+            #         same_on_batch=False,
+            #         p=1.0,
+            #         keepdim=False,
+            #     )
+            #     self.geometric_augmentation_global = augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0)
 
-                if self.do_seg_crops is not None:
-                    # Needs 2 data_keys to apply same transfo on img and mask
-                    self.geometric_augmentation_local = AugmentationSequential(
-                        augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
-                        data_keys=["input", "input"],
-                    )
-                else:
-                    self.geometric_augmentation_local = AugmentationSequential(
-                        augmentation.RandomResizedCrop(
-                            local_crops_size,
-                            scale=local_crops_scale,
-                            resample=Resample.BICUBIC.name,
-                            same_on_batch=False,
-                        ),
-                        augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
-                    )
+            #     if self.do_seg_crops is not None:
+            #         # Needs 2 data_keys to apply same transfo on img and mask
+            #         self.geometric_augmentation_local = AugmentationSequential(
+            #             augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
+            #             data_keys=["input", "input"],
+            #         )
+            #     else:
+            #         self.geometric_augmentation_local = AugmentationSequential(
+            #             augmentation.RandomResizedCrop(
+            #                 local_crops_size,
+            #                 scale=local_crops_scale,
+            #                 resample=Resample.BICUBIC.name,
+            #                 same_on_batch=False,
+            #             ),
+            #             augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
+            #         )
 
-                self.std_augmentation_local = AugmentationSequential(
-                    augmentation.RandomResizedCrop(
-                        local_crops_size,
-                        scale=local_crops_scale,
-                        resample=Resample.BICUBIC.name,
-                        same_on_batch=False,
-                    ),
-                    augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
-                )
+            #     self.std_augmentation_local = AugmentationSequential(
+            #         augmentation.RandomResizedCrop(
+            #             local_crops_size,
+            #             scale=local_crops_scale,
+            #             resample=Resample.BICUBIC.name,
+            #             same_on_batch=False,
+            #         ),
+            #         augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
+            #     )
             else:
                 self.geometric_augmentation_global = AugmentationSequential(
                     augmentation.RandomResizedCrop(
@@ -154,14 +155,14 @@ class DataAugmentationDINO(object):
 
             # color distorsions / blurring
             color_jittering = AugmentationSequential(
-                augmentation.ColorJiggle(
-                    brightness=0.4,
-                    contrast=0.4,
-                    saturation=0.2,
-                    hue=0.1,
-                    same_on_batch=False,
-                    p=0.8,
-                ),
+                # augmentation.ColorJiggle(
+                #     brightness=0.4,
+                #     contrast=0.4,
+                #     saturation=0.2,
+                #     hue=0.1,
+                #     same_on_batch=False,
+                #     p=0.8,
+                # ),
                 augmentation.RandomGrayscale(p=0.2),
             )
 
@@ -190,7 +191,7 @@ class DataAugmentationDINO(object):
                 )
                 self.global_transfo2 = AugmentationSequential(
                     #color_jittering,
-                    global_transfo2_extra,
+                    #global_transfo2_extra,
                     self.normalize,
                 )
                 self.local_transfo = AugmentationSequential(

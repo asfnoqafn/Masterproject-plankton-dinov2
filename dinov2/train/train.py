@@ -230,6 +230,35 @@ def select_augmentations(cfg, do_multi_channel=False):
     return data_transform_cpu, data_transform_gpu
 
 
+def load_pretrained_weights(model, checkpoint_path):
+    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    
+    if 'teacher' in checkpoint:
+        state_dict = checkpoint['teacher']
+    else:
+        state_dict = checkpoint
+        
+
+    msg = model.load_state_dict(state_dict, strict=False)
+    
+    with torch.no_grad():
+        rgb_weights = torch.tensor([0.2989, 0.5870, 0.1140])
+        rgb_weights = rgb_weights.view(3, 1, 1, 1)
+        model.patch_embed.channel_adapt.weight.data.copy_(rgb_weights)
+        
+    for param in model.patch_embed.channel_adapt.parameters():
+        param.requires_grad = True
+    
+    print("Pretrained weights loaded with message:", msg)
+    print("Channel adaptation layer initialized and set to trainable")
+    
+    adapt_params = sum(p.numel() for p in model.patch_embed.channel_adapt.parameters() if p.requires_grad)
+    print(f"Number of trainable parameters in channel adaptation: {adapt_params}")
+    
+    return model
+
+
+
 def apply_optim_scheduler(optimizer, lr, wd, last_layer_lr):
     for param_group in optimizer.param_groups:
         is_last_layer = param_group["is_last_layer"]
@@ -284,6 +313,7 @@ def do_train(cfg, model, resume=False):
         "resume",
         resume,
     )
+    
     if os.path.isfile(cfg.MODEL.WEIGHTS):
         start_iter = checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=resume).get("iteration", -1) + 1
     else:
@@ -377,7 +407,7 @@ def do_train(cfg, model, resume=False):
         max_iter,
         start_iter,
     ):
-        print(11111)
+
         if cfg.train.do_profiling:
             profiler.step()
         if data_transform_gpu is not None or cfg.train.augmentations == AugmentationType.KORNIA_CPU.value:
@@ -404,7 +434,6 @@ def do_train(cfg, model, resume=False):
         if iteration > max_iter:
             return
 
-        print(122222)
         # apply schedules
         lr = lr_schedule[iteration]
         wd = wd_schedule[iteration]
@@ -491,6 +520,7 @@ def do_train(cfg, model, resume=False):
                     }
                 )
 
+
             # checkpointing and testing
 
             if (
@@ -499,6 +529,10 @@ def do_train(cfg, model, resume=False):
             ):
                 do_test(cfg, model, f"training_{iteration}")
                 torch.cuda.synchronize()
+                adapt_weights = model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt.weight.data.view(-1).cpu().numpy()
+                weights = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.data.view(-1).cpu().numpy()
+                print(f"Projection weights: {weights}")
+                print(f"Channel adaptation weights: {adapt_weights}")
 
             periodic_checkpointer.step(iteration)
             iteration = iteration + 1
@@ -531,6 +565,7 @@ def main(args):
     cfg = setup(args)
 
     model = SSLMetaArch(cfg).to(torch.device("cuda"))
+
     model.prepare_for_distributed_training()
 
     torch.backends.cudnn.benchmark = True

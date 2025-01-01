@@ -134,6 +134,7 @@ class DinoVisionTransformer(nn.Module):
             print(f"---- Using PatchEmbedPerChannel, with {in_chans} channels ----")
             embed_layer = PatchEmbedPerChannel
         else:
+            print(f"---- Using GrayScalePatchEmbed, with {in_chans} channels ----")
             embed_layer = GrayscalePatchEmbed if in_chans == 1 else PatchEmbed
 
         if isinstance(in_chans, int):
@@ -155,7 +156,6 @@ class DinoVisionTransformer(nn.Module):
                 for ch in in_chans
             }
             num_patches = self.patch_embed[min(in_chans)].num_patches
-        print(f"Patch Embedding: {self.patch_embed}")
 
         if self.use_ch_patch_embed:
             if not isinstance(in_chans, int):
@@ -168,7 +168,6 @@ class DinoVisionTransformer(nn.Module):
         self.pos_embed = nn.Parameter(
             torch.zeros(1, num_patches + self.num_tokens, embed_dim)
         )
-        print("init self.pos_embed", self.pos_embed.shape)
         assert num_register_tokens >= 0
         self.register_tokens = (
             nn.Parameter(torch.zeros(1, num_register_tokens, embed_dim))
@@ -267,11 +266,11 @@ class DinoVisionTransformer(nn.Module):
         w0 = w // self.patch_size
         h0 = h // self.patch_size
         M = int(math.sqrt(N))  # Recover the number of patches in each dimension
-        print(
-            "pos_embed",
-            f"N {N}, M{M}, w0 {w0}, h0 {h0}, w {w}, h {h}, self.pos_embed {self.pos_embed.shape}",
-            flush=True,
-        )
+        # print(
+        #     "pos_embed",
+        #     f"N {N}, M{M}, w0 {w0}, h0 {h0}, w {w}, h {h}, self.pos_embed {self.pos_embed.shape}",
+        #     flush=True,
+        # )
         assert N == M * M
         kwargs = {}
         if self.interpolate_offset:
@@ -417,7 +416,7 @@ class DinoVisionTransformer(nn.Module):
         # b c w h OR b c p (n p)
         # TODO: Problem: is using np p as w h --> aspect ratio severly distorted....
         b, c, w, h = x.size()
-        print("b c w h _ channels", b, c, w, h)
+        #print("b c w h _ channels", b, c, w, h)
         if isinstance(
             self.patch_embed, dict
         ):  # here we have one tokenizer for each nb channels

@@ -125,49 +125,39 @@ class GrayscalePatchEmbed(nn.Module):
         self.flatten_embedding = flatten_embedding
 
         
-        self.channel_adapt = nn.Conv2d(1, 3, 1, bias=False)
-        self.channel_adapt.weight.data = torch.tensor([
-            [[0.299]], [[0.587]], [[0.114]]
-        ])
+        self.channel_adapt = nn.Conv2d(in_channels=1,out_channels=3,kernel_size=1, stride=1, bias=False)
         
-        # Main patch embedding (frozen by default)
+
         self.proj = nn.Conv2d(
-            3,  # Now takes output from channel_adapt
+            3,
             embed_dim,
             kernel_size=patch_HW,
             stride=patch_HW,
         )
         
-        if freeze_projection:
-            for param in self.proj.parameters():
-                param.requires_grad = False
-                
+             
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
+    
     def forward(self, x: Tensor) -> Tensor:
         _, _, H, W = x.shape
         patch_H, patch_W = self.patch_size
 
         assert H % patch_H == 0, f"Input image height {H} is not a multiple of patch height {patch_H}"
         assert W % patch_W == 0, f"Input image width {W} is not a multiple of patch width: {patch_W}"
-        
-        # Apply channel adaptation
         x = self.channel_adapt(x)
-        # Rest of the forward pass remains the same hopefully
-        x = self.proj(x)
+        x = self.proj(x)  # B D sqrt(np) sqrt(np)
         H_p, W_p = x.size(2), x.size(3)
-        x = x.flatten(2).transpose(1, 2)
+        x = x.flatten(2).transpose(1, 2)  # B np D
         x = self.norm(x)
         if not self.flatten_embedding:
-            x = x.reshape(-1, H_p, W_p, self.embed_dim)
+            x = x.reshape(-1, H_p, W_p, self.embed_dim)  # B H_p W_p D
 
         return x
 
     def flops(self) -> float:
         Ho, Wo = self.patches_resolution
-        # Add channel adaptation FLOPs
-        flops = Ho * Wo * 3  # 1x1 conv from 1 to 3 channels
-        # Original projection FLOPs
+        flops = Ho * Wo * 3
         flops += Ho * Wo * self.embed_dim * 3 * (self.patch_size[0] * self.patch_size[1])
         if self.norm is not None:
             flops += Ho * Wo * self.embed_dim

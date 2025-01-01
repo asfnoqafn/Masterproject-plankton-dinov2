@@ -62,11 +62,11 @@ ibot:
 train:
   batch_size_per_gpu: 16 #256
   dataset_path: LMDBDataset:split=ALL:root=/fast/AG_Kainmueller/plankton/data/WHOI/preprocessed/preprocessed_lmdb/:extra=*
-  output_dir: 'home/jluesch/output_dir'
+  output_dir: '/home/hk-project-p0021769/hgf_grc7525/output/'
   saveckp_freq: 10
   seed: 0
   num_workers: 8
-  OFFICIAL_EPOCH_LENGTH: 1250
+  OFFICIAL_EPOCH_LENGTH: 100 #1250
   centering: "sinkhorn_knopp" # or "centering"
   cache_dataset: false
   use_torch_compile: true
@@ -80,7 +80,7 @@ student:
   drop_path_rate: 0
   layerscale: 1.0e-05
   drop_path_uniform: true
-  pretrained_weights: 'checkpoints/dinov2_vits14_pretrain.pth'
+  pretrained_weights: '/home/hk-project-p0021769/hgf_grc7525/checkpoints/dinov2_vits14_pretrain.pth'
   ffn_layer: "mlp"
   block_chunks: 0
   qkv_bias: true
@@ -94,14 +94,14 @@ teacher:
   final_momentum_teacher: 1
   warmup_teacher_temp: 0.04
   teacher_temp: 0.07
-  warmup_teacher_temp_epochs: 30
+  warmup_teacher_temp_epochs: 1 #30
 optim:
   epochs: 100
   weight_decay: 0.04
   weight_decay_end: 0.4
   base_lr: 0.0005  # learning rate for a batch size of 1024
-  lr: 0.  # will be set after applying scaling rule
-  warmup_epochs: 10
+  lr: 0.001.  # will be set after applying scaling rule #0
+  warmup_epochs: 1
   min_lr: 1.0e-06
   clip_grad: 3.0
   freeze_last_layer_epochs: 1
@@ -125,4 +125,4 @@ crops:
   use_ch_patch_embed: false
   use_variable_channels: false
 evaluation:
-  eval_period_iterations: 12500
+  eval_period_iterations: 100 #12500

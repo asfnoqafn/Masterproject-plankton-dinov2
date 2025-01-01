@@ -197,7 +197,20 @@ def load_pretrained_weights(
     }
 
     msg = model.load_state_dict(state_dict, strict=False)
+
+    missing_keys = [key for key in msg.missing_keys if "channel_adapt" not in key]
+    if missing_keys:
+        logger.warning(f"Incompatible keys detected: {missing_keys}")
+    else:
+        logger.info(f"Pretrained weights loaded successfully without missing keys.")
     logger.info("Pretrained weights found at {} and loaded with msg: {}".format(pretrained_weights, msg))
+    
+    if hasattr(model.patch_embed, "channel_adapt"):
+        print("Channel adapt layer found in model -> training in Greyscale!")
+        with torch.no_grad():
+            rgb_weights = torch.tensor([0.2989, 0.5870, 0.1140]).view(3, 1, 1, 1)
+            model.patch_embed.channel_adapt.weight.copy_(rgb_weights)
+        logger.info("Initialized and enabled training for `channel_adapt` layer.")
 
 
 def fix_random_seeds(seed=31):
