@@ -62,8 +62,9 @@ class PatchEmbed(nn.Module):
 
         self.flatten_embedding = flatten_embedding
 
+        self.channel_adapt = nn.Conv2d(in_channels=1,out_channels=3,kernel_size=1, stride=1, bias=True)
         self.proj = nn.Conv2d(
-            in_chans,
+            3,
             embed_dim,
             kernel_size=patch_HW,
             stride=patch_HW,
@@ -76,6 +77,8 @@ class PatchEmbed(nn.Module):
 
         assert H % patch_H == 0, f"Input image height {H} is not a multiple of patch height {patch_H}"
         assert W % patch_W == 0, f"Input image width {W} is not a multiple of patch width: {patch_W}"
+
+        x = self.channel_adapt(x)
         x = self.proj(x)  # B D sqrt(np) sqrt(np)
         H_p, W_p = x.size(2), x.size(3)
         x = x.flatten(2).transpose(1, 2)  # B np D

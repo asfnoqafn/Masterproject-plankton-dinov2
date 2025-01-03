@@ -36,7 +36,7 @@ class ExtendedVisionDataset(VisionDataset):
             try:
                 # have to copy bc stream not writeable
                 image = torch.frombuffer(np.copy(img_bytes), dtype=torch.uint8)
-                image = decode_image(image, ImageReadMode.RGB)
+                image = decode_image(image, ImageReadMode.GRAY)
                 image = (image / 255.0).to(torch.float32)
             except Exception as e:
                 print(e)

@@ -486,6 +486,12 @@ def do_train(cfg, model, resume=False):
         model.backward(loss_accumulator)
         print("Patch embed gradients:", 
         model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.data.view(-1).cpu().numpy())
+        print("Patch embed weights:", model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.data.view(-1).cpu().numpy())
+
+        print("Grayscale: gradients:", 
+        model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt.weight.grad.data.view(-1).cpu().numpy())
+        print("Grayscale: weights:",
+        model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt.weight.data.view(-1).cpu().numpy())
         # clip gradients
         if fp16_scaler is not None:
             if cfg.optim.clip_grad:

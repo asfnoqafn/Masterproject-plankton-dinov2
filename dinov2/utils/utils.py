@@ -153,6 +153,15 @@ def load_pretrained_weights(
     else:
         print(f"Error: Key {teacher_student_key} not recognized, options are: 'student', 'teacher'")
         sys.exit(1)
+
+    if hasattr(model, 'student'):
+        channel_adapt = model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt
+        nn.init.kaiming_normal_(channel_adapt.weight.data)
+        if channel_adapt.bias is not None:
+            nn.init.zeros_(channel_adapt.bias.data)
+        logger.info("Initialized channel adaptation layer with Kaiming")
+
+
     if model.use_ch_patch_embed:
         state_dict = {k: v for k, v in state_dict.items() if "patch_embed" not in k}
 
@@ -160,6 +169,8 @@ def load_pretrained_weights(
     keys_model = set(model.state_dict().keys())
     if len(keys_load.intersection(keys_model)) / len(keys_model) < 0.6:
         state_dict = match_state_dict_keys(state_dict, keys_load, keys_model)
+
+
 
     if "pos_embed" in model.state_dict().keys() and "pos_embed" in state_dict.keys():
         loaded_img_shape = int(np.sqrt(state_dict["pos_embed"].shape[1] - 1))
@@ -198,6 +209,14 @@ def load_pretrained_weights(
 
     msg = model.load_state_dict(state_dict, strict=False)
     logger.info("Pretrained weights found at {} and loaded with msg: {}".format(pretrained_weights, msg))
+
+    if hasattr(model, 'student'):
+        channel_adapt = model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt
+        logger.info("Channel adapt weights: {}".format(
+            channel_adapt.weight.data.view(-1).cpu().numpy()))
+        if channel_adapt.bias is not None:
+            logger.info("Channel adapt bias: {}".format(
+                channel_adapt.bias.data.cpu().numpy()))
 
 
 def fix_random_seeds(seed=31):
