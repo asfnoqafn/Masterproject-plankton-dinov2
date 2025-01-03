@@ -484,7 +484,8 @@ def do_train(cfg, model, resume=False):
         # torch.distributed.all_reduce(loss_accumulator)
         # Think it should be here, but cause hang
         model.backward(loss_accumulator)
-
+        print("Patch embed gradients:", 
+        model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.data.view(-1).cpu().numpy())
         # clip gradients
         if fp16_scaler is not None:
             if cfg.optim.clip_grad:

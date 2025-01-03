@@ -60,9 +60,9 @@ ibot:
   head_nlayers: 3
   head_hidden_dim: 2048
 train:
-  batch_size_per_gpu: 256
+  batch_size_per_gpu: 16 #256
   dataset_path: LMDBDataset:split=ALL:root=/fast/AG_Kainmueller/plankton/data/WHOI/preprocessed/preprocessed_lmdb/:extra=*
-  output_dir: 'home/jluesch/output_dir'
+  output_dir: '/home/hk-project-p0021769/hgf_grc7525/output/'
   saveckp_freq: 10
   seed: 0
   num_workers: 8
@@ -80,7 +80,7 @@ student:
   drop_path_rate: 0
   layerscale: 1.0e-05
   drop_path_uniform: true
-  pretrained_weights: '/fast/AG_Kainmueller/plankton/checkpoints/dinov2_vits14_pretrain.pth'
+  pretrained_weights: '/home/hk-project-p0021769/hgf_grc7525/checkpoints/dinov2_vits14_pretrain.pth'
   ffn_layer: "mlp"
   block_chunks: 0
   qkv_bias: true
