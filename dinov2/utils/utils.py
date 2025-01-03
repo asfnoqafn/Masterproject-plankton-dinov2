@@ -161,6 +161,9 @@ def load_pretrained_weights(
     if len(keys_load.intersection(keys_model)) / len(keys_model) < 0.6:
         state_dict = match_state_dict_keys(state_dict, keys_load, keys_model)
 
+
+
+
     if "pos_embed" in model.state_dict().keys() and "pos_embed" in state_dict.keys():
         loaded_img_shape = int(np.sqrt(state_dict["pos_embed"].shape[1] - 1))
         state_dict["pos_embed"] = match_pos_embeds(
@@ -196,21 +199,21 @@ def load_pretrained_weights(
         for k_c, v_c in state_dict.items()
     }
 
-    msg = model.load_state_dict(state_dict, strict=False)
-
-    missing_keys = [key for key in msg.missing_keys if "channel_adapt" not in key]
-    if missing_keys:
-        logger.warning(f"Incompatible keys detected: {missing_keys}")
-    else:
-        logger.info(f"Pretrained weights loaded successfully without missing keys.")
-    logger.info("Pretrained weights found at {} and loaded with msg: {}".format(pretrained_weights, msg))
-    
     if hasattr(model.patch_embed, "channel_adapt"):
         print("Channel adapt layer found in model -> training in Greyscale!")
         with torch.no_grad():
-            rgb_weights = torch.tensor([0.2989, 0.5870, 0.1140]).view(3, 1, 1, 1)
-            model.patch_embed.channel_adapt.weight.copy_(rgb_weights)
+            rgb_weights = torch.tensor([0.2989, 0.5870, 0.1140], dtype=torch.float64).view(3, 1, 1, 1)
+            model.patch_embed.channel_adapt.weight.copy_(rgb_weights.to(torch.float32))
         logger.info("Initialized and enabled training for `channel_adapt` layer.")
+        print("grayscale needs grad?")
+        print(model.patch_embed.channel_adapt.weight.requires_grad)
+        print(model.patch_embed.proj.weight.requires_grad)
+
+    msg = model.load_state_dict(state_dict, strict=False)
+
+    logger.info("Pretrained weights found at {} and loaded with msg: {}".format(pretrained_weights, msg))
+    
+
 
 
 def fix_random_seeds(seed=31):

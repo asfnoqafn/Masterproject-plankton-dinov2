@@ -106,7 +106,6 @@ class GrayscalePatchEmbed(nn.Module):
         embed_dim: int = 768,
         norm_layer: Optional[Callable] = None,
         flatten_embedding: bool = True,
-        freeze_projection: bool = True
     ) -> None:
         super().__init__()
 
@@ -127,7 +126,6 @@ class GrayscalePatchEmbed(nn.Module):
         
         self.channel_adapt = nn.Conv2d(in_channels=1,out_channels=3,kernel_size=1, stride=1, bias=False)
         
-
         self.proj = nn.Conv2d(
             3,
             embed_dim,

@@ -230,35 +230,6 @@ def select_augmentations(cfg, do_multi_channel=False):
     return data_transform_cpu, data_transform_gpu
 
 
-def load_pretrained_weights(model, checkpoint_path):
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
-    
-    if 'teacher' in checkpoint:
-        state_dict = checkpoint['teacher']
-    else:
-        state_dict = checkpoint
-        
-
-    msg = model.load_state_dict(state_dict, strict=False)
-    
-    with torch.no_grad():
-        rgb_weights = torch.tensor([0.2989, 0.5870, 0.1140])
-        rgb_weights = rgb_weights.view(3, 1, 1, 1)
-        model.patch_embed.channel_adapt.weight.data.copy_(rgb_weights)
-        
-    for param in model.patch_embed.channel_adapt.parameters():
-        param.requires_grad = True
-    
-    print("Pretrained weights loaded with message:", msg)
-    print("Channel adaptation layer initialized and set to trainable")
-    
-    adapt_params = sum(p.numel() for p in model.patch_embed.channel_adapt.parameters() if p.requires_grad)
-    print(f"Number of trainable parameters in channel adaptation: {adapt_params}")
-    
-    return model
-
-
-
 def apply_optim_scheduler(optimizer, lr, wd, last_layer_lr):
     for param_group in optimizer.param_groups:
         is_last_layer = param_group["is_last_layer"]
@@ -400,6 +371,7 @@ def do_train(cfg, model, resume=False):
     print("cfg.train.in_chans", cfg.train.in_chans)
     if not isinstance(cfg.train.in_chans, int):
         dataset.set_curr_in_chans(cfg.train.in_chans[0])
+
     for data in metric_logger.log_every(
         data_loader,
         20,
@@ -447,7 +419,64 @@ def do_train(cfg, model, resume=False):
             optimizer.zero_grad(set_to_none=True)
 
         loss_accumulator, loss_dict = model.forward_teacher_student(data, teacher_temp=teacher_temp)
+
+        print("loss_dict", loss_dict)
+        print("############################################################################################################")
         model.backward(loss_accumulator)
+
+        # verify gradients
+        # Channel adapt layer
+        print("Channel adapt gradients:", 
+            model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt.weight.grad.data.view(-1).cpu().numpy())
+        print("Channel adapt weights:", 
+            model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt.weight.data.view(-1).cpu().numpy())
+
+        # # Patch embedding projection
+        # print("Patch embed gradients:", 
+        #     model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.data.view(-1).cpu().numpy())
+        # print("Patch embed weights:",
+        #     model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.data.view(-1).cpu().numpy())
+
+
+        # for block_idx, block in enumerate(model.student.backbone._fsdp_wrapped_module.blocks):
+        #     print(f"\nBlock {block_idx}")
+            
+        #     print("Norm1 gradients:", block.norm1.weight.grad.data.view(-1).cpu().numpy())
+            
+        #     print("QKV gradients:", block.attn.qkv.weight.grad.data.view(-1).cpu().numpy())
+        #     print("Attention proj gradients:", block.attn.proj.weight.grad.data.view(-1).cpu().numpy())
+            
+        #     print("LayerScale1 gradients:", block.ls1.gamma.grad.data.view(-1).cpu().numpy())
+            
+        #     print("Norm2 gradients:", block.norm2.weight.grad.data.view(-1).cpu().numpy())
+            
+        #     print("MLP fc1 gradients:", block.mlp.fc1.weight.grad.data.view(-1).cpu().numpy())
+        #     print("MLP fc2 gradients:", block.mlp.fc2.weight.grad.data.view(-1).cpu().numpy())
+            
+        #     print("LayerScale2 gradients:", block.ls2.gamma.grad.data.view(-1).cpu().numpy())
+
+        # print("\nFinal norm gradients:", 
+        # model.student.backbone._fsdp_wrapped_module.norm.weight.grad.data.view(-1).cpu().numpy())
+
+        # DINO head gradients
+        # print("DINO head MLP gradients:")
+        # for idx, layer in enumerate(model.student.dino_head._fsdp_wrapped_module.mlp):
+        #     if isinstance(layer, torch.nn.Linear):
+        #         print(f"Layer {idx} gradients:", layer.weight.grad.data.view(-1).cpu().numpy())
+        #         print(f"Layer {idx} weights:", layer.weight.data.view(-1).cpu().numpy())
+
+
+        #print("DINO head last layer gradients:", 
+        #    model.student.dino_head._fsdp_wrapped_module.last_layer.weight.grad.data.view(-1).cpu().numpy())
+        #print("DINO head last layer weights:",
+        #    model.student.dino_head._fsdp_wrapped_module.last_layer.weight.data.view(-1).cpu().numpy())
+        # for block_idx, block in enumerate(model.student.backbone._fsdp_wrapped_module.blocks):
+        #     attn = block.attn
+        #     if attn.qkv.weight.grad is not None:  # Check if gradients exist
+        #         print(f"Gradients for attention block {block_idx} qkv weights:")
+        #         print(attn.qkv.weight.grad.data.view(-1).cpu().numpy())
+        #     else:
+        #         print(f"No gradients for attention block {block_idx} qkv weights.")
 
         if cfg.crops.use_variable_channels:
             total_loss_accumulator += loss_accumulator
@@ -483,7 +512,7 @@ def do_train(cfg, model, resume=False):
                         v.clip_grad_norm_(cfg.optim.clip_grad)
                 optimizer.step()
 
-            # perform teacher EMA update
+            
             model.update_teacher(mom)
 
             # logging

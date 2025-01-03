@@ -76,7 +76,7 @@ class DinoVisionTransformer(nn.Module):
         drop_path_rate=0.0,
         drop_path_uniform=False,
         init_values=None,  # for layerscale: None or 0 => no layerscale
-        embed_layer=PatchEmbed,
+        embed_layer=GrayscalePatchEmbed,
         act_layer=nn.GELU,
         block_fn=Block,
         ffn_layer="mlp",
@@ -138,6 +138,7 @@ class DinoVisionTransformer(nn.Module):
             embed_layer = GrayscalePatchEmbed if in_chans == 1 else PatchEmbed
 
         if isinstance(in_chans, int):
+            print("embed_layer", embed_layer)
             self.patch_embed = embed_layer(
                 img_size=img_size,
                 patch_size=patch_size,
@@ -161,6 +162,7 @@ class DinoVisionTransformer(nn.Module):
             if not isinstance(in_chans, int):
                 in_chans = min(in_chans)
             num_patches = int(num_patches / in_chans)
+            print("shouldnt be here")
         self.num_loc_crops = num_loc_crops
         self.free_shapes = free_shapes
 
