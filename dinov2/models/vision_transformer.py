@@ -86,6 +86,7 @@ class DinoVisionTransformer(nn.Module):
         free_shapes=None,
         num_loc_crops=8,
         use_ch_patch_embed=False,
+        gray_scale=None,
     ):
         """
         Args:
@@ -127,12 +128,15 @@ class DinoVisionTransformer(nn.Module):
         self.interpolate_offset = interpolate_offset
         self.img_size = img_size
         self.in_chans = in_chans
+        self.gray_scale = gray_scale
+
 
         self.use_ch_patch_embed = use_ch_patch_embed
         if self.use_ch_patch_embed:
             print(f"---- Using PatchEmbedPerChannel, with {in_chans} channels ----")
             embed_layer = PatchEmbedPerChannel
         else:
+            print(f"---- Using PatchEmbed, with {in_chans} channels ----")
             embed_layer = PatchEmbed
 
         if isinstance(in_chans, int):
@@ -141,6 +145,7 @@ class DinoVisionTransformer(nn.Module):
                 patch_size=patch_size,
                 in_chans=in_chans,
                 embed_dim=embed_dim,
+                gray_scale=gray_scale,
             )
             num_patches = self.patch_embed.num_patches
         else:  # list of channels

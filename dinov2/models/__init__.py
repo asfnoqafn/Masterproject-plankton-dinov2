@@ -39,6 +39,7 @@ def build_model(
             num_loc_crops=num_loc_crops,
             use_ch_patch_embed=use_ch_patch_embed,
             in_chans=in_chans,
+            gray_scale=args.gray_scale,
         )
         teacher = vits.__dict__[args.arch](**vit_kwargs)
         if only_teacher:

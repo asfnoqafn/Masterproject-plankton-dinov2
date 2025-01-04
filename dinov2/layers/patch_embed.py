@@ -42,6 +42,7 @@ class PatchEmbed(nn.Module):
         embed_dim: int = 768,
         norm_layer: Optional[Callable] = None,
         flatten_embedding: bool = True,
+        gray_scale: bool = False,
     ) -> None:
         super().__init__()
 
@@ -61,14 +62,23 @@ class PatchEmbed(nn.Module):
         self.embed_dim = embed_dim
 
         self.flatten_embedding = flatten_embedding
+        self.gray_scale = gray_scale
 
-        self.channel_adapt = nn.Conv2d(in_channels=1,out_channels=3,kernel_size=1, stride=1, bias=True)
-        self.proj = nn.Conv2d(
-            3,
-            embed_dim,
-            kernel_size=patch_HW,
-            stride=patch_HW,
-        )
+        if self.gray_scale:
+            self.channel_adapt = nn.Conv2d(in_channels=1,out_channels=3,kernel_size=1, stride=1, bias=True)
+            self.proj = nn.Conv2d(
+                3,
+                embed_dim,
+                kernel_size=patch_HW,
+                stride=patch_HW,
+            )
+        else:
+            self.proj = nn.Conv2d(
+                1,
+                embed_dim,
+                kernel_size=patch_HW,
+                stride=patch_HW,
+            )
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
     def forward(self, x: Tensor) -> Tensor:
@@ -78,8 +88,12 @@ class PatchEmbed(nn.Module):
         assert H % patch_H == 0, f"Input image height {H} is not a multiple of patch height {patch_H}"
         assert W % patch_W == 0, f"Input image width {W} is not a multiple of patch width: {patch_W}"
 
-        x = self.channel_adapt(x)
-        x = self.proj(x)  # B D sqrt(np) sqrt(np)
+        if self.gray_scale:
+            x = self.channel_adapt(x)
+            x = self.proj(x)  # B D sqrt(np) sqrt(np)
+        else:
+            x = self.proj(x)
+
         H_p, W_p = x.size(2), x.size(3)
         x = x.flatten(2).transpose(1, 2)  # B np D
         x = self.norm(x)

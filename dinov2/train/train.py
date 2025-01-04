@@ -578,7 +578,7 @@ def do_train(cfg, model, resume=False):
 def main(args):
     torchvision.disable_beta_transforms_warning()
     cfg = setup(args)
-
+    print(cfg)
     model = SSLMetaArch(cfg).to(torch.device("cuda"))
     model.prepare_for_distributed_training()
 
