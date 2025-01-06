@@ -2,7 +2,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-gpu=8
+#SBATCH --cpus-per-gpu=1
 #SBATCH -e /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.out
 #SBATCH --time 00:01:00
@@ -10,7 +10,7 @@
 
 BATCH_S=96
 N_GPUS=1
-N_CPUS=8
+N_CPUS=1
 echo $SLURM_JOB_ID
 OMP_NUM_THREADS=$N_CPUS PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/repo/Masterproject-plankton-dinov2 torchrun \
 	--standalone --nnodes=1 --nproc_per_node=$N_GPUS /home/hk-project-p0021769/hgf_grc7525/repo/Masterproject-plankton-dinov2/dinov2/train/train.py --no-resume \

@@ -60,9 +60,10 @@ class PatchEmbed(nn.Module):
 
         self.in_chans = in_chans
         self.embed_dim = embed_dim
-
+        print("embed_dim", embed_dim)
         self.flatten_embedding = flatten_embedding
         self.gray_scale = gray_scale
+
 
         if self.gray_scale:
             self.channel_adapt = nn.Conv2d(in_channels=1,out_channels=3,kernel_size=1, stride=1, bias=True)
@@ -74,7 +75,7 @@ class PatchEmbed(nn.Module):
             )
         else:
             self.proj = nn.Conv2d(
-                1,
+                3,
                 embed_dim,
                 kernel_size=patch_HW,
                 stride=patch_HW,
@@ -99,7 +100,11 @@ class PatchEmbed(nn.Module):
         x = self.norm(x)
         if not self.flatten_embedding:
             x = x.reshape(-1, H_p, W_p, self.embed_dim)  # B H_p W_p D
-
+            print(x.shape)
+            print("flatten_embedding is False")
+        print(x.shape)
+        print("flatten_embedding is True")
+        print(x.shape)
         return x
 
     def flops(self) -> float:
