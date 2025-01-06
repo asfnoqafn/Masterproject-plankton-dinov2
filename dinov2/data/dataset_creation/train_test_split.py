@@ -80,19 +80,16 @@ def load_all_datasets(main_folder):
     print(f"Loading datasets from {main_folder}")
     for dataset in sorted(os.listdir(main_folder)):
         print(f"Loading dataset: {dataset}")
-        dataset_path = os.path.join(main_folder, dataset)
-        for subdir in sorted(os.listdir(dataset_path)):
-            print(f"Loading dataset: {subdir}")
-            datasetpath_lmdb = os.path.join(dataset_path, subdir)
-            print("dataset path: ", datasetpath_lmdb) 
-            
-            if datasetpath_lmdb.endswith("_imgs") or datasetpath_lmdb.endswith('images'):
-                img_data.extend(load_lmdb_data(datasetpath_lmdb))
-            elif datasetpath_lmdb.endswith("_labels") or datasetpath_lmdb.endswith('labels'):
-                label_data.extend(load_lmdb_data(datasetpath_lmdb))
-            else:
-                print(f"Skipping {datasetpath_lmdb}")
-            print(f"Loaded dataset: {dataset}")
+        datasetpath_lmdb = os.path.join(main_folder, dataset)
+        print("dataset path: ", datasetpath_lmdb) 
+        
+        if datasetpath_lmdb.endswith("_imgs") or datasetpath_lmdb.endswith('images'):
+            img_data.extend(load_lmdb_data(datasetpath_lmdb))
+        elif datasetpath_lmdb.endswith("_labels") or datasetpath_lmdb.endswith('labels'):
+            label_data.extend(load_lmdb_data(datasetpath_lmdb))
+        else:
+            print(f"Skipping {datasetpath_lmdb}")
+        print(f"Loaded dataset: {dataset}")
                     
     return img_data, label_data
 
@@ -114,8 +111,11 @@ def split_and_save_data(main_folder, output_folder, test_size=0.2):
 
     print(f"Total data loaded: {len(img_data)} images and {len(label_data)} labels.")
 
-    blacklist = ['artifacts', 'artifacts_edge', 'unknown_blobs_and_smudges', 'unknown_sticks', 'unknown_unclassified', 
-                 'artefact', 'badfocus', 'dark', 'light', 'streak', 'vertical line', 'artefact']
+    # blacklist = ['artifacts', 'artifacts_edge', 'unknown_blobs_and_smudges', 'unknown_sticks', 'unknown_unclassified', 
+    #              'artefact', 'badfocus', 'dark', 'light', 'streak', 'vertical line', 'artefact']
+    
+    # when having to use empty blacklist
+    blacklist = []
     # consistent label mapping TODO add similar string machting and blacklist classes such as blurry
     label_map = {}
     next_id = 0
