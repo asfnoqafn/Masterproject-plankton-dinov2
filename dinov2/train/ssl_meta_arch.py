@@ -52,7 +52,8 @@ class SSLMetaArch(nn.Module):
         student_model_dict["backbone"] = student_backbone
         teacher_model_dict["backbone"] = teacher_backbone
         logger.info(f"OPTIONS -- architecture : embed_dim: {embed_dim}")
-
+        print("student_backbone", student_backbone)
+        print("------------------------------------")
         if cfg.student.pretrained_weights:
             logger.info(f"OPTIONS -- pretrained weights: loading from {cfg.student.pretrained_weights}")
             load_pretrained_weights(
