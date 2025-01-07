@@ -402,7 +402,7 @@ def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir
     tmp_lmdb_path = os.path.join(tmp_dir, lmdb_name) if tmp_dir is not None else None
     total_images = 0
     bad_bins = []
-    processed_bins = []
+    processed_bins: dict[str, int] = {}
     # open lmdb
     env: lmdb.Environment = lmdb.open(tmp_lmdb_path if tmp_lmdb_path is not None else lmdb_path, map_size=int(1e12))
 
@@ -422,7 +422,7 @@ def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir
                 bad_bins.append(Path(zip_filename).stem)
                 continue
 
-            processed_bins.append(Path(zip_filename).stem)  # bin is processed, so add it to processed list
+            processed_bins[Path(zip_filename).stem] = lmdb_count  # bin is processed, so add it to processed dict
     env.close()
 
     if tmp_lmdb_path is not None:
@@ -437,13 +437,13 @@ def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir
     with lock:
         if not os.path.exists(processed_bins_path):
             with open(processed_bins_path, "w") as f:
-                state = {"total_images": 0, "processed_bins": [], "bad_bins": []}
+                state = {"total_images": 0, "processed_bins": {}, "bad_bins": []}
                 json.dump(state, f)
         else:
             with open(processed_bins_path, "r") as f:
                 state: dict = json.load(f)
         state["total_images"] = total_images + state.get("total_images", 0)
-        state["processed_bins"] = processed_bins + state.get("processed_bins", [])
+        state["processed_bins"] = state.get("processed_bins", {}) | processed_bins
         state["bad_bins"] = bad_bins + state.get("bad_bins", [])
         with open(processed_bins_path, "w") as f:
             json.dump(state, f)
@@ -459,7 +459,8 @@ def main(args):
     )
     if os.path.exists(processed_bins_path):
         with open(processed_bins_path, "r") as f:
-            processed_bins = json.load(f).get("processed_bins", [])
+            processed_bins = json.load(f).get("processed_bins", {})
+            processed_bins = list(processed_bins.keys())
     else:
         processed_bins = []
             
