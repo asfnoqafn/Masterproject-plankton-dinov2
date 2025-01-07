@@ -16,6 +16,7 @@ from pathlib import Path
 from queue import Empty, Queue
 from typing import Optional
 from zipfile import ZipFile
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 import imageio.v3 as iio
 import lmdb
@@ -36,6 +37,27 @@ class Bin:
     
 # "complete crap" according to mvco csv, even though they don't have the correct tags, so we skip these
 blacklisted_mvco_bins = ["D20211123T063204_IFCB010", "D20211123T065325_IFCB010", "D20211123T071429_IFCB010", "D20211123T073533_IFCB010", "D20211123T075637_IFCB010", "D20211123T081741_IFCB010", "D20211123T083845_IFCB010", "D20211123T085949_IFCB010", "D20211123T092053_IFCB010", "D20211123T094157_IFCB010", "D20211123T100301_IFCB010", "D20211123T102405_IFCB010", "D20211123T104509_IFCB010", "D20211123T110613_IFCB010", "D20211123T112717_IFCB010", "D20211123T114821_IFCB010", "D20211123T120925_IFCB010", "D20211123T123029_IFCB010", "D20211123T125133_IFCB010", "D20211123T131237_IFCB010", "D20211123T133341_IFCB010", "D20211123T135445_IFCB010", "D20211123T141550_IFCB010", "D20211123T143654_IFCB010", "D20211123T145758_IFCB010", "D20211123T151902_IFCB010", "D20211123T154007_IFCB010", "D20211123T160111_IFCB010", "D20211123T162215_IFCB010", "D20211123T164320_IFCB010", "D20211123T170424_IFCB010", "D20211123T172528_IFCB010", "D20211123T174632_IFCB010", "D20211123T180736_IFCB010", "D20211123T182840_IFCB010", "D20211123T184944_IFCB010", "D20211123T191048_IFCB010", "D20211123T193153_IFCB010", "D20211123T195257_IFCB010", "D20211123T201401_IFCB010", "D20211123T203505_IFCB010", "D20211123T205610_IFCB010", "D20211123T211714_IFCB010", "D20211123T213818_IFCB010", "D20211123T215922_IFCB010", "D20211123T222026_IFCB010", "D20211123T224131_IFCB010", "D20211123T230235_IFCB010", "D20211123T232338_IFCB010", "D20211123T234442_IFCB010", "D20211124T000546_IFCB010", "D20211124T002650_IFCB010", "D20211124T004754_IFCB010", "D20211124T010858_IFCB010", "D20211124T013002_IFCB010", "D20211124T015106_IFCB010", "D20211124T021210_IFCB010", "D20211124T023314_IFCB010", "D20211124T025418_IFCB010", "D20211124T031522_IFCB010", "D20211124T033626_IFCB010", "D20211124T035730_IFCB010", "D20211124T041834_IFCB010", "D20211124T043938_IFCB010", "D20211124T050042_IFCB010", "D20211124T054310_IFCB010"]
+
+@retry(
+    stop=stop_after_attempt(5),  # Retry up to 5 times
+    wait=wait_exponential(multiplier=20, min=20, max=320),  # Exponential backoff
+    retry=retry_if_exception_type((requests.RequestException, requests.HTTPError)),
+    reraise=True)
+def download_with_retry(url: str, output_path:str):
+    """Download a file with retries and save it to the specified path."""
+    response = requests.get(url, stream=True, timeout=10)
+    download_path = f"{output_path}.download"
+    try:
+        response.raise_for_status()  # Raise an exception for HTTP errors
+    except requests.HTTPError as e:
+        if url.endswith("_features.csv") and response.status_code == 404: # type: ignore
+            pass            # features file is not available for all bins
+        raise e
+
+    with open(download_path, 'wb') as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+    os.rename(download_path, output_path)
 
 def download_bin(bin: Bin, api_path: str, output_dir: str, q: Queue[str], include_features=True, include_bin_metadata=True):
     """
@@ -61,27 +83,12 @@ def download_bin(bin: Bin, api_path: str, output_dir: str, q: Queue[str], includ
         # Extract filename from the URL or headers
         filename = url_and_path.split('/')[-1]
         output_path = os.path.join(output_dir, filename)
-        download_path = f"{output_path}.download"
-        response = requests.get(url_and_path, stream=True, timeout=60)
         try:
-            response.raise_for_status()
-
-            # Save the file to disk
-            with open(download_path, 'wb') as f:
-                # website crashed with higher chunk size, so we use 8192, not sure if it was our fault or just bad timing. In the past a chunk size of 8192 worked fine.
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            os.rename(download_path, output_path)
-
+            download_with_retry(url_and_path, output_path)
             if filename.endswith(".zip"):
                 q.put(filename)
                 logging.info(f"Added {filename} to queue.")
-        except requests.HTTPError as e:
-            if file_to_download == "_features.csv" and response.status_code == 404: # type: ignore
-                # features file is not available for all bins
-                continue
-            failed_files.append((filename, e))
-        except requests.RequestException as e:
+        except Exception as e:
             failed_files.append((filename, e))
 
     zip_failed = len(failed_files) > 0 and '.zip' in failed_files[0][0]
@@ -347,7 +354,7 @@ def lmdb_builder(
     # worker_configurer
 ) -> None:
     logger = setup_logging(log_queue)
-    timeout = 600
+    timeout = 1200
     while True:
         with lmdb_counter_lock:
             lmdb_counter.value += 1
