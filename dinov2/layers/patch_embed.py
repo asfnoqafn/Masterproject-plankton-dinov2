@@ -95,6 +95,7 @@ class PatchEmbed(nn.Module):
             x = self.proj(x)  # B D sqrt(np) sqrt(np)
         if self.gray_scale == 2:
             x = self.proj(x)
+            
         H_p, W_p = x.size(2), x.size(3)
         x = x.flatten(2).transpose(1, 2)  # B np D
         x = self.norm(x)

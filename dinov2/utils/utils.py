@@ -124,6 +124,7 @@ def load_pretrained_weights(
     pretrained_weights,
     checkpoint_key,
     teacher_student_key="teacher",
+    do_eval=False,
 ):
     if urlparse(pretrained_weights).scheme:  # If it looks like an URL
         state_dict = torch.hub.load_state_dict_from_url(pretrained_weights, map_location="cpu")
@@ -154,31 +155,32 @@ def load_pretrained_weights(
         print(f"Error: Key {teacher_student_key} not recognized, options are: 'student', 'teacher'")
         sys.exit(1)
 
-    if model.gray_scale == 1:
-        print("Initializing channel adaptation layer with Kaiming( Grayscale opt 1)")
-        channel_adapt = model.patch_embed.channel_adapt
-        nn.init.kaiming_normal_(channel_adapt.weight.data)
-        if channel_adapt.bias is not None:
-            nn.init.zeros_(channel_adapt.bias.data)
-        logger.info("Initialized channel adaptation layer with Kaiming")
-    if model.gray_scale == 2:
+    if not do_eval:
+        if model.gray_scale == 1:
+            print("Initializing channel adaptation layer with Kaiming( Grayscale opt 1)")
+            channel_adapt = model.patch_embed.channel_adapt
+            nn.init.kaiming_normal_(channel_adapt.weight.data)
+            if channel_adapt.bias is not None:
+                nn.init.zeros_(channel_adapt.bias.data)
+            logger.info("Initialized channel adaptation layer with Kaiming")
+        if model.gray_scale == 2:
 
-        state_dict = {k: v for k, v in state_dict.items() if "proj" not in k} # remove prev proj layer config
+            state_dict = {k: v for k, v in state_dict.items() if "proj" not in k} # remove prev proj layer config
 
 
-        #proj = model.patch_embed.proj
-        # Average across the 3 input channels to get 1 channel
-        #new_weights = proj.weight.data.mean(dim=1, keepdim=True)  # Shape: [384, 1, 14, 14]
-        #proj.weight.data = new_weights
-        #nn.init.zeros_(proj.bias.data)
-        proj = model.patch_embed.proj
-        new_weights = torch.zeros(384, 1, 14, 14)  # Create tensor with target shape
-        nn.init.kaiming_normal_(new_weights)
-        proj.weight.data = new_weights
-        nn.init.zeros_(proj.bias.data)
-        print("Initialized proj layer with Kaiming")
-    else:
-        raise NotImplementedError("Gray scale without rgb")
+            #proj = model.patch_embed.proj
+            # Average across the 3 input channels to get 1 channel
+            #new_weights = proj.weight.data.mean(dim=1, keepdim=True)  # Shape: [384, 1, 14, 14]
+            #proj.weight.data = new_weights
+            #nn.init.zeros_(proj.bias.data)
+            proj = model.patch_embed.proj
+            new_weights = torch.zeros(384, 1, 14, 14)  # Create tensor with target shape
+            nn.init.kaiming_normal_(new_weights)
+            proj.weight.data = new_weights
+            nn.init.zeros_(proj.bias.data)
+            print("Initialized proj layer with Kaiming")
+        else:
+            raise NotImplementedError("Gray scale without rgb")
 
     if model.use_ch_patch_embed:
         state_dict = {k: v for k, v in state_dict.items() if "patch_embed" not in k}

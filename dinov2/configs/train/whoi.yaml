@@ -71,7 +71,7 @@ train:
   cache_dataset: false
   use_torch_compile: true
   do_profiling: false
-  augmentations: "kornia_gpu"
+  augmentations: "kornia_cpu"
   in_chans: 1
   do_debug: false
 student:
