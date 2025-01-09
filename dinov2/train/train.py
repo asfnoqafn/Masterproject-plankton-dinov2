@@ -303,9 +303,9 @@ def do_train(cfg, model, resume=False):
 
     periodic_checkpointer = PeriodicCheckpointer(
         checkpointer,
-        period=1 * OFFICIAL_EPOCH_LENGTH,
+        period=3 * OFFICIAL_EPOCH_LENGTH,
         max_iter=max_iter,
-        max_to_keep=3,
+        max_to_keep=3, # TODO more during actual training run for better monitoring
     )
 
     # setup data preprocessing

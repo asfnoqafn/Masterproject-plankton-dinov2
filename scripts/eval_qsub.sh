@@ -4,8 +4,8 @@
 #SBATCH --cpus-per-gpu=19
 #SBATCH -e /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.out
-#SBATCH --time 00:05:00
-#SBATCH --partition=dev_accelerated
+#SBATCH --time 04:00:00
+#SBATCH --partition=accelerated
 N_GPUS=1
 N_CPUS=19
 echo $SLURM_JOB_ID

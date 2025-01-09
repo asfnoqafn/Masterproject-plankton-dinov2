@@ -400,25 +400,15 @@ class DinoVisionTransformer(nn.Module):
         Returns:
             torch.Tensor: tokens with positional embeddings, shape = (b, n, d)
         """
-        """
-        print(
-            "prepare_tokens_with_masks x.shape local_patch_pos local_crop_dims local_crop_len num_ch_list"
-        )
-        print(
-            f"prepare_tokens_with_masks {x.shape} {local_patch_pos} {local_crop_dims} {local_crop_len} {num_ch_list}"
-        )"""
-
+ 
         # newly created pos embed vect also needs padding
         # b c w h OR b c p (n p)
         # TODO: Problem: is using np p as w h --> aspect ratio severly distorted....
         b, c, w, h = x.size()
-        print(f"prepare_tokens_with_masks x.shape 1 {x.shape}")
         if isinstance(self.patch_embed, dict):  # here we have one tokenizer for each nb channels
             x = self.patch_embed[c](x)
-            print(f"patch embed x.shape 1 {x.shape}")
         else:
             x = self.patch_embed(x)  # b n d (=384)
-            print(f"patch embed x.shape 2 {x.shape}")
             if num_ch_list is not None:  # means that x = (b c) n d
                 b = len(num_ch_list)
                 x_list = torch.split(x, num_ch_list, dim=0)  # b [c n d]
@@ -426,12 +416,10 @@ class DinoVisionTransformer(nn.Module):
                 x = x.reshape(b, -1, x.shape[-1])  # b (c_max n) d
 
         x_dim = x.shape[-1]
-        print(f"prepare_tokens_with_masks x.shape 2 {x.shape}")
         if masks is not None:
             x = torch.where(
                 masks.unsqueeze(-1), self.mask_token.to(x.dtype).unsqueeze(0), x
             )
-        print(f"prepare_tokens_with_masks x.shape 3 {x.shape}")
         if (
             self.free_shapes and local_patch_pos is not None
         ):  # if local crops w free shape

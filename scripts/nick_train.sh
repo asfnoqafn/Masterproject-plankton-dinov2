@@ -18,4 +18,4 @@ OMP_NUM_THREADS=$N_CPUS PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/repo/Ma
 	train.output_dir='/home/hk-project-p0021769/hgf_grc7525/output/' train.use_torch_compile=true \
 	train.dataset_path="LMDBDataset:split=ALL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/train/nontest/:extra=*" train.num_workers=$N_CPUS \
 	train.batch_size_per_gpu=$BATCH_S train.augmentations=kornia_gpu student.arch=vit_small crops.use_native_res=false crops.free_shapes=none \
-	crops.local_crops_number=8 crops.use_ch_patch_embed=false train.in_chans=1 optim.base_lr=0.0005 crops.use_variable_channels=false train.grayscale=true \
+	crops.local_crops_number=8 crops.use_ch_patch_embed=false train.in_chans=1 optim.base_lr=0.0005 crops.use_variable_channels=false\
