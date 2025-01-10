@@ -16,7 +16,7 @@ from pathlib import Path
 from queue import Empty, Queue
 from typing import Optional
 from zipfile import ZipFile
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 import imageio.v3 as iio
 import lmdb
@@ -42,17 +42,19 @@ blacklisted_mvco_bins = ["D20211123T063204_IFCB010", "D20211123T065325_IFCB010",
     stop=stop_after_attempt(5),  # Retry up to 5 times
     wait=wait_exponential(multiplier=20, min=20, max=320),  # Exponential backoff
     retry=retry_if_exception_type((requests.RequestException, requests.HTTPError)),
-    reraise=True)
-def download_with_retry(url: str, output_path:str):
+    reraise=True,
+    before_sleep=before_sleep_log(logging.getLogger(), logging.WARNING))
+def download_with_retry(url: str, output_path:str, session: requests.Session):
     """Download a file with retries and save it to the specified path."""
-    response = requests.get(url, stream=True, timeout=10)
+    response = session.get(url, stream=True, timeout=10)
     download_path = f"{output_path}.download"
     try:
         response.raise_for_status()  # Raise an exception for HTTP errors
     except requests.HTTPError as e:
         if url.endswith("_features.csv") and response.status_code == 404: # type: ignore
-            pass            # features file is not available for all bins
-        raise e
+            return            # features file is not available for all bins
+        else:
+            raise e
 
     with open(download_path, 'wb') as f:
         for chunk in response.iter_content(chunk_size=8192):
@@ -77,19 +79,20 @@ def download_bin(bin: Bin, api_path: str, output_dir: str, q: Queue[str], includ
 
     url = f"{api_path}/{bin.dataset}/{bin.bin_id}"
 
-    for file_to_download in files_to_download:
-        url_and_path = url + file_to_download
+    with requests.Session() as session:
+        for file_to_download in files_to_download:
+            url_and_path = url + file_to_download
 
-        # Extract filename from the URL or headers
-        filename = url_and_path.split('/')[-1]
-        output_path = os.path.join(output_dir, filename)
-        try:
-            download_with_retry(url_and_path, output_path)
-            if filename.endswith(".zip"):
-                q.put(filename)
-                logging.info(f"Added {filename} to queue.")
-        except Exception as e:
-            failed_files.append((filename, e))
+            # Extract filename from the URL or headers
+            filename = url_and_path.split('/')[-1]
+            output_path = os.path.join(output_dir, filename)
+            try:
+                download_with_retry(url_and_path, output_path, session)
+                if filename.endswith(".zip"):
+                    q.put(filename)
+                    logging.info(f"Added {filename} to queue.")
+            except Exception as e:
+                failed_files.append((filename, e))
 
     zip_failed = len(failed_files) > 0 and '.zip' in failed_files[0][0]
 
@@ -114,12 +117,6 @@ def download_bin(bin: Bin, api_path: str, output_dir: str, q: Queue[str], includ
         raise failed_files[0][1]
     else:
         return failed_files
-
-
-# def force_download_bin_list(bin_list: list[str], api_path: str, output_dir, include_features=True, include_bin_metadata=True):
-#     for bin in bin_list:
-#         download_bin(Bin("", bin, "", 0), api_path, output_dir, include_features, include_bin_metadata)
-
 
 def get_bin_data(csv_path, output_dir: str, max_bins: Optional[int] = None, start_bin: Optional[str] = None, blacklisted_tags: list[str] = [], blacklisted_sample_types: list[str] = [], processed_bins: list[str] = []):
     """
@@ -196,43 +193,9 @@ def download_metadata_csv(dataset: str, api_path: str, output_dir: str):
             f.write(chunk)
     return output_path
 
-
-def download_multiple_zips(bins: list[Bin], api_path, output_dir, q: Queue[str], max_workers):
-    """
-    Downloads multiple ZIP files concurrently from a list of URLs.
-
-    Args:
-        urls (list): List of API endpoints to download ZIP files.
-        output_dir (str): Directory to save the downloaded ZIP files.
-        max_workers (int): Maximum number of threads to use for concurrent downloads.
-    """
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
-
-    # Use ThreadPoolExecutor for concurrent downloading
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Map each URL to the download_zip function
-        future_to_bin = {executor.submit(download_bin, bin=bin, api_path=api_path, output_dir=output_dir, q=q): bin for bin in bins}
-
-        # Process completed downloads
-        for future in concurrent.futures.as_completed(future_to_bin):
-            bin = future_to_bin[future]
-            try:
-                failed_files = future.result()
-                if len(failed_files) == 0:
-                    logging.info(f"Finished downloading {bin.bin_id}.")
-                else:
-                    for filename, e in failed_files:
-                        logging.warning(f"Download failed for {filename}: {e}")
-            except Exception as e:
-                logging.error(f"Error downloading {bin.bin_id}: {e}")
-        logging.info(f"Finished downloading {len(bins)} bins.")
-
-# Queue for log messages from processes
 log_queue = multiprocessing.Queue()
 
-# Function to setup logging inside each worker
-
-
+# setup logging for each lmdb worker
 def setup_logging(queue: multiprocessing.Queue):
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
@@ -266,61 +229,6 @@ def init_log_queue(queue: multiprocessing.Queue):
     global log_queue
     log_queue = queue
 
-
-def download_zips_and_build_lmdbs(undownloaded_bins: list[Bin], 
-                                  unprocessed_bins: list[Bin],
-                                  api_path: str, 
-                                  output_dir: str, 
-                                  lmdb_dir: str, 
-                                  num_api_workers: int, 
-                                  num_lmdb_workers: int, 
-                                  chunk_size: int, 
-                                  tmp_dir: Optional[str] = None) -> None:
-    m = multiprocessing.Manager()
-    
-    bin_queue: Queue[str] = m.Queue()
-    # add unprocessed bins to queue
-    for bin in unprocessed_bins:
-        bin_queue.put(f"{bin.bin_id}.zip")
-    logging.info(f"Added {len(unprocessed_bins)} unprocessed but already downloaded bins to queue.")
-
-    lock = m.Lock()
-    num_existing_lmdbs = len(list(Path(lmdb_dir).glob("*_images")))
-    logging.info(f"Found {num_existing_lmdbs} existing lmdbs...")
-    lmdb_counter = m.Value('i', num_existing_lmdbs)
-    lmdb_counter_lock = m.Lock()
-
-    listener_process = multiprocessing.Process(target=listener, args=(log_queue,))
-    listener_process.start()
-
-    processed_bins_path = os.path.join(
-        lmdb_dir, "processed_bins.json"
-    )
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=num_api_workers) as thread_pool, concurrent.futures.ProcessPoolExecutor(max_workers=num_lmdb_workers, initializer=init_log_queue, initargs=(log_queue,)) as process_pool:
-        future_to_bin = {thread_pool.submit(download_bin, bin, api_path, output_dir, bin_queue): bin for bin in undownloaded_bins}
-        
-        for _ in range(num_lmdb_workers):
-            process_pool.submit(lmdb_builder, bin_queue, lock, lmdb_counter, lmdb_dir, processed_bins_path, chunk_size, output_dir, lmdb_counter_lock, tmp_dir)
-
-        # Process completed downloads
-        for future in concurrent.futures.as_completed(future_to_bin):
-            bin = future_to_bin[future]
-            try:
-                failed_files = future.result()
-                if len(failed_files) == 0:
-                    logging.info(f"Finished downloading {bin.bin_id}.")
-                else:
-                    for filename, e in failed_files:
-                        logging.warning(f"Download failed for {filename}: {e}")
-            except Exception as e:
-                logging.error(f"Error downloading {bin.bin_id}: {e}")
-        logging.info(f"Finished downloading {len(undownloaded_bins)} bins.")
-
-    log_queue.put(None)
-    listener_process.join()
-
-
 # later just import both of these fronm create lmdb script
 def normalize(x):
     return (x - x.min()) / (x.max() - x.min() + 1e-5)
@@ -338,37 +246,6 @@ def load_img(img_path: ImageResource) -> np.ndarray:
     img = normalize(np.squeeze(img))
     img = (img * 255).astype(np.uint8)
     return img
-
-
-def lmdb_builder(
-    bin_queue: Queue,
-    lock: threading.Lock,
-    lmdb_counter: ValueProxy[int],
-    # log_queue: multiprocessing.Queue,
-    lmdb_dir: str,
-    processed_bins_path: str,
-    chunk_size: int,
-    bin_output_dir: str,
-    lmdb_counter_lock: threading.Lock,
-    tmp_dir: Optional[str] = None,
-    # worker_configurer
-) -> None:
-    logger = setup_logging(log_queue)
-    timeout = 1200
-    while True:
-        with lmdb_counter_lock:
-            lmdb_counter.value += 1
-            lmdb_count = lmdb_counter.value
-        logger.info(f"Started building LMDB #{lmdb_count:03}")
-        try:
-            build_lmdb(bin_queue, lock, lmdb_count, lmdb_dir, processed_bins_path, chunk_size, bin_output_dir, logger, tmp_dir, timeout)
-        except Empty:
-            logging.info(f"Process finished. Queue was empty for longer than {timeout} seconds")
-            break
-        except Exception as e:
-            logger.error(f"Process crashed. Error building lmdb: {e}")
-            break
-
 
 def save_zip_to_lmdb(zip_filename, txn, bin_output_dir):
     zip_filepath = os.path.join(bin_output_dir, zip_filename)
@@ -403,7 +280,7 @@ def save_zip_to_lmdb(zip_filename, txn, bin_output_dir):
     return total_images
 
 
-def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir: str, processed_bins_path: str, chunk_size: int, bin_output_dir: str, logger: logging.Logger, tmp_dir: Optional[str] = None, timeout=600) -> None:
+def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir: str, processed_bins_path: str, chunk_size: int, bin_output_dir: str, logger: logging.Logger, tmp_dir: Optional[str] = None, timeout=1200) -> None:
     lmdb_name = f"{lmdb_count:03}_images"
     lmdb_path = os.path.join(lmdb_dir, lmdb_name)
     tmp_lmdb_path = os.path.join(tmp_dir, lmdb_name) if tmp_dir is not None else None
@@ -455,6 +332,88 @@ def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir
         with open(processed_bins_path, "w") as f:
             json.dump(state, f)
 
+def lmdb_builder(
+    bin_queue: Queue,
+    lock: threading.Lock,
+    lmdb_counter: ValueProxy[int],
+    lmdb_dir: str,
+    processed_bins_path: str,
+    chunk_size: int,
+    bin_output_dir: str,
+    lmdb_counter_lock: threading.Lock,
+    tmp_dir: Optional[str] = None,
+    queue_timeout = 1200,
+    # worker_configurer
+) -> None:
+    logger = setup_logging(log_queue)
+    while True:
+        with lmdb_counter_lock:
+            lmdb_counter.value += 1
+            lmdb_count = lmdb_counter.value
+        logger.info(f"Started building LMDB #{lmdb_count:03}")
+        try:
+            build_lmdb(bin_queue, lock, lmdb_count, lmdb_dir, processed_bins_path, chunk_size, bin_output_dir, logger, tmp_dir, queue_timeout)
+        except Empty:
+            logging.info(f"Process finished. Queue was empty for longer than {queue_timeout} seconds")
+            break
+        except Exception as e:
+            logger.error(f"Process crashed. Error building lmdb: {e}")
+            break
+
+def download_zips_and_build_lmdbs(undownloaded_bins: list[Bin], 
+                                  unprocessed_bins: list[Bin],
+                                  api_path: str, 
+                                  bin_output_dir: str, 
+                                  lmdb_output_dir: str, 
+                                  num_api_workers: int, 
+                                  num_lmdb_workers: int, 
+                                  chunk_size: int, 
+                                  tmp_dir: Optional[str] = None,
+                                queue_timeout: int = 1200,
+                                **kwargs) -> None:
+    m = multiprocessing.Manager()
+    
+    bin_queue: Queue[str] = m.Queue()
+    # add unprocessed bins to queue
+    for bin in unprocessed_bins:
+        bin_queue.put(f"{bin.bin_id}.zip")
+    logging.info(f"Added {len(unprocessed_bins)} unprocessed but already downloaded bins to queue.")
+
+    lock = m.Lock()
+    num_existing_lmdbs = len(list(Path(lmdb_output_dir).glob("*_images")))
+    logging.info(f"Found {num_existing_lmdbs} existing lmdbs...")
+    lmdb_counter = m.Value('i', num_existing_lmdbs)
+    lmdb_counter_lock = m.Lock()
+
+    listener_process = multiprocessing.Process(target=listener, args=(log_queue,))
+    listener_process.start()
+
+    processed_bins_path = os.path.join(
+        lmdb_output_dir, "processed_bins.json"
+    )
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_api_workers) as thread_pool, concurrent.futures.ProcessPoolExecutor(max_workers=num_lmdb_workers, initializer=init_log_queue, initargs=(log_queue,)) as process_pool:
+        future_to_bin = {thread_pool.submit(download_bin, bin, api_path, bin_output_dir, bin_queue): bin for bin in undownloaded_bins}
+        
+        for _ in range(num_lmdb_workers):
+            process_pool.submit(lmdb_builder, bin_queue, lock, lmdb_counter, lmdb_output_dir, processed_bins_path, chunk_size, bin_output_dir, lmdb_counter_lock, tmp_dir, queue_timeout)
+
+        # Process completed downloads
+        for future in concurrent.futures.as_completed(future_to_bin):
+            bin = future_to_bin[future]
+            try:
+                failed_files = future.result()
+                if len(failed_files) == 0:
+                    logging.info(f"Finished downloading {bin.bin_id}.")
+                else:
+                    for filename, e in failed_files:
+                        logging.warning(f"Download failed for {filename}: {e}")
+            except Exception as e:
+                logging.error(f"Error downloading {bin.bin_id}: {e}")
+        logging.info(f"Finished downloading {len(undownloaded_bins)} bins.")
+
+    log_queue.put(None)
+    listener_process.join()
 
 def main(args):
     os.makedirs(args.bin_output_dir, exist_ok=True)
@@ -474,7 +433,7 @@ def main(args):
     undownloaded_bins, unprocessed_bins = get_bin_data(csv_path=csv_path, output_dir=args.bin_output_dir, start_bin=args.start_bin, blacklisted_sample_types=args.blacklisted_sample_types.split(","), blacklisted_tags=args.blacklisted_tags.split(","), max_bins=args.max_bins, processed_bins=processed_bins)  # gets all bins not present in the folder
 
     # download bins and add path to zipfile in queue
-    download_zips_and_build_lmdbs(undownloaded_bins=undownloaded_bins, unprocessed_bins=unprocessed_bins, api_path=args.api_path, output_dir=args.bin_output_dir, lmdb_dir=args.lmdb_output_dir, num_api_workers=args.num_api_workers, num_lmdb_workers=args.num_lmdb_workers, chunk_size=args.chunk_size, tmp_dir=args.tmp_dir)
+    download_zips_and_build_lmdbs(undownloaded_bins=undownloaded_bins, unprocessed_bins=unprocessed_bins, **vars(args))
 
 
 def get_args_parser():
@@ -534,6 +493,12 @@ def get_args_parser():
         type=int,
         help="Size to chunk images into different lmdbs",
         default=1_000_000,
+    )
+    parser.add_argument(
+        "--queue_timeout",
+        type=int,
+        help="Timeout for queue to be empty before process exits",
+        default=1200,
     )
     return parser
 
