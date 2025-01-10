@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
+import json
 from tensorboard.plugins import projector
 import google.protobuf.text_format as text_format
 import logging
@@ -338,8 +339,49 @@ def extract_features_with_dataloader(model, data_loader, sample_count, gather_on
     return features, all_labels
 
 
+class HierarchyNode:
+    def __init__(self, name):
+        self.name = name
+        self.children = []
+        self.parent = None
 
-import torch
+    def add_child(self, child):
+        child.parent = self
+        self.children.append(child)
+
+    def is_descendant(self, node_name):
+        """Check if a given node name is a descendant."""
+        for child in self.children:
+            if child.name == node_name or child.is_descendant(node_name):
+                return True
+        return False
+    
+def deserialize_hierarchy(data):
+    """Reconstruct the hierarchy tree from a dictionary."""
+    node = HierarchyNode(data["name"])
+    for child_data in data["children"]:
+        child_node = deserialize_hierarchy(child_data)
+        node.add_child(child_node)
+    return node
+
+def load_hierarchy_from_file(file_path):
+    """Load the hierarchy tree from a JSON file."""
+    with open(file_path, "r") as file:
+        data = json.load(file)
+    return deserialize_hierarchy(data)
+
+def serialize_hierarchy(node):
+    """Convert the hierarchy tree to a dictionary for JSON serialization."""
+    return {
+        "name": node.name,
+        "children": [serialize_hierarchy(child) for child in node.children]
+    }
+
+def save_hierarchy_to_file(hierarchy_root, file_path):
+    """Save the hierarchy tree to a JSON file."""
+    with open(file_path, "w") as file:
+        json.dump(serialize_hierarchy(hierarchy_root), file, indent=4)
+
 
 class PCA:
     def __init__(self, num_components: int):

@@ -4,11 +4,12 @@
 #SBATCH --cpus-per-gpu=19
 #SBATCH -e /home/hk-project-p0021769/hgf_rth0695/output/slurm_output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_rth0695/output/slurm_output/log_%j.out
-#SBATCH --time 02:00:00
-#SBATCH --partition=accelerated
+#SBATCH --time 01:00:00
+#SBATCH --partition=dev_accelerated
 N_GPUS=4
 N_CPUS=19
 echo $SLURM_JOB_ID
+export TORCH_USE_CUDA_DSA=1
 
 PYTHONPATH=/home/hk-project-p0021769/hgf_rth0695/Masterproject-plankton-dinov2 torchrun \
  --standalone --nnodes=1 dinov2/run/eval/linear.py \
@@ -20,4 +21,6 @@ PYTHONPATH=/home/hk-project-p0021769/hgf_rth0695/Masterproject-plankton-dinov2 t
  --pretrained-weights 'checkpoints/dinov2_vits14_pretrain.pth' \
  --log-missclassified-images True \
  --log-confusion-matrix True \
- --run_name 'linear_eval_ZooCamNet' \
+ --run_name 'linear_eval_ZooCamNet'
+#  --hierarchy-file-path="/home/hk-project-p0021769/hgf_rth0695/Masterproject-plankton-dinov2/hierarchy_zoo_cam.json" \
+#  --loss-function="custom_hierarchical" \

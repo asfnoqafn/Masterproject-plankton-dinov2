@@ -38,6 +38,7 @@ from dinov2.eval.setup import setup_and_build_model
 from dinov2.eval.utils import (
     ModelWithIntermediateLayers,
     evaluate,
+    load_hierarchy_from_file,
 )
 from dinov2.logging import MetricLogger
 
@@ -197,6 +198,17 @@ def get_args_parser(
         "--log-confusion-matrix",
         type=bool,
         help="This flag enables logging of the confusion matrix to WandB",
+    )
+    parser.add_argument(
+        "--loss-function",
+        type=str,
+        default="cross_entropy",
+        help="Loss function to use for training the linear classifier, can be 'cross_entropy' or 'custom_hierarchical'",
+    )
+    parser.add_argument(
+        "--hierarchy-file-path",
+        type=str,
+        help="Path to the hierarchy file for the custom hierarchical loss function",
     )
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
@@ -421,6 +433,8 @@ def eval_linear(
     num_images_to_log=20,  # Number of misclassified images to log
     log_missclassified_images=False,
     log_confusion_matrix=False,
+    loss_function="cross_entropy",
+    hierarchy_file_path=None,
 ):
     checkpointer = Checkpointer(
         linear_classifier,
@@ -441,7 +455,15 @@ def eval_linear(
         # Forward pass
         features = feature_model(data)
         outputs = linear_classifier(features)
-        loss = nn.CrossEntropyLoss()(outputs, labels)
+        if(loss_function == "cross_entropy"):
+            loss = nn.CrossEntropyLoss()(outputs, labels)
+        if(loss_function == "custom_hierarchical"):
+            try:
+                hierarchy_root = load_hierarchy_from_file(hierarchy_file_path)
+            except: 
+                raise ValueError(f"Hierarchy file {hierarchy_file_path} could not be loaded. Please make sure the file exists and is in the correct format.")
+            loss = hierarchical_loss(outputs, labels, hierarchy_root, val_class_mapping)
+
 
         # Backward pass and optimization
         optimizer.zero_grad()
@@ -524,7 +546,63 @@ def eval_linear(
 
     return val_results_dict, feature_model, linear_classifier, iteration
 
+def hierarchical_loss(predictions, labels, hierarchy_root, val_class_mapping):
+    """
+    Compute hierarchical loss with tree structure.
+    
+    :param predictions: Tensor of shape (N, C) with predicted probabilities for each class.
+    :param labels: Tensor of shape (N,) with ground-truth class indices.
+    :param hierarchy_root: Root of the hierarchy tree.
+    :param class_indices: Dict mapping class names to indices.
+    :return: Computed loss value.
+    """
+    # Create class mapping dictionaries
+    class_indices = {row[0]: int(row[1]) for row in val_class_mapping}
 
+    index_to_class = {v: k for k, v in class_indices.items()}
+    
+    loss = 0.0
+    for i, (pred, label) in enumerate(zip(predictions, labels)):
+        true_class = index_to_class[label.item()]
+        pred_probs = torch.softmax(pred, dim=0)
+        
+        # Get the predicted class and its probability
+        predicted_class = index_to_class[torch.argmax(pred).item()]
+        predicted_prob = pred_probs[torch.argmax(pred)]
+        
+        # Traverse the hierarchy to determine penalties
+        def find_node(node, target):
+            if node.name == target:
+                return node
+            for child in node.children:
+                result = find_node(child, target)
+                if result:
+                    return result
+            return None
+
+        true_node = find_node(hierarchy_root, true_class)
+        pred_node = find_node(hierarchy_root, predicted_class)
+        
+        if pred_node is None or true_node is None:
+            raise ValueError(f"Class {true_class} or {predicted_class} not found in hierarchy.")
+        
+        if pred_node == true_node:
+            # Correct prediction
+            penalty = 0.0
+        elif true_node.is_descendant(predicted_class):
+            # Predicted class is a parent of the true class
+            penalty = 0.1
+        elif pred_node.is_descendant(true_class):
+            # Predicted class is a child of the true class
+            penalty = 0.2
+        else:
+            # Predicted class is a sibling or unrelated
+            penalty = 1.0
+
+        # Combine penalty with negative log likelihood
+        loss += penalty * -torch.log(predicted_prob)
+    
+    return loss / len(predictions)
 
 def make_eval_data_loader(test_dataset_str, batch_size, num_workers, metric_type):
     test_dataset = make_dataset(
@@ -614,6 +692,8 @@ def run_eval_linear(
     test_metric_types=None,
     log_missclassified_images=False,
     log_confusion_matrix=False,
+    loss_function="cross_entropy",
+    hierarchy_file_path=None,
 ):
     seed = 0
     test_dataset_strs = test_dataset_strs or [val_dataset_str]
@@ -713,6 +793,8 @@ def run_eval_linear(
         num_images_to_log=50,
         log_missclassified_images=log_missclassified_images,
         log_confusion_matrix=log_confusion_matrix,
+        loss_function=loss_function,
+        hierarchy_file_path=hierarchy_file_path,
     )
 
     # Test on additional datasets
@@ -766,6 +848,8 @@ def main(args):
         test_class_mapping_fpaths=args.test_class_mapping_fpaths,
         log_missclassified_images=args.log_missclassified_images,
         log_confusion_matrix=args.log_confusion_matrix,
+        loss_function=args.loss_function,
+        hierarchy_file_path=args.hierarchy_file_path,
     )
     return 0
 

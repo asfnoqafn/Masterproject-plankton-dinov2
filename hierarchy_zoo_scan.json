@@ -1,0 +1,1017 @@
+{
+    "name": "Root",
+    "children": [
+        {
+            "name": "living",
+            "children": [
+                {
+                    "name": "eukaryota",
+                    "children": [
+                        {
+                            "name": "opisthokonta",
+                            "children": [
+                                {
+                                    "name": "holozoa",
+                                    "children": [
+                                        {
+                                            "name": "metazoa",
+                                            "children": [
+                                                {
+                                                    "name": "arthropoda",
+                                                    "children": [
+                                                        {
+                                                            "name": "crustacea",
+                                                            "children": [
+                                                                {
+                                                                    "name": "maxillopoda",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "copepoda",
+                                                                            "children": [
+                                                                                {
+                                                                                    "name": "calanoida",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "acartiidae",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "calanidae",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "paracalanidae",
+                                                                                            "children": [
+                                                                                                {
+                                                                                                    "name": "calocalanus",
+                                                                                                    "children": [
+                                                                                                        {
+                                                                                                            "name": "calocalanuspavo",
+                                                                                                            "children": []
+                                                                                                        }
+                                                                                                    ]
+                                                                                                }
+                                                                                            ]
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "candaciidae",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "centropagidae",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "eucalanidae",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "euchaetidae",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "augaptilidae",
+                                                                                            "children": [
+                                                                                                {
+                                                                                                    "name": "haloptilus",
+                                                                                                    "children": []
+                                                                                                }
+                                                                                            ]
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "heterorhabdidae",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "metridinidae",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "pontellidae",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "rhincalanidae",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "temoridae",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                },
+                                                                                {
+                                                                                    "name": "poecilostomatoida",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "sapphirinidae",
+                                                                                            "children": [
+                                                                                                {
+                                                                                                    "name": "copilia",
+                                                                                                    "children": []
+                                                                                                }
+                                                                                            ]
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "corycaeidae",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "oncaeidae",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                },
+                                                                                {
+                                                                                    "name": "harpacticoida",
+                                                                                    "children": []
+                                                                                },
+                                                                                {
+                                                                                    "name": "cyclopoida",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "oithonidae",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                }
+                                                                            ]
+                                                                        },
+                                                                        {
+                                                                            "name": "thecostraca",
+                                                                            "children": [
+                                                                                {
+                                                                                    "name": "cirripedia",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "cirrus",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "cypris",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "naupliicirripedia",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                }
+                                                                            ]
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                {
+                                                                    "name": "malacostraca",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "eumalacostraca",
+                                                                            "children": [
+                                                                                {
+                                                                                    "name": "amphipoda",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "hyperiidea",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                },
+                                                                                {
+                                                                                    "name": "euphausiacea",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "calyptopsis",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                },
+                                                                                {
+                                                                                    "name": "cumacea",
+                                                                                    "children": []
+                                                                                },
+                                                                                {
+                                                                                    "name": "isopoda",
+                                                                                    "children": []
+                                                                                },
+                                                                                {
+                                                                                    "name": "decapoda",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "dendrobranchiata",
+                                                                                            "children": [
+                                                                                                {
+                                                                                                    "name": "sergestoidea",
+                                                                                                    "children": [
+                                                                                                        {
+                                                                                                            "name": "luciferidae",
+                                                                                                            "children": [
+                                                                                                                {
+                                                                                                                    "name": "larvaeluciferidae",
+                                                                                                                    "children": []
+                                                                                                                }
+                                                                                                            ]
+                                                                                                        },
+                                                                                                        {
+                                                                                                            "name": "sergestidae",
+                                                                                                            "children": [
+                                                                                                                {
+                                                                                                                    "name": "protozoeasergestidae",
+                                                                                                                    "children": []
+                                                                                                                }
+                                                                                                            ]
+                                                                                                        }
+                                                                                                    ]
+                                                                                                },
+                                                                                                {
+                                                                                                    "name": "penaeoidea",
+                                                                                                    "children": [
+                                                                                                        {
+                                                                                                            "name": "penaeidae",
+                                                                                                            "children": [
+                                                                                                                {
+                                                                                                                    "name": "protozoeapenaeidae",
+                                                                                                                    "children": []
+                                                                                                                }
+                                                                                                            ]
+                                                                                                        }
+                                                                                                    ]
+                                                                                                }
+                                                                                            ]
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "pleocyemata",
+                                                                                            "children": [
+                                                                                                {
+                                                                                                    "name": "anomura",
+                                                                                                    "children": [
+                                                                                                        {
+                                                                                                            "name": "porcellanidae",
+                                                                                                            "children": [
+                                                                                                                {
+                                                                                                                    "name": "larvaeporcellanidae",
+                                                                                                                    "children": []
+                                                                                                                }
+                                                                                                            ]
+                                                                                                        },
+                                                                                                        {
+                                                                                                            "name": "galatheidae",
+                                                                                                            "children": [
+                                                                                                                {
+                                                                                                                    "name": "zoeagalatheidae",
+                                                                                                                    "children": []
+                                                                                                                }
+                                                                                                            ]
+                                                                                                        }
+                                                                                                    ]
+                                                                                                },
+                                                                                                {
+                                                                                                    "name": "brachyura",
+                                                                                                    "children": [
+                                                                                                        {
+                                                                                                            "name": "megalopa",
+                                                                                                            "children": []
+                                                                                                        },
+                                                                                                        {
+                                                                                                            "name": "zoeabrachyura",
+                                                                                                            "children": []
+                                                                                                        }
+                                                                                                    ]
+                                                                                                }
+                                                                                            ]
+                                                                                        }
+                                                                                    ]
+                                                                                },
+                                                                                {
+                                                                                    "name": "mysida",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "larvaemysida",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "protozoeaeumalacostraca",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                }
+                                                                            ]
+                                                                        },
+                                                                        {
+                                                                            "name": "hoplocarida",
+                                                                            "children": [
+                                                                                {
+                                                                                    "name": "stomatopoda",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "larvaestomatopoda",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                }
+                                                                            ]
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                {
+                                                                    "name": "branchiopoda",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "diplostraca",
+                                                                            "children": [
+                                                                                {
+                                                                                    "name": "cladocera",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "podonidae",
+                                                                                            "children": [
+                                                                                                {
+                                                                                                    "name": "evadne",
+                                                                                                    "children": []
+                                                                                                },
+                                                                                                {
+                                                                                                    "name": "podon",
+                                                                                                    "children": []
+                                                                                                }
+                                                                                            ]
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "sididae",
+                                                                                            "children": [
+                                                                                                {
+                                                                                                    "name": "penilia",
+                                                                                                    "children": []
+                                                                                                }
+                                                                                            ]
+                                                                                        }
+                                                                                    ]
+                                                                                }
+                                                                            ]
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                {
+                                                                    "name": "metanaupliicrustacea",
+                                                                    "children": []
+                                                                },
+                                                                {
+                                                                    "name": "naupliicrustacea",
+                                                                    "children": []
+                                                                },
+                                                                {
+                                                                    "name": "oligostraca",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "ostracoda",
+                                                                            "children": []
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                {
+                                                                    "name": "partcrustacea",
+                                                                    "children": []
+                                                                }
+                                                            ]
+                                                        },
+                                                        {
+                                                            "name": "hexapoda",
+                                                            "children": [
+                                                                {
+                                                                    "name": "insecta",
+                                                                    "children": []
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    "name": "cnidaria",
+                                                    "children": [
+                                                        {
+                                                            "name": "anthozoa",
+                                                            "children": [
+                                                                {
+                                                                    "name": "hexacorallia",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "actiniaria",
+                                                                            "children": []
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        },
+                                                        {
+                                                            "name": "hydrozoa",
+                                                            "children": [
+                                                                {
+                                                                    "name": "trachylina",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "narcomedusae",
+                                                                            "children": [
+                                                                                {
+                                                                                    "name": "aeginidae",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "solmundella",
+                                                                                            "children": [
+                                                                                                {
+                                                                                                    "name": "solmundellabitentaculata",
+                                                                                                    "children": [
+                                                                                                        {
+                                                                                                            "name": "actinula",
+                                                                                                            "children": []
+                                                                                                        }
+                                                                                                    ]
+                                                                                                }
+                                                                                            ]
+                                                                                        }
+                                                                                    ]
+                                                                                }
+                                                                            ]
+                                                                        },
+                                                                        {
+                                                                            "name": "trachymedusae",
+                                                                            "children": [
+                                                                                {
+                                                                                    "name": "rhopalonematidae",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "aglaura",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "rhopalonema",
+                                                                                            "children": [
+                                                                                                {
+                                                                                                    "name": "rhopalonemavelatum",
+                                                                                                    "children": []
+                                                                                                }
+                                                                                            ]
+                                                                                        }
+                                                                                    ]
+                                                                                },
+                                                                                {
+                                                                                    "name": "geryoniidae",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "liriope",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                }
+                                                                            ]
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                {
+                                                                    "name": "hydroidolina",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "siphonophorae",
+                                                                            "children": [
+                                                                                {
+                                                                                    "name": "calycophorae",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "abylidae",
+                                                                                            "children": [
+                                                                                                {
+                                                                                                    "name": "bassia",
+                                                                                                    "children": []
+                                                                                                },
+                                                                                                {
+                                                                                                    "name": "abylopsis",
+                                                                                                    "children": [
+                                                                                                        {
+                                                                                                            "name": "abylopsistetragona",
+                                                                                                            "children": [
+                                                                                                                {
+                                                                                                                    "name": "bractabylopsistetragona",
+                                                                                                                    "children": []
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "name": "eudoxieabylopsistetragona",
+                                                                                                                    "children": []
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "name": "gonophoreabylopsistetragona",
+                                                                                                                    "children": []
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "name": "nectophoreabylopsistetragona",
+                                                                                                                    "children": []
+                                                                                                                }
+                                                                                                            ]
+                                                                                                        }
+                                                                                                    ]
+                                                                                                }
+                                                                                            ]
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "diphyidae",
+                                                                                            "children": [
+                                                                                                {
+                                                                                                    "name": "bractdiphyidae",
+                                                                                                    "children": []
+                                                                                                },
+                                                                                                {
+                                                                                                    "name": "eudoxiediphyidae",
+                                                                                                    "children": []
+                                                                                                },
+                                                                                                {
+                                                                                                    "name": "gonophorediphyidae",
+                                                                                                    "children": []
+                                                                                                },
+                                                                                                {
+                                                                                                    "name": "nectophorediphyidae",
+                                                                                                    "children": []
+                                                                                                }
+                                                                                            ]
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "hippopodiidae",
+                                                                                            "children": [
+                                                                                                {
+                                                                                                    "name": "nectophorehippopodiidae",
+                                                                                                    "children": []
+                                                                                                }
+                                                                                            ]
+                                                                                        }
+                                                                                    ]
+                                                                                },
+                                                                                {
+                                                                                    "name": "physonectae",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "nectophorephysonectae",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "siphonula",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                },
+                                                                                {
+                                                                                    "name": "partsiphonophorae",
+                                                                                    "children": []
+                                                                                }
+                                                                            ]
+                                                                        },
+                                                                        {
+                                                                            "name": "leptothecata",
+                                                                            "children": [
+                                                                                {
+                                                                                    "name": "campanulariidae",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "obelia",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                }
+                                                                            ]
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        },
+                                                        {
+                                                            "name": "scyphozoa",
+                                                            "children": [
+                                                                {
+                                                                    "name": "ephyra",
+                                                                    "children": []
+                                                                }
+                                                            ]
+                                                        },
+                                                        {
+                                                            "name": "partcnidaria",
+                                                            "children": []
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    "name": "chordata",
+                                                    "children": [
+                                                        {
+                                                            "name": "craniata",
+                                                            "children": [
+                                                                {
+                                                                    "name": "vertebrata",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "gnathostomata",
+                                                                            "children": [
+                                                                                {
+                                                                                    "name": "actinopterygii",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "eggactinopterygii",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                }
+                                                                            ]
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        },
+                                                        {
+                                                            "name": "tunicata",
+                                                            "children": [
+                                                                {
+                                                                    "name": "thaliacea",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "doliolida",
+                                                                            "children": []
+                                                                        },
+                                                                        {
+                                                                            "name": "salpida",
+                                                                            "children": [
+                                                                                {
+                                                                                    "name": "salpidae",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "endostyle",
+                                                                                            "children": []
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "nucleus",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                },
+                                                                                {
+                                                                                    "name": "juvenilesalpida",
+                                                                                    "children": []
+                                                                                }
+                                                                            ]
+                                                                        },
+                                                                        {
+                                                                            "name": "pyrosomatida",
+                                                                            "children": []
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                {
+                                                                    "name": "appendicularia",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "fritillariidae",
+                                                                            "children": []
+                                                                        },
+                                                                        {
+                                                                            "name": "oikopleuridae",
+                                                                            "children": []
+                                                                        },
+                                                                        {
+                                                                            "name": "tailappendicularia",
+                                                                            "children": []
+                                                                        },
+                                                                        {
+                                                                            "name": "trunkappendicularia",
+                                                                            "children": []
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    "name": "annelida",
+                                                    "children": [
+                                                        {
+                                                            "name": "partannelida",
+                                                            "children": []
+                                                        },
+                                                        {
+                                                            "name": "polychaeta",
+                                                            "children": [
+                                                                {
+                                                                    "name": "errantia",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "tomopteridae",
+                                                                            "children": []
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    "name": "mollusca",
+                                                    "children": [
+                                                        {
+                                                            "name": "gastropoda",
+                                                            "children": [
+                                                                {
+                                                                    "name": "atlanta",
+                                                                    "children": []
+                                                                },
+                                                                {
+                                                                    "name": "heterobranchia",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "euthyneura",
+                                                                            "children": [
+                                                                                {
+                                                                                    "name": "euopisthobranchia",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "thecosomata",
+                                                                                            "children": [
+                                                                                                {
+                                                                                                    "name": "cavoliniidae",
+                                                                                                    "children": [
+                                                                                                        {
+                                                                                                            "name": "cavolinia",
+                                                                                                            "children": [
+                                                                                                                {
+                                                                                                                    "name": "cavoliniainflexa",
+                                                                                                                    "children": []
+                                                                                                                }
+                                                                                                            ]
+                                                                                                        }
+                                                                                                    ]
+                                                                                                },
+                                                                                                {
+                                                                                                    "name": "creseidae",
+                                                                                                    "children": [
+                                                                                                        {
+                                                                                                            "name": "creseis",
+                                                                                                            "children": [
+                                                                                                                {
+                                                                                                                    "name": "creseidaeacicula",
+                                                                                                                    "children": []
+                                                                                                                }
+                                                                                                            ]
+                                                                                                        }
+                                                                                                    ]
+                                                                                                },
+                                                                                                {
+                                                                                                    "name": "cymbuliaperoni",
+                                                                                                    "children": []
+                                                                                                },
+                                                                                                {
+                                                                                                    "name": "limacinidae",
+                                                                                                    "children": []
+                                                                                                }
+                                                                                            ]
+                                                                                        },
+                                                                                        {
+                                                                                            "name": "gymnosomata",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                }
+                                                                            ]
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        },
+                                                        {
+                                                            "name": "bivalvia",
+                                                            "children": []
+                                                        },
+                                                        {
+                                                            "name": "eggmollusca",
+                                                            "children": []
+                                                        },
+                                                        {
+                                                            "name": "partmollusca",
+                                                            "children": []
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    "name": "chaetognatha",
+                                                    "children": [
+                                                        {
+                                                            "name": "headchaetognatha",
+                                                            "children": []
+                                                        },
+                                                        {
+                                                            "name": "tailchaetognatha",
+                                                            "children": []
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    "name": "ctenophora",
+                                                    "children": []
+                                                },
+                                                {
+                                                    "name": "bryozoa",
+                                                    "children": [
+                                                        {
+                                                            "name": "cyphonaute",
+                                                            "children": []
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    "name": "echinodermata",
+                                                    "children": [
+                                                        {
+                                                            "name": "larvaeechinodermata",
+                                                            "children": []
+                                                        },
+                                                        {
+                                                            "name": "echinoidea",
+                                                            "children": [
+                                                                {
+                                                                    "name": "pluteusechinoidea",
+                                                                    "children": []
+                                                                }
+                                                            ]
+                                                        },
+                                                        {
+                                                            "name": "ophiuroidea",
+                                                            "children": [
+                                                                {
+                                                                    "name": "pluteusophiuroidea",
+                                                                    "children": []
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "name": "harosa",
+                            "children": [
+                                {
+                                    "name": "stramenopiles",
+                                    "children": [
+                                        {
+                                            "name": "ochrophyta",
+                                            "children": [
+                                                {
+                                                    "name": "bacillariophyta",
+                                                    "children": [
+                                                        {
+                                                            "name": "coscinodiscophytina",
+                                                            "children": [
+                                                                {
+                                                                    "name": "coscinodiscids",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "coscinodiscus",
+                                                                            "children": []
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "rhizaria",
+                                    "children": [
+                                        {
+                                            "name": "retaria",
+                                            "children": [
+                                                {
+                                                    "name": "foraminifera",
+                                                    "children": []
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "name": "cercozoa",
+                                            "children": [
+                                                {
+                                                    "name": "thecofilosea",
+                                                    "children": [
+                                                        {
+                                                            "name": "phaeodaria",
+                                                            "children": []
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "alveolata",
+                                    "children": [
+                                        {
+                                            "name": "myzozoa",
+                                            "children": [
+                                                {
+                                                    "name": "holodinophyta",
+                                                    "children": [
+                                                        {
+                                                            "name": "dinophyceae",
+                                                            "children": [
+                                                                {
+                                                                    "name": "gonyaulacales",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "ceratiaceae",
+                                                                            "children": [
+                                                                                {
+                                                                                    "name": "neoceratium",
+                                                                                    "children": []
+                                                                                }
+                                                                            ]
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                {
+                                                                    "name": "noctilucales",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "4",
+                                                                            "children": [
+                                                                                {
+                                                                                    "name": "noctilucaceae",
+                                                                                    "children": [
+                                                                                        {
+                                                                                            "name": "noctiluca",
+                                                                                            "children": []
+                                                                                        }
+                                                                                    ]
+                                                                                }
+                                                                            ]
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "other",
+                    "children": [
+                        {
+                            "name": "otheregg",
+                            "children": []
+                        },
+                        {
+                            "name": "seaweed",
+                            "children": []
+                        }
+                    ]
+                },
+                {
+                    "name": "otherliving",
+                    "children": []
+                }
+            ]
+        },
+        {
+            "name": "notliving",
+            "children": [
+                {
+                    "name": "artefact",
+                    "children": [
+                        {
+                            "name": "badfocus",
+                            "children": []
+                        },
+                        {
+                            "name": "bubble",
+                            "children": []
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "detritus",
+            "children": [
+                {
+                    "name": "fiber",
+                    "children": []
+                }
+            ]
+        }
+    ]
+}

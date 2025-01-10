@@ -125,7 +125,14 @@ def make_dataset(
         is_cached=cache_dataset,
         **kwargs,
     )
+    
+    print(f"Targets in dataset: {with_targets}")
 
+    # Log dataset information.
+    logger.info(f"dataset: {dataset}")
+   
+    for i in range(10):
+        print(f"Dataset target {i}: ", dataset.get_target(i))
     logger.info(f"# of dataset samples: {len(dataset):,d}")
 
     # Aggregated datasets do not expose (yet) these attributes, so add them.
