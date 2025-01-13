@@ -706,7 +706,6 @@ def run_eval_linear(
         transform=train_transform,
         with_targets=True,
     )
-    training_num_classes = len(torch.unique(torch.Tensor(train_dataset.get_targets().astype(int))))
     # sampler_type = SamplerType.SHARDED_INFINITE
     # sampler_type = SamplerType.INFINITE
 

@@ -6,7 +6,6 @@
 import logging
 from enum import Enum
 from typing import Any, Callable, List, Optional, TypeVar
-
 import torch
 from torch.utils.data import Sampler
 
@@ -126,14 +125,11 @@ def make_dataset(
         **kwargs,
     )
     
-    print(f"Targets in dataset: {with_targets}")
+
 
     # Log dataset information.
     logger.info(f"dataset: {dataset}")
    
-    for i in range(10):
-        print(f"Dataset target {i}: ", dataset.get_target(i))
-    logger.info(f"# of dataset samples: {len(dataset):,d}")
 
     # Aggregated datasets do not expose (yet) these attributes, so add them.
     if not hasattr(dataset, "transform"):
