@@ -357,6 +357,11 @@ def plotting(features, labels, step=0):
 
 
 def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, train_dataset, save_images):
+    label_mapping_path = r"/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/plankton/-TRAIN_label_map.json"
+    with open(label_mapping_path, 'r') as f:
+        label_mapping = json.load(f)
+    
+    reverse_mapping = {v: k for k, v in label_mapping.items()}
     
     wandb_run_name = wandb.run.name if wandb.run else "default_run"
     wandb_log_dir = os.path.join(tensorboard_log_dir, wandb_run_name)
@@ -366,8 +371,10 @@ def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, tr
     metadata_path = os.path.join(embeddings_dir, 'metadata.tsv')
     unique_labels = np.unique(train_labels.cpu().numpy())
     with open(metadata_path, 'w') as f:
-        for label in unique_labels:
-            f.write(f"{label}\n")
+        f.write("label\n")  # Add header
+        for label in train_labels.cpu().numpy():
+            class_name = reverse_mapping[label]
+            f.write(f"{class_name}\n")
 
     embedding_tensor = torch.tensor(train_features.cpu().numpy())
     config = projector.ProjectorConfig()
@@ -414,11 +421,11 @@ def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, tr
                 
                 tensor_image = ToTensor()(resized_image)
                 sprite_images.append(tensor_image)
-                sprite_labels.append(label)
+                sprite_labels.append(reverse_mapping[label])
                 sprite_indices.append(idx)
 
         sprite_images = torch.stack(sprite_images)
-        sprite_labels = torch.tensor(sprite_labels)
+        sprite_labels = sprite_labels
 
         images_dir = os.path.join(embeddings_dir, "images")
         os.makedirs(images_dir, exist_ok=True)
@@ -426,7 +433,7 @@ def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, tr
         # Save sprite images
         image_paths = []
         for i, img in enumerate(sprite_images):
-            pil_image = Image.fromarray((img.permute(1, 2, 0).numpy() * 255).astype(np.uint8))  # (H, W, C)
+            pil_image = Image.fromarray((img.permute(1, 2, 0).numpy() * 255).astype(np.uint8))
             image_path = os.path.join(images_dir, f"image_{i}.png")
             pil_image.save(image_path)
             image_paths.append(image_path)
@@ -443,27 +450,22 @@ def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, tr
     embedding.sprite.image_path = os.path.relpath(images_dir, embeddings_dir)
     embedding.sprite.single_image_dim.extend([224, 224])
 
-
     writer = SummaryWriter(log_dir=embeddings_dir)
     selected_embedding_tensor = embedding_tensor[sprite_indices]
+
+    # Convert numeric labels to class names for TensorBoard
+    metadata_labels = [reverse_mapping[label.item()] for label in train_labels[sprite_indices]] if save_images else \
+                     [reverse_mapping[label.item()] for label in train_labels]
 
     # Log embeddings to TensorBoard
     writer = SummaryWriter(log_dir=embeddings_dir)
     writer.add_embedding(
-        mat=selected_embedding_tensor,  # Use only embeddings for sprite images
+        mat=selected_embedding_tensor,
         label_img=sprite_images if save_images else None,
-        metadata=train_labels[sprite_indices].cpu().tolist() if save_images else train_labels.cpu.tolist(),  # Corresponding labels
+        metadata=metadata_labels,
         global_step=0
     )
     writer.close()
-
-    #metadata_path = os.path.join(embeddings_dir, 'metadata.tsv')
-    #with open(metadata_path, 'w') as f:
-    #    f.write("index\tlabel\tis_sprite\n")
-    #   
-    #    for i in range(len(train_labels)):
-    #       is_sprite = 1 if i in sprite_indices else 0
-    #       f.write(f"{i}\t{train_labels[i].item()}\t{is_sprite}\n")
 
 
 
@@ -497,8 +499,8 @@ def eval_knn(
 
 
     if tensorboard_log_dir is not None:
-
-        4
+        tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, train_dataset, save_images)
+  
     logger.info(f"Train features created, shape {train_features.shape}.")
     #plotting(train_features, train_labels) #broken
 

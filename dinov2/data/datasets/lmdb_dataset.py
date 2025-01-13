@@ -26,6 +26,13 @@ class LMDBDataset(ImageNet):
         entries = self._get_entries()
         class_index = entries[index].get("class_id")
         return int(class_index) if class_index is not None else None
+    
+    def get_metadata(self, index: int) -> dict:
+        entry = self._entries[index]
+        lmdb_txn = self._lmdb_txns[entry["lmdb_meta_file"]]
+        metadata = lmdb_txn.get(entry["index"]).decode("utf-8")
+        print("metadata", metadata)
+        return metadata
 
     @property
     def _entries_path(self) -> str:
@@ -66,6 +73,9 @@ class LMDBDataset(ImageNet):
         file_list_imgs = sorted([el for el in file_list if el.endswith("imgs") or el.endswith("images")])
         print("Datasets imgs file list: ", file_list_imgs)
 
+        file_list_meta = sorted([el for el in file_list if el.endswith("metadata")])
+        print("Datasets metadata file list: ", file_list_meta)
+
         accumulated = []
         self._lmdb_txns = dict()
         global_idx = 0
@@ -75,8 +85,12 @@ class LMDBDataset(ImageNet):
             file_list_imgs = file_list_imgs[:1]
 
         use_labels = len(file_list_labels) > 0 and self.with_targets
-        lists_to_iterate = zip(file_list_labels, file_list_imgs) if use_labels else file_list_imgs
+        use_metadata = len(file_list_meta) > 0 and self.has_metadata
+        lists_to_iterate = zip(file_list_labels, file_list_imgs, file_list_meta) if use_labels else file_list_imgs
         for iter_obj in lists_to_iterate:
+
+            lmdb_path_imgs = iter_obj
+
             if use_labels:
                 lmdb_path_labels, lmdb_path_imgs = iter_obj
                 lmdb_env_labels = lmdb.open(
@@ -88,8 +102,16 @@ class LMDBDataset(ImageNet):
                 )
                 lmdb_txn_labels = lmdb_env_labels.begin()
 
-            else:
-                lmdb_path_imgs = iter_obj
+            if use_metadata:
+                lmdb_path_meta = iter_obj
+                lmdb_env_meta = lmdb.open(
+                    lmdb_path_meta,
+                    readonly=True,
+                    lock=False,
+                    readahead=False,
+                    meminit=False,
+                )
+                lmdb_txn_meta = lmdb_env_meta.begin()
 
             lmdb_env_imgs = lmdb.open(
                 lmdb_path_imgs,
@@ -109,16 +131,24 @@ class LMDBDataset(ImageNet):
             # save img tcxn from which to get labels later
             self._lmdb_txns[lmdb_path_imgs] = lmdb_txn_imgs
 
+            if use_metadata:
+                self._lmdb_txns[lmdb_path_meta] = lmdb_txn_meta
+
             if use_labels:
                 lmdb_cursor = lmdb_txn_labels.cursor()
             else:
                 lmdb_cursor = lmdb_txn_imgs.cursor()
+                
             for key, value in lmdb_cursor:
                 entry = dict()
                 if use_labels:
                     entry["class_id"] = int.from_bytes(value, byteorder="little")
+                
                 entry["index"] = key
                 entry["lmdb_imgs_file"] = lmdb_path_imgs
+
+                if use_metadata:
+                    entry["lmdb_meta_file"] = lmdb_path_meta
 
                 accumulated.append(entry)
                 global_idx += 1
