@@ -101,20 +101,7 @@ def is_in_blacklist(label, blacklist):
     return False
 
 
-def split_and_save_data(main_folder, output_folder, test_size=0.2):
-    """
-    Loads all datasets, splits the data into train and test, and saves them in the output folder.
-    """
-    os.makedirs(output_folder, exist_ok=True)
-
-    img_data, label_data = load_all_datasets(main_folder)
-
-    print(f"Total data loaded: {len(img_data)} images and {len(label_data)} labels.")
-
-    # blacklist = ['artifacts', 'artifacts_edge', 'unknown_blobs_and_smudges', 'unknown_sticks', 'unknown_unclassified', 
-    #              'artefact', 'badfocus', 'dark', 'light', 'streak', 'vertical line', 'artefact']
-    
-    # when having to use empty blacklist
+def return_label_map(label_data, blacklist):
     blacklist = []
     # consistent label mapping TODO add similar string machting and blacklist classes such as blurry
     label_map = {}
@@ -138,9 +125,28 @@ def split_and_save_data(main_folder, output_folder, test_size=0.2):
                 next_id += 1
 
     print(f"Generated label map with {len(label_map)} classes.")
+    return label_map
 
+
+def split_and_save_data(main_folder, output_folder, test_size=0.2):
+    """
+    Loads all datasets, splits the data into train and test, and saves them in the output folder.
+    """
+    os.makedirs(output_folder, exist_ok=True)
+
+    img_data, label_data = load_all_datasets(main_folder)
+
+    print(f"Total data loaded: {len(img_data)} images and {len(label_data)} labels.")
+
+    # blacklist = ['artifacts', 'artifacts_edge', 'unknown_blobs_and_smudges', 'unknown_sticks', 'unknown_unclassified', 
+    #              'artefact', 'badfocus', 'dark', 'light', 'streak', 'vertical line', 'artefact']
+    
+    # when having to use empty blacklist
+    
     train_imgs, test_imgs = train_test_split(img_data, test_size=test_size, shuffle=True, random_state=43)
     train_labels, test_labels = train_test_split(label_data, test_size=test_size, shuffle=True, random_state=43)
+    train_label_map = return_label_map(train_labels, [])
+    test_label_map = return_label_map(test_labels, [])
 
     # Save the split data to LMDB
     save_lmdb_data(
@@ -148,7 +154,7 @@ def split_and_save_data(main_folder, output_folder, test_size=0.2):
         os.path.join(output_folder, "-TRAIN_labels"),
         train_imgs,
         train_labels,
-        label_map,
+        train_label_map,
         os.path.join(output_folder, "TRAIN_label_map.json")
     )
     save_lmdb_data(
@@ -156,7 +162,7 @@ def split_and_save_data(main_folder, output_folder, test_size=0.2):
         os.path.join(output_folder, "-VAL_labels"),
         test_imgs,
         test_labels,
-        label_map,
+        test_label_map,
         os.path.join(output_folder, "VAL_label_map.json")
     )
 
