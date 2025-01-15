@@ -472,7 +472,6 @@ class DinoVisionTransformer(nn.Module):
             )
 
         else:
-            print(f"prepare_tokens_with_masks x.shape {x.shape}")
             x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
             interpolated_pos_embeds = self.interpolate_pos_encoding(x, w, h)
 
