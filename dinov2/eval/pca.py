@@ -60,29 +60,37 @@ def extract_pca_features(dataset, batch_size, num_workers, num_components, devic
         drop_last=False,
         shuffle=False,
     )
-
+    
     all_features, all_labels = [], []
-
+    
     # Initialize IncrementalPCA
     ipca = IncrementalPCAWrapper(num_components=num_components, batch_size=batch_size)
-
+    
+    # First pass: Fit the PCA
     for samples, labels in dataloader:
         samples = samples.to(device)
         features = samples.view(samples.size(0), -1)  # Flatten images if needed
         
-        # Apply Incremental PCA in batches
-        if len(all_features) == 0:
-            # First batch, just fit and transform
-            ipca.fit(features)
-        reduced_features = ipca.transform(features)
-        
-        # Store features and labels
-        all_features.append(reduced_features)
-        all_labels.append(labels)
-
+        # Incrementally fit PCA
+        ipca.partial_fit(features)
+    
+    # Second pass: Transform the data
+    for samples, labels in dataloader:
+        samples = samples.to(device)
+        features = samples.view(samples.size(0), -1)  # Flatten images if needed
+        print(f"Original features shape: {features.shape}")
+        # Transform using the fitted PCA
+        if features.size(1) > ipca.num_components:
+            reduced_features = ipca.transform(features)
+            print(f"Reduced features shape: {reduced_features.shape}")
+            # Store features and labels
+            all_features.append(reduced_features)
+            all_labels.append(labels)
+    
+    # Concatenate all features and labels
     all_features = torch.cat(all_features, dim=0)
     all_labels = torch.cat(all_labels, dim=0)
-
+    
     print(f"PCA-reduced features shape: {all_features.shape}, labels shape: {all_labels.shape}.")
     return all_features, all_labels
 

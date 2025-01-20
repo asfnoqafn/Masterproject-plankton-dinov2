@@ -17,8 +17,8 @@ notebooks/dataloader_benchmark_results_10000_gpuTrue.csv
 notebooks/time_vs_num_workers_workstation.png
 notebooks/dataloader_benchmark_results_10000_gpuTrue/time_vs_num_workers_workstation.png
 
+*.png
 *.csv
-*.png !docs/images/*.png
 *.jpg
 
 logs/log.txt
