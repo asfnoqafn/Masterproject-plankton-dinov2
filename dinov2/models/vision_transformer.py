@@ -520,6 +520,10 @@ class DinoVisionTransformer(nn.Module):
 
         x = x + interpolated_pos_embeds
         if self.register_tokens is not None:
+            print(f"Register tokens: {self.register_tokens.shape}")
+            print(f"X: {x.shape}")
+            print(f"X[:,0 ]{x[:,0].shape}")
+            print(f"X[:,1: ]{x[:,1:].shape}")
             x = torch.cat(
                 (
                     x[:, 0],

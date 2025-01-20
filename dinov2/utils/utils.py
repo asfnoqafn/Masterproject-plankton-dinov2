@@ -11,7 +11,8 @@ import subprocess
 import sys
 from typing import Union
 from urllib.parse import urlparse
-
+from dinov2.data.datasets.config import ImageConfig
+from torchvision.io import ImageReadMode
 import numpy as np
 import torch
 from torch import nn
@@ -155,6 +156,8 @@ def load_pretrained_weights(
         print(f"Error: Key {teacher_student_key} not recognized, options are: 'student', 'teacher'")
         sys.exit(1)
 
+    ImageConfig.read_mode = ImageReadMode.GRAY if model.gray_scale == 1 or model.gray_scale == 2 else ImageReadMode.RGB
+    print(f"ImageConfig.read_mode: {ImageConfig.read_mode}")
     if not do_eval:
         if model.gray_scale == 1:
             print("Initializing channel adaptation layer with Kaiming( Grayscale opt 1)")
@@ -180,7 +183,13 @@ def load_pretrained_weights(
             nn.init.zeros_(proj.bias.data)
             print("Initialized proj layer with Kaiming")
         else:
-            raise NotImplementedError("Gray scale without rgb")
+            print("training from fb checkpoint in RBG")
+
+
+    if do_eval:
+        print("loading checkpoint with eval mode")
+        print("shape patch embed",model.patch_embed.proj.weight.data.shape)
+
 
     if model.use_ch_patch_embed:
         state_dict = {k: v for k, v in state_dict.items() if "patch_embed" not in k}

@@ -80,6 +80,13 @@ class PatchEmbed(nn.Module):
                 stride=patch_HW,
             )
 
+        if self.gray_scale == 0:
+            self.proj = nn.Conv2d(
+                3,
+                embed_dim,
+                kernel_size=patch_HW,
+                stride=patch_HW,
+            )
 
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
@@ -96,7 +103,7 @@ class PatchEmbed(nn.Module):
         if self.gray_scale == 2:
             x = self.proj(x)
         if self.gray_scale == 0:
-            raise NotImplementedError("gray_scale == 0 not correctly implemented needs change to dataloader")
+            x = self.proj(x)
 
         H_p, W_p = x.size(2), x.size(3)
         x = x.flatten(2).transpose(1, 2)  # B np D

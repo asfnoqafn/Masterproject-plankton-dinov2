@@ -40,6 +40,8 @@ from dinov2.eval.metrics import (
 from dinov2.eval.setup import (
     get_args_parser as get_setup_args_parser,
 )
+
+from dinov2.data.datasets.config import ImageReadMode
 from dinov2.eval.setup import setup_and_build_model
 from dinov2.eval.utils import (
     ModelWithNormalize,
