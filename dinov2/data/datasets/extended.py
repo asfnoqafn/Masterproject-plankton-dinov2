@@ -35,12 +35,9 @@ class ExtendedVisionDataset(VisionDataset):
         else:
             try:
                 image = torch.frombuffer(np.copy(img_bytes), dtype=torch.uint8)
-                print(f"[DEBUG] Pre-decode image shape: {image.shape}")
-                print(f"[DEBUG] Using read mode: {ImageConfig.read_mode}")
                 image = decode_image(image, ImageConfig.read_mode)
-                print(f"[DEBUG] Post-decode image shape: {image.shape}")
                 image = (image / 255.0).to(torch.float32)
-                print(f"[DEBUG] Final image shape: {image.shape}, dtype: {image.dtype}")
+
                 
             except Exception as e:
                 print(e)

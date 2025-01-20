@@ -71,8 +71,12 @@ def build_model_for_eval(config, pretrained_weights, do_eval = True):
     model, _ = build_model_from_cfg(config, only_teacher=True)
     dinov2_utils.load_pretrained_weights(model=model, pretrained_weights=pretrained_weights, checkpoint_key="teacher", teacher_student_key="teacher", do_eval=do_eval)
     model.eval()
+    print("Model loaded from", pretrained_weights)
+    print("Model summary:", model)
     model.cuda()
     return model
+
+
 
 
 def setup_and_build_model(args, do_eval: bool = False) -> Tuple[Any, torch.dtype]:

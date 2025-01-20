@@ -499,8 +499,8 @@ def eval_knn(
 
 
     if tensorboard_log_dir is not None:
-
-        4
+        tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, train_dataset, save_images)
+        
     logger.info(f"Train features created, shape {train_features.shape}.")
     #plotting(train_features, train_labels) #broken
 
