@@ -74,9 +74,13 @@ def _delete_lmdb(dataset_lmdb_dir: Path):
     shutil.rmtree(lmdb_path)
 
 
-def get_image_dimensions(img_path):
-    img = iio.imread(img_path, pilmode='RGB')
-    return img.shape[:2] # Returns (height, width)
+def get_image_dimensions(img_path): 
+    try:
+        img = iio.imread(img_path, pilmode='RGB')  # This reads only metadata
+        return img.shape[:2]  # Returns (height, width)
+    except Exception as e:
+        print(f"Error reading image {img_path}: {e}")
+        return None  # Return None if there is an error
 
 
 def _write_databases(
@@ -181,22 +185,22 @@ def build_databases(
 
     unlabeled_images_lmdb = _create_lmdb(
         Path(args.lmdb_path),
-        name=f'unlabled_{_DataType.IMAGES.value}_{number_of_images_without_labels}imgs',
+        name=f'unlabled_{_DataType.IMAGES.value}',
         map_size=map_size_img,
     )
     labeled_images_lmdb = _create_lmdb(
         Path(args.lmdb_path),
-        name=f'labled_{_DataType.IMAGES.value}_{number_of_images_with_labels}imgs',
+        name=f'labled_{_DataType.IMAGES.value}',
         map_size=map_size_img,
     )
     labels_lmdb = _create_lmdb(
         Path(args.lmdb_path),
-        name=f'{_DataType.LABELS.value}_{number_of_images_with_labels}imgs',
+        name=f'{_DataType.LABELS.value}',
         map_size=map_size_meta,
     )
     metadata_lmdb = _create_lmdb(
         Path(args.lmdb_path),
-        name=f'{_DataType.METADATA.value}_{number_of_images_with_metadata}imgs',
+        name=f'{_DataType.METADATA.value}',
         map_size=map_size_meta,
     )
 
