@@ -4,7 +4,6 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 import argparse
-import glob
 import logging
 import math
 import os
@@ -385,7 +384,8 @@ def do_train(cfg, model, resume=False):
         profiler = torch.profiler.profile(
             activities=activities,
             on_trace_ready=torch.profiler.tensorboard_trace_handler(profiler_dir),
-            with_stack=False,
+            with_stack=True,
+            schedule=torch.profiler.schedule(wait=5, warmup=1, active=5, repeat=3),
         )
         profiler.start()
 
@@ -555,15 +555,17 @@ def do_train(cfg, model, resume=False):
         print("profiler.stop()")
         profiler.stop()
         print("profiler.stopped")
-        print(profiler.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+        print(profiler.key_averages().table(sort_by="cpu_time_total", row_limit=100))
         # create a wandb Artifact
-        profile_art = wandb.Artifact("trace", type="profile")
-        # add the pt.trace.json files to the Artifact
-        trace_files = glob.glob(profiler_dir + ".pt.trace.json")
-        for trace_file in trace_files:
-            profile_art.add_file(os.path.join(profiler_dir, trace_file))
+        # profile_art = wandb.Artifact("trace", type="profile")
+        # # add the pt.trace.json files to the Artifact
+        # trace_files = glob.glob(os.path.join(profiler_dir, "*.pt.trace.json"))
+        # print(os.path.join(profiler_dir, "*.pt.trace.json"))
+        # for trace_file in trace_files:
+        #     print(f"Adding {trace_file} to the artifact")
+        #     profile_art.add_file(os.path.join(profiler_dir, trace_file))
         # log the artifact
-        profile_art.save()
+        # profile_art.save()
 
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
@@ -597,4 +599,7 @@ def main(args):
 
 if __name__ == "__main__":
     args = get_args_parser(add_help=True).parse_args()
+    # activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
+    # with profile(activities=activities) as prof:
     main(args)
+    # prof.export_chrome_trace("trace.json")
