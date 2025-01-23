@@ -10,6 +10,7 @@ import os
 import sys
 from enum import Enum
 from functools import partial
+import time
 
 import torch
 import torchvision
@@ -389,6 +390,7 @@ def do_train(cfg, model, resume=False):
         )
         profiler.start()
 
+    end = time.time()
     for data in metric_logger.log_every(
         data_loader,
         20,
@@ -516,14 +518,27 @@ def do_train(cfg, model, resume=False):
                 if math.isnan(v):
                     print("Key:{} is nan. Stopping...".format(k))
             raise AssertionError
-        losses_reduced = sum(loss for loss in loss_dict_reduced.values())
 
+        # checkpointing and testing
+        if (
+            cfg.evaluation.eval_period_iterations > 0
+            and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
+        ):
+            do_test(cfg, model, f"training_{iteration}")
+            torch.cuda.synchronize()
+
+        periodic_checkpointer.step(iteration)
+
+        losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+        iter_time = time.time() - end
+        end = time.time()
         metric_logger.update(lr=lr)
         metric_logger.update(wd=wd)
         metric_logger.update(mom=mom)
         metric_logger.update(last_layer_lr=last_layer_lr)
         metric_logger.update(current_batch_size=current_batch_size)
         metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
+        metric_logger.update(iter_time=iter_time)
 
         if distributed.is_main_process():
             wandb.log(
@@ -534,20 +549,11 @@ def do_train(cfg, model, resume=False):
                     "mom": mom,
                     "ll_lr": last_layer_lr,
                     "total_loss": losses_reduced,
+                    "iter_time": iter_time,
+                    "data_time": metric_logger.data_time.value,
                     **loss_dict_reduced,
                 }
             )
-
-        # checkpointing and testing
-
-        if (
-            cfg.evaluation.eval_period_iterations > 0
-            and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
-        ):
-            do_test(cfg, model, f"training_{iteration}")
-            torch.cuda.synchronize()
-
-        periodic_checkpointer.step(iteration)
         iteration = iteration + 1
     metric_logger.synchronize_between_processes()
 
