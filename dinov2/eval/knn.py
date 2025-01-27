@@ -2,7 +2,8 @@
 #
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
-
+from dinov2.data.datasets.config import ImageConfig
+from torchvision.io import ImageReadMode
 import argparse
 import json
 import logging
@@ -143,7 +144,18 @@ def get_args_parser(
         "--save_images",
         action="store_true",
         help="Flag to save raw images for TensorBoard Embedding Projector",
-    )   
+    )
+    parser.add_argument(
+        "--model_type",
+        type=str,
+        default="dinov2",
+    )
+    parser.add_argument(
+        "--gray_scale",
+        action="store_true",
+        help="Flag to convert images to gray scale",
+    )
+
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
         val_dataset_str="ImageNet:split=VAL",
@@ -496,11 +508,13 @@ def eval_knn(
         num_workers,
         gather_on_cpu=gather_on_cpu,
     )
-
+    print(train_features[0])
+    print("---------------------------------")
+    print(train_features[1])
 
     if tensorboard_log_dir is not None:
         tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, train_dataset, save_images)
-        
+
     logger.info(f"Train features created, shape {train_features.shape}.")
     #plotting(train_features, train_labels) #broken
 
@@ -681,7 +695,11 @@ def eval_knn_with_model(
 
 # @record
 def main(args):
-    model, autocast_dtype = setup_and_build_model(args, do_eval=True)
+    
+    if args.gray_scale:
+        ImageConfig.read_mode = ImageReadMode.GRAY
+
+    model, autocast_dtype = setup_and_build_model(args, do_eval=True , model_type=args.model_type)
 
     print("args.output_dir", args.output_dir)
     eval_knn_with_model(

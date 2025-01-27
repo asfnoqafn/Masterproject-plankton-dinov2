@@ -492,6 +492,22 @@ def do_train(cfg, model, resume=False):
         #model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt.weight.grad.data.view(-1).cpu().numpy())
         #print("Grayscale: weights:",
         #model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt.weight.data.view(-1).cpu().numpy())
+        if iteration % (OFFICIAL_EPOCH_LENGTH // 10) == 0 and iteration > 0:
+            #print("xxxxxxxxxxx",model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.data.view(-1).cpu().numpy())
+            patch_embed_grad = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.view(-1).cpu().numpy()
+            #patch_embed_grad_norm = patch_embed_grad.data.view(-1).norm().item()
+            print("before clip")
+            print("Patch embed gradients:", patch_embed_grad.shape)
+            print("Patch embed gradients min:", patch_embed_grad.min())
+            print("Patch embed gradients max:", patch_embed_grad.max())
+            if distributed.is_main_process():
+                wandb.log(
+                    {
+                        "patch_embed_grad_min_before_clip": patch_embed_grad.min(),
+                        "patch_embed_grad_max_before_clip": patch_embed_grad.max(),
+                    }
+                )
+        
         # clip gradients
         if fp16_scaler is not None:
             if cfg.optim.clip_grad:
@@ -510,6 +526,23 @@ def do_train(cfg, model, resume=False):
         model.update_teacher(mom)
 
         # logging
+
+        if iteration % (OFFICIAL_EPOCH_LENGTH // 10) == 0 and iteration > 0:
+            #print("xxxxxxxxxxx",model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.data.view(-1).cpu().numpy())
+            patch_embed_grad = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.view(-1).cpu().numpy()
+            #patch_embed_grad_norm = patch_embed_grad.data.view(-1).norm().item()
+            print("Patch embed gradients:", patch_embed_grad.shape)
+            print("Patch embed gradients min:", patch_embed_grad.min())
+            print("Patch embed gradients max:", patch_embed_grad.max())
+            if distributed.is_main_process():
+                wandb.log(
+                    {
+                        "patch_embed_grad_min": patch_embed_grad.min(),
+                        "patch_embed_grad_max": patch_embed_grad.max(),
+                    }
+                )
+
+
         if distributed.get_global_size() > 1:
             for v in loss_dict.values():
                 torch.distributed.all_reduce(v)
