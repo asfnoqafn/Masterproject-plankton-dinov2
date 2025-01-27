@@ -19,10 +19,14 @@ class DatasetWithEnumeratedTargets(Dataset):
         target = self._dataset.get_target(index)
         return (index, target)
 
+    def get_metadata(self, index: int) -> Tuple[Any, int]:
+        metadata = self._dataset.get_metadata(index)
+        return (index, metadata)
+
     def __getitem__(self, index: int) -> Tuple[Any, Tuple[Any, int]]:
-        image, target = self._dataset[index]
+        image, target, metadata = self._dataset[index]
         target = index if target is None else target
-        return image, (index, target)
+        return image, (index, target, metadata)
 
     def __len__(self) -> int:
         return len(self._dataset)

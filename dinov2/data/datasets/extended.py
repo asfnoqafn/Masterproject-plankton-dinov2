@@ -25,6 +25,9 @@ class ExtendedVisionDataset(VisionDataset):
 
     def get_target(self, index: int) -> Any:
         raise NotImplementedError
+    
+    def get_metadata(self, index: int) -> Any:
+        raise NotImplementedError
 
     def __getitem__(self, index: int) -> Union[Tuple[Any, Any], torch.Tensor, Image.Image]:
         img_bytes = self.get_image_data(index)
@@ -51,11 +54,13 @@ class ExtendedVisionDataset(VisionDataset):
 
         target = self.get_target(index)
         target = TargetDecoder(target).decode()
+        
+        metadata = self.get_metadata(index)
 
         if self.transforms is not None:
             image, target = self.transforms(image, target)
 
-        return image, target
+        return image, target, metadata
 
     def __len__(self) -> int:
         raise NotImplementedError

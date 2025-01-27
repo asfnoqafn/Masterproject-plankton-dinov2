@@ -497,8 +497,8 @@ def eval_knn(
 
 
     if tensorboard_log_dir is not None:
+        tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, train_dataset, save_images)
 
-        4
     logger.info(f"Train features created, shape {train_features.shape}.")
     #plotting(train_features, train_labels) #broken
 
@@ -607,12 +607,14 @@ def eval_knn_with_model(
     train_dataset = make_dataset(
         dataset_str=train_dataset_str,
         transform=transform,
-        with_targets=True
+        with_targets=True,
+        with_metadata=True
     )
     val_dataset = make_dataset(
         dataset_str=val_dataset_str,
         transform=transform,
-        with_targets=True
+        with_targets=True,
+        with_metadata=True
     )
 
     with torch.cuda.amp.autocast(dtype=autocast_dtype):
