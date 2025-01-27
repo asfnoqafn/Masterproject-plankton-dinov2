@@ -241,7 +241,6 @@ def log_images_to_wandb(missclassified_images: List[dict], class_map=None):
     """
     images_to_log = []
     for image in missclassified_images:
-        print(f"Image size: {image['image'].shape}")
         img = image["image"].cpu().permute(1, 2, 0).numpy()  # Convert to HWC format
         pred_label = class_map[image["predicted_label"]] if class_map is not None else image["predicted_label"]
         true_label = class_map[image["true_label"]] if class_map is not None else image["true_label"]

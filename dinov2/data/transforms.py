@@ -121,11 +121,8 @@ def make_classification_eval_transform(
     std: Sequence[float] = [WHOI_DEFAULT_STD],
 ) -> v2.Compose:
     transforms_list = [
-        v2.Resize(
-            resize_size,
-            interpolation=interpolation,
-            antialias=True,
-        ),
+        v2.Resize(223,max_size= 224, antialias=True),
+        v2.Pad(112, fill=255, padding_mode='constant'),
         v2.CenterCrop(crop_size),
         MaybeToTensor(),
         make_normalize_transform(mean=mean, std=std),

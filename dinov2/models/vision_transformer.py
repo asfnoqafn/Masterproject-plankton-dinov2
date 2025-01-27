@@ -422,11 +422,11 @@ class DinoVisionTransformer(nn.Module):
             x = self.patch_embed[c](x)
         else:
             x = self.patch_embed(x)  # b n d (=384)
-            if num_ch_list is not None:  # means that x = (b c) n d
-                b = len(num_ch_list)
-                x_list = torch.split(x, num_ch_list, dim=0)  # b [c n d]
-                x = pad_sequence(x_list, batch_first=True)  # b c_max n d
-                x = x.reshape(b, -1, x.shape[-1])  # b (c_max n) d
+            # if num_ch_list is not None:  # means that x = (b c) n d
+            #     b = len(num_ch_list)
+            #     x_list = torch.split(x, num_ch_list, dim=0)  # b [c n d]
+            #     x = pad_sequence(x_list, batch_first=True)  # b c_max n d
+            #     x = x.reshape(b, -1, x.shape[-1])  # b (c_max n) d
 
         x_dim = x.shape[-1]
 

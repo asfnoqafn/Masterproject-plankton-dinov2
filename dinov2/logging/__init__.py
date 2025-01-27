@@ -121,3 +121,39 @@ def setup_logging(
             config=args,
             dir=output,
         )
+
+def setup_logging_sweep(
+    output: Optional[str] = None,
+    *,
+    name: Optional[str] = None,
+    level: int = logging.DEBUG,
+    capture_warnings: bool = True,
+    args: Optional[dict] = None,
+    do_eval: bool = False,
+) -> None:
+    """
+    Setup logging.
+
+    Args:
+        output: A file name or a directory to save log files. If None, log
+            files will not be saved. If output ends with ".txt" or ".log", it
+            is assumed to be a file name.
+            Otherwise, logs will be saved to `output/log.txt`.
+        name: The name of the logger to configure, by default the root logger.
+        level: The logging level to use.
+        capture_warnings: Whether warnings should be captured as logs.
+    """
+    if distributed.is_main_process():
+        logging.captureWarnings(capture_warnings)
+        _configure_logger(name, level=level, output=output)
+
+        project = "mp_aqqua"
+        wandb.init(project=project)
+        # Update args with WandB sweep parameters
+        if args is not None:
+            sweep_params = dict(wandb.config)  # Get sweep parameters
+            for key, value in sweep_params.items():
+                setattr(args, key, value)  # Dynamically set attributes in args
+
+        print("Updated args with sweep parameters: ", args)
+        return args

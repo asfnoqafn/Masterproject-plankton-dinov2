@@ -41,6 +41,7 @@ from dinov2.eval.utils import (
     load_hierarchy_from_file,
 )
 from dinov2.logging import MetricLogger
+import torch.nn.functional as F
 
 logger = logging.getLogger("dinov2")
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
@@ -209,6 +210,23 @@ def get_args_parser(
         "--hierarchy-file-path",
         type=str,
         help="Path to the hierarchy file for the custom hierarchical loss function",
+    )
+    parser.add_argument(
+        "--hierarchy-weight",
+        type=float,
+        default=2.0,
+        help="Weight applied to hierarchical loss",
+    )
+    parser.add_argument(
+        "--scaling-factor",
+        type=float,
+        default=2.0,
+        help="Scaling factor for negative log likelihood",
+    )
+    parser.add_argument(
+        "--log-both-losses",
+        type=bool,
+        help="This flag enables logging of both the cross entropy and hierarchical loss",
     )
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
@@ -435,6 +453,10 @@ def eval_linear(
     log_confusion_matrix=False,
     loss_function="cross_entropy",
     hierarchy_file_path=None,
+    scaling_factor,
+    hierarchy_weight,
+    log_both_losses=False,
+    distance_matrix=None,
 ):
     checkpointer = Checkpointer(
         linear_classifier,
@@ -455,14 +477,32 @@ def eval_linear(
         # Forward pass
         features = feature_model(data)
         outputs = linear_classifier(features)
-        if(loss_function == "cross_entropy"):
-            loss = nn.CrossEntropyLoss()(outputs, labels)
-        if(loss_function == "custom_hierarchical"):
+
+        # TODO: Should log both right now, when not remove this
+
+        cross_entropy_loss = None
+        custom_hierarchical_loss = None
+        custom_hierarchical_loss_combined = None
+
+        if log_both_losses or loss_function == "cross_entropy":
+            cross_entropy_loss_single = nn.CrossEntropyLoss()(outputs, labels)
+        
+        if log_both_losses or loss_function == "custom_hierarchical":
             try:
                 hierarchy_root = load_hierarchy_from_file(hierarchy_file_path)
-            except: 
+            except:
                 raise ValueError(f"Hierarchy file {hierarchy_file_path} could not be loaded. Please make sure the file exists and is in the correct format.")
-            loss = hierarchical_loss(outputs, labels, hierarchy_root, val_class_mapping)
+            custom_hierarchical_loss = hierarchical_loss(outputs, labels, hierarchy_root, val_class_mapping, hierarchy_weight, scaling_factor)
+        
+        if log_both_losses or loss_function == "custom_hierarchical_combined":
+            cross_entropy_loss, base_hierarchical_loss, custom_hierarchical_loss_combined = hierarchical_loss_improved(outputs, labels, distance_matrix,  hierarchy_weight)
+
+        if loss_function == "cross_entropy":
+            loss = cross_entropy_loss
+        elif loss_function == "custom_hierarchical":
+            loss = custom_hierarchical_loss
+        elif loss_function == "custom_hierarchical_combined":
+            loss = custom_hierarchical_loss_combined
 
 
         # Backward pass and optimization
@@ -472,14 +512,27 @@ def eval_linear(
         scheduler.step()
 
         # Log metrics
-        if iteration % 10 == 0:
+        if iteration % 1 == 0:
             torch.cuda.synchronize()
             loss_value = loss.item()
             current_lr = optimizer.param_groups[0]["lr"]
             metric_logger.update(loss=loss_value, lr=current_lr)
 
             # WandB logging
-            wandb.log({"loss": loss_value, "lr": current_lr, "iteration": iteration})
+            if(log_both_losses):
+                wandb.log({
+                    "lr": current_lr,
+                    "iteration": iteration,
+                    "hierarchical_loss": base_hierarchical_loss.item(),
+                    "cross_entropy_loss": cross_entropy_loss.item(),
+                    "loss": custom_hierarchical_loss_combined.item(),
+                })
+            else:
+                wandb.log({
+                    "loss": loss_value,
+                    "lr": current_lr,
+                    "iteration": iteration,
+                })
 
         # Periodic checkpointing
         if iteration > start_iter + 5 and iteration % running_checkpoint_period == 0:
@@ -546,63 +599,159 @@ def eval_linear(
 
     return val_results_dict, feature_model, linear_classifier, iteration
 
-def hierarchical_loss(predictions, labels, hierarchy_root, val_class_mapping):
-    """
-    Compute hierarchical loss with tree structure.
+# Traverse the hierarchy to determine penalties
+def find_node(node, target):
+    if node.name == target:
+        return node
+    for child in node.children:
+        result = find_node(child, target)
+        if result:
+            return result
+    return None
     
-    :param predictions: Tensor of shape (N, C) with predicted probabilities for each class.
-    :param labels: Tensor of shape (N,) with ground-truth class indices.
-    :param hierarchy_root: Root of the hierarchy tree.
-    :param class_indices: Dict mapping class names to indices.
-    :return: Computed loss value.
-    """
-    # Create class mapping dictionaries
+def hierarchical_loss(predictions, labels, hierarchy_root, val_class_mapping, hierarchy_weight, scaling_factor):
     class_indices = {row[0]: int(row[1]) for row in val_class_mapping}
-
     index_to_class = {v: k for k, v in class_indices.items()}
     
-    loss = 0.0
+    # Initialize loss as a tensor
+    batch_loss = torch.tensor(0.0, device=predictions.device, requires_grad=True)
+    
     for i, (pred, label) in enumerate(zip(predictions, labels)):
         true_class = index_to_class[label.item()]
         pred_probs = torch.softmax(pred, dim=0)
         
-        # Get the predicted class and its probability
-        predicted_class = index_to_class[torch.argmax(pred).item()]
-        predicted_prob = pred_probs[torch.argmax(pred)]
-        
-        # Traverse the hierarchy to determine penalties
-        def find_node(node, target):
-            if node.name == target:
-                return node
-            for child in node.children:
-                result = find_node(child, target)
-                if result:
-                    return result
-            return None
-
+        # Initialize sample loss as a tensor
+        sample_loss = torch.tensor(0.0, device=predictions.device, requires_grad=True)
         true_node = find_node(hierarchy_root, true_class)
-        pred_node = find_node(hierarchy_root, predicted_class)
         
-        if pred_node is None or true_node is None:
-            raise ValueError(f"Class {true_class} or {predicted_class} not found in hierarchy.")
+        for idx, prob in enumerate(pred_probs):
+            pred_class = index_to_class[idx]
+            pred_node = find_node(hierarchy_root, pred_class)
+            
+            if pred_node is None or true_node is None:
+                raise ValueError(f"Class {true_class} or {pred_class} not found in hierarchy.")
+            
+            # Calculate penalty
+            if pred_node == true_node:
+                penalty = 0.0
+            elif true_node.is_descendant(pred_class):
+                penalty = 1.0
+            elif pred_node.is_descendant(true_class):
+                penalty = 2.0
+            else:
+                penalty = 5.0
+                
+            # Convert penalty to tensor and maintain computational graph
+            penalty = torch.tensor(penalty, device=predictions.device)
+                
+            # Add loss contribution from this class
+            EPSILON = 1e-8
+            if prob > 0:  # Avoid log(0)
+                weight = 1.0 if idx == label.item() else 0.5
+                sample_loss = sample_loss + penalty * -torch.log(prob * EPSILON) * weight
         
-        if pred_node == true_node:
-            # Correct prediction
-            penalty = 0.0
-        elif true_node.is_descendant(predicted_class):
-            # Predicted class is a parent of the true class
-            penalty = 0.1
-        elif pred_node.is_descendant(true_class):
-            # Predicted class is a child of the true class
-            penalty = 0.2
-        else:
-            # Predicted class is a sibling or unrelated
-            penalty = 1.0
-
-        # Combine penalty with negative log likelihood
-        loss += penalty * -torch.log(predicted_prob)
+        batch_loss = batch_loss + sample_loss * scaling_factor
     
-    return loss / len(predictions)
+    # L2 regularization
+    # l2_lambda = 1e-3
+    # l2_reg = torch.tensor(0.0, device=predictions.device, requires_grad=True)
+    # for param in model.parameters():
+    #     l2_reg += torch.norm(param)
+    # Normalize and apply weight
+    # final_loss = (batch_loss / len(predictions)) * hierarchy_weight + l2_lambda * l2_reg
+    final_loss = (batch_loss / len(predictions)) * hierarchy_weight
+    return final_loss
+
+def hierarchical_loss_combined(predictions, labels, hierarchy_root, val_class_mapping, hierarchy_weight, scaling_factor):
+    """
+    Combines regular cross entropy with hierarchical penalties
+    """
+    # Base cross entropy loss
+    base_loss = nn.CrossEntropyLoss()(predictions, labels)
+    
+    class_indices = {row[0]: int(row[1]) for row in val_class_mapping}
+    index_to_class = {v: k for k, v in class_indices.items()}
+    
+    # Add hierarchical penalties
+    batch_size = len(predictions)
+    hierarchical_penalty = torch.tensor(0.0, device=predictions.device, requires_grad=True)
+    
+    pred_classes = torch.argmax(predictions, dim=1)
+    
+    for pred, label in zip(pred_classes, labels):
+        true_class = index_to_class[label.item()]
+        pred_class = index_to_class[pred.item()]
+        
+        true_node = find_node(hierarchy_root, true_class)
+        pred_node = find_node(hierarchy_root, pred_class)
+        
+        if pred_node != true_node:  # Only add penalty if prediction is wrong
+            if true_node.is_descendant(pred_class):
+                penalty = 1.0
+            elif pred_node.is_descendant(true_class):
+                penalty = 2.0
+            else:
+                penalty = 7.0
+                
+            hierarchical_penalty = hierarchical_penalty + torch.tensor(penalty, device=predictions.device)
+    
+    # Combine losses
+    total_loss = base_loss * scaling_factor + (hierarchical_penalty / batch_size) * hierarchy_weight
+    
+    return total_loss
+
+def hierarchical_loss_improved(predictions, labels, distance_matrix, hierarchy_weight=1.0):
+
+    # Base cross-entropy loss
+    base_loss = F.cross_entropy(predictions, labels)
+    print("Predictions: ", predictions)
+    print("Labels: ", labels) 
+
+    # If distance matrix is not provided, calculate it
+    if distance_matrix is None:
+        Exception("Distance matrix must be provided for improved hierarchical loss.")
+    distance_matrix = torch.tensor(distance_matrix, dtype=torch.float32, device=predictions.device)
+
+    # Reduce predictions to class-level distribution
+    predictions_reduced = predictions.mean(dim=0)
+
+    # Compute soft targets from distance matrix
+    soft_targets = F.softmax(-distance_matrix, dim=1)
+
+    # KL Divergence loss
+    hierarchical_loss = F.kl_div(
+        F.log_softmax(predictions_reduced, dim=0),
+        soft_targets,
+        reduction='batchmean'
+    )
+
+    # Combine losses
+    total_loss = base_loss + hierarchy_weight * hierarchical_loss
+
+    return base_loss, hierarchical_loss, total_loss
+
+def calculate_distance_matrix(hierarchy_root, index_to_class):
+    # Calculate distance matrix once and return it
+    distance_matrix = np.zeros((len(index_to_class), len(index_to_class)))
+
+    for i in range(len(index_to_class)):
+        for j in range(len(index_to_class)):
+            class_i = index_to_class[i]
+            class_j = index_to_class[j]
+
+            node_i = find_node(hierarchy_root, class_i)
+            node_j = find_node(hierarchy_root, class_j)
+
+            if node_i == node_j:
+                distance_matrix[i, j] = 0.0
+            elif node_i.is_descendant(class_j):
+                distance_matrix[i, j] = 1.0
+            elif node_j.is_descendant(class_i):
+                distance_matrix[i, j] = 2.0
+            else:
+                distance_matrix[i, j] = 7.0
+
+    return distance_matrix
 
 def make_eval_data_loader(test_dataset_str, batch_size, num_workers, metric_type):
     test_dataset = make_dataset(
@@ -694,6 +843,9 @@ def run_eval_linear(
     log_confusion_matrix=False,
     loss_function="cross_entropy",
     hierarchy_file_path=None,
+    hierarchy_weight=2.0,
+    scaling_factor=2.0,
+    log_both_losses=False,
 ):
     seed = 0
     test_dataset_strs = test_dataset_strs or [val_dataset_str]
@@ -717,6 +869,30 @@ def run_eval_linear(
     autocast_ctx = partial(torch.cuda.amp.autocast, enabled=True, dtype=autocast_dtype)
     feature_model = ModelWithIntermediateLayers(model, n_last_blocks, autocast_ctx)
     sample_output = feature_model(train_dataset[0][0].unsqueeze(0).cuda())
+
+    distance_matrix = None
+
+    if(val_class_mapping_fpath.endswith(".json")):
+        # Class mapping
+        with open(val_class_mapping_fpath, 'r') as f:
+            data = json.load(f)
+
+        # If you need it as a NumPy array (for example, for integer mapping):
+        val_class_mapping= np.array(list(data.items()))
+    else: 
+        val_class_mapping = np.load(val_class_mapping_fpath) if val_class_mapping_fpath else None
+    test_class_mappings = [
+        np.load(fpath) if fpath and fpath != "None" else None for fpath in test_class_mapping_fpaths
+    ]
+
+    if(loss_function == "custom_hierarchical" or loss_function == "custom_hierarchical_combined"):  
+        class_indices = {row[0]: int(row[1]) for row in val_class_mapping}
+        index_to_class = {v: k for k, v in class_indices.items()}
+        try:	
+            hierarchy_root = load_hierarchy_from_file(hierarchy_file_path)
+        except:
+            raise ValueError(f"Hierarchy file {hierarchy_file_path} could not be loaded. Please make sure the file exists and is in the correct format.")
+        distance_matrix = calculate_distance_matrix(hierarchy_root, index_to_class)
 
     # Setup linear classifier and optimizer
     linear_classifier = setup_linear_classifier(
@@ -755,21 +931,6 @@ def run_eval_linear(
         persistent_workers=True,
     )
     val_data_loader = make_eval_data_loader(val_dataset_str, batch_size, num_workers, val_metric_type)
-
-    if(val_class_mapping_fpath.endswith(".json")):
-        # Class mapping
-        with open(val_class_mapping_fpath, 'r') as f:
-            data = json.load(f)
-
-        # If you need it as a NumPy array (for example, for integer mapping):
-        val_class_mapping= np.array(list(data.items()))
-    else: 
-        val_class_mapping = np.load(val_class_mapping_fpath) if val_class_mapping_fpath else None
-    test_class_mappings = [
-        np.load(fpath) if fpath and fpath != "None" else None for fpath in test_class_mapping_fpaths
-    ]
-    print("Val class mapping: ", val_class_mapping)
-
     # Evaluation
     metrics_file_path = os.path.join(output_dir, "results_eval_linear.json")
     val_results_dict = eval_linear(
@@ -794,6 +955,10 @@ def run_eval_linear(
         log_confusion_matrix=log_confusion_matrix,
         loss_function=loss_function,
         hierarchy_file_path=hierarchy_file_path,
+        hierarchy_weight=hierarchy_weight,
+        scaling_factor=scaling_factor,
+        log_both_losses = log_both_losses,
+        distance_matrix=distance_matrix,
     )
 
     # Test on additional datasets
@@ -849,6 +1014,9 @@ def main(args):
         log_confusion_matrix=args.log_confusion_matrix,
         loss_function=args.loss_function,
         hierarchy_file_path=args.hierarchy_file_path,
+        hierarchy_weight=args.hierarchy_weight,
+        scaling_factor=args.scaling_factor,
+        log_both_losses=args.log_both_losses,
     )
     return 0
 

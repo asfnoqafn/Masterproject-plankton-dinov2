@@ -73,6 +73,7 @@ def get_args_parser(
         type=str,
         help="Nodes to exclude",
     )
+    parser.add_argument("--sweep-config-fpath", type=str, help="WandB Sweep Config File Path")
     return parser
 
 
