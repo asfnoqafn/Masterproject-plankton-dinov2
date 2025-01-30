@@ -1,5 +1,6 @@
 import argparse
 import concurrent.futures
+import contextlib
 import json
 import logging
 import logging.handlers
@@ -21,9 +22,6 @@ import numpy as np
 from imageio.typing import ImageResource
 
 from csv_parser import Bin, download_metadata_csv, get_downloaded_bins, get_args_parser as get_csv_args_parser
-
-# Lock to prevent multiple threads from writing to the same file
-state_lock = threading.Lock()
 
 # setup logging for each lmdb worker
 def setup_logging(queue: multiprocessing.Queue):
@@ -77,9 +75,11 @@ def load_img(img_path: ImageResource) -> np.ndarray:
     img = (img * 255).astype(np.uint8)
     return img
 
-def save_zip_to_lmdb(zip_filename, txn, bin_output_dir):
+def save_zip_to_lmdb(bin: Bin, txn, bin_output_dir, txn_meta: Optional[lmdb.Transaction] = None) -> int:
+    zip_filename: str = bin.id + ".zip"
     zip_filepath = os.path.join(bin_output_dir, zip_filename)
     total_images = 0
+
     with ZipFile(zip_filepath) as zf:
         for image_relpath in zf.namelist():
             if "__MACOSX" in image_relpath:
@@ -106,28 +106,49 @@ def save_zip_to_lmdb(zip_filename, txn, bin_output_dir):
 
                 # Save to LMDB
                 txn.put(img_key_bytes, img_encoded)
+
+                if txn_meta is not None:
+                    metadata = json.dumps({
+                        "bin": bin.id,
+                        "filename": image_relpath,
+                        "dataset": bin.dataset,
+                        "utc": bin.sample_time,
+                        "lat": bin.latitude,
+                        "long": bin.longitude,
+                        "ml_analyzed": bin.ml_analyzed,
+                        "instrument": bin.instrument,
+                    })
+                    metadata_encoded = metadata.encode("utf-8")
+                    txn_meta.put(img_key_bytes, metadata_encoded)
                 total_images += 1
     return total_images
 
 
-def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir: str, processed_bins_path: str, chunk_size: int, bin_output_dir: str, logger: logging.Logger, tmp_dir: Optional[str] = None, timeout=1200) -> None:
+def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir: str, processed_bins_path: str, chunk_size: int, bin_output_dir: str, logger: logging.Logger, tmp_dir: Optional[str] = None, timeout=1200, save_metadata: bool = False) -> None:
     lmdb_name = f"{lmdb_count:03}_images"
+    meta_lmdb_name = f"{lmdb_count:03}_metadata"
     lmdb_path = os.path.join(lmdb_dir, lmdb_name)
+    meta_lmdb_path = os.path.join(lmdb_dir, meta_lmdb_name)
     tmp_lmdb_path = os.path.join(tmp_dir, lmdb_name) if tmp_dir is not None else None
+    tmp_meta_lmdb_path = os.path.join(tmp_dir, meta_lmdb_name) if tmp_dir is not None else None
     total_images = 0
     bad_bins = []
     processed_bins: dict[str, int] = {}
     # open lmdb
     env: lmdb.Environment = lmdb.open(tmp_lmdb_path if tmp_lmdb_path is not None else lmdb_path, map_size=int(1e12))
+    meta_env: Optional[lmdb.Environment] = None
 
-    with env.begin(write=True) as txn:
+    if save_metadata:
+        meta_env = lmdb.open(tmp_meta_lmdb_path if tmp_dir is not None else meta_lmdb_path, map_size=int(1e10))
+
+    with (env.begin(write=True) as txn, (meta_env.begin(write=True) if meta_env else contextlib.nullcontext()) as txn_meta):
         while total_images < chunk_size:
-            bin = bin_queue.get(block=True, timeout=timeout)
-            zip_filename: str = bin.bin_id + ".zip"
+            bin: Bin = bin_queue.get(block=True, timeout=timeout)
+            zip_filename: str = bin.id + ".zip"
             # open next zip-file and write images to lmdb
             try:
                 logger.info(f"Reading zip file {os.path.join(bin_output_dir, zip_filename)} from queue...")
-                num_images = save_zip_to_lmdb(zip_filename=zip_filename, txn=txn, bin_output_dir=bin_output_dir)
+                num_images = save_zip_to_lmdb(bin=bin, txn=txn, bin_output_dir=bin_output_dir, txn_meta=txn_meta)
                 total_images += num_images
                 logger.info(f"Added {num_images} images from {zip_filename} to {lmdb_name}")
             except Exception as e:
@@ -138,13 +159,21 @@ def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir
                 continue
 
             processed_bins[Path(zip_filename).stem] = lmdb_count  # bin is processed, so add it to processed dict
+    
     env.close()
+    meta_env.close() if meta_env else None
 
     if tmp_lmdb_path is not None:
         try:
             shutil.move(tmp_lmdb_path, lmdb_path)
         except Exception as e:
             logger.error(f"Error moving lmdb from {tmp_lmdb_path} to {lmdb_path}: {e}")
+            pass
+        if tmp_meta_lmdb_path is not None:
+            try:
+                shutil.move(tmp_meta_lmdb_path, meta_lmdb_path)
+            except Exception as e:
+                logger.error(f"Error moving lmdb from {tmp_meta_lmdb_path} to {meta_lmdb_path}: {e}")
             pass
     logger.info(f"Saved new lmdb at: {lmdb_path}")
 
@@ -174,6 +203,7 @@ def lmdb_worker(
     lmdb_counter_lock: threading.Lock,
     tmp_dir: Optional[str] = None,
     queue_timeout = 1200,
+    save_metadata: bool = False,
     # worker_configurer
 ) -> None:
     logger = setup_logging(log_queue)
@@ -183,7 +213,7 @@ def lmdb_worker(
             lmdb_count = lmdb_counter.value
         logger.info(f"Started building LMDB #{lmdb_count:03}")
         try:
-            build_lmdb(bin_queue, lock, lmdb_count, lmdb_dir, processed_bins_path, chunk_size, bin_output_dir, logger, tmp_dir, queue_timeout)
+            build_lmdb(bin_queue, lock, lmdb_count, lmdb_dir, processed_bins_path, chunk_size, bin_output_dir, logger, tmp_dir, queue_timeout, save_metadata=save_metadata)
         except Empty:
             logging.info(f"Process finished. Queue was empty for longer than {queue_timeout} seconds")
             break
@@ -193,7 +223,7 @@ def lmdb_worker(
 
 log_queue = multiprocessing.Queue()
 
-def process_bins(bins: list[Bin], bin_output_dir: str,  lmdb_output_dir: str, num_lmdb_workers: int, chunk_size: int, tmp_dir: Optional[str] = None, queue_timeout: int = 1200, **args) -> None:
+def process_bins(bins: list[Bin], bin_output_dir: str,  lmdb_output_dir: str, num_lmdb_workers: int, chunk_size: int, tmp_dir: Optional[str] = None, queue_timeout: int = 1200, save_metadata: bool = False,  **args) -> None:
     m = multiprocessing.Manager()
     
     bin_queue: Queue[Bin] = m.Queue()
@@ -217,7 +247,7 @@ def process_bins(bins: list[Bin], bin_output_dir: str,  lmdb_output_dir: str, nu
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=num_lmdb_workers, initializer=init_log_queue, initargs=(log_queue,)) as process_pool:
         for _ in range(num_lmdb_workers):
-            process_pool.submit(lmdb_worker, bin_queue, lock, lmdb_counter, lmdb_output_dir, processed_bins_path, chunk_size, bin_output_dir, lmdb_counter_lock, tmp_dir, queue_timeout)
+            process_pool.submit(lmdb_worker, bin_queue, lock, lmdb_counter, lmdb_output_dir, processed_bins_path, chunk_size, bin_output_dir, lmdb_counter_lock, tmp_dir, queue_timeout, save_metadata)
     log_queue.put(None)
     listener_process.join()
 
@@ -237,7 +267,7 @@ def main(args):
     else:
         processed_bins = []
 
-    bins = [bin for bin in get_downloaded_bins(csv_path, args.bin_output_dir, blacklisted_sample_types=args.blacklisted_sample_types.split(","), blacklisted_tags=args.blacklisted_tags.split(",")) if bin not in processed_bins]
+    bins = [bin for bin in get_downloaded_bins(csv_path, args.bin_output_dir, blacklisted_sample_types=args.blacklisted_sample_types.split(","), blacklisted_tags=args.blacklisted_tags.split(",")) if bin.id not in processed_bins]
 
     # download bins and add path to zipfile in queue
     process_bins(bins=bins, **vars(args))
@@ -284,7 +314,6 @@ def get_args_parser():
 if __name__ == "__main__":
     args_parser = get_args_parser()
     args = args_parser.parse_args()
-    print(args)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     sys.exit(main(args))

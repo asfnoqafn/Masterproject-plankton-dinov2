@@ -10,34 +10,36 @@ import requests
 @dataclass
 class Bin:
     """Represents an IFCB bin with its metadata"""
-    bin_id: str
+    id: str
     dataset: str
     sample_time: str
     n_images: int
     latitude: float
     longitude: float
-    # ml_analyzed: float
+    ml_analyzed: float
+    instrument: str
     
 # "complete crap" according to mvco csv, even though they don't have the correct tags, so we skip these
 blacklisted_mvco_bins = ["D20211123T063204_IFCB010", "D20211123T065325_IFCB010", "D20211123T071429_IFCB010", "D20211123T073533_IFCB010", "D20211123T075637_IFCB010", "D20211123T081741_IFCB010", "D20211123T083845_IFCB010", "D20211123T085949_IFCB010", "D20211123T092053_IFCB010", "D20211123T094157_IFCB010", "D20211123T100301_IFCB010", "D20211123T102405_IFCB010", "D20211123T104509_IFCB010", "D20211123T110613_IFCB010", "D20211123T112717_IFCB010", "D20211123T114821_IFCB010", "D20211123T120925_IFCB010", "D20211123T123029_IFCB010", "D20211123T125133_IFCB010", "D20211123T131237_IFCB010", "D20211123T133341_IFCB010", "D20211123T135445_IFCB010", "D20211123T141550_IFCB010", "D20211123T143654_IFCB010", "D20211123T145758_IFCB010", "D20211123T151902_IFCB010", "D20211123T154007_IFCB010", "D20211123T160111_IFCB010", "D20211123T162215_IFCB010", "D20211123T164320_IFCB010", "D20211123T170424_IFCB010", "D20211123T172528_IFCB010", "D20211123T174632_IFCB010", "D20211123T180736_IFCB010", "D20211123T182840_IFCB010", "D20211123T184944_IFCB010", "D20211123T191048_IFCB010", "D20211123T193153_IFCB010", "D20211123T195257_IFCB010", "D20211123T201401_IFCB010", "D20211123T203505_IFCB010", "D20211123T205610_IFCB010", "D20211123T211714_IFCB010", "D20211123T213818_IFCB010", "D20211123T215922_IFCB010", "D20211123T222026_IFCB010", "D20211123T224131_IFCB010", "D20211123T230235_IFCB010", "D20211123T232338_IFCB010", "D20211123T234442_IFCB010", "D20211124T000546_IFCB010", "D20211124T002650_IFCB010", "D20211124T004754_IFCB010", "D20211124T010858_IFCB010", "D20211124T013002_IFCB010", "D20211124T015106_IFCB010", "D20211124T021210_IFCB010", "D20211124T023314_IFCB010", "D20211124T025418_IFCB010", "D20211124T031522_IFCB010", "D20211124T033626_IFCB010", "D20211124T035730_IFCB010", "D20211124T041834_IFCB010", "D20211124T043938_IFCB010", "D20211124T050042_IFCB010", "D20211124T054310_IFCB010"]
 
 def get_downloaded_bins(csv_path: Path, bins_path: Path, blacklisted_tags: list[str] = [], blacklisted_sample_types: list[str] = []):
     bins = get_filtered_bins(csv_path, blacklisted_tags, blacklisted_sample_types)
-    downloaded_bins = []
+    downloaded_bins: list[Bin] = []
     for bin in bins:
-        if (bins_path / f"{bin.bin_id}.zip").exists():
+        if (bins_path / f"{bin.id}.zip").exists():
             downloaded_bins.append(bin)
     return downloaded_bins
 
 def parse_line(line: dict):
     return Bin(
-        bin_id=line["pid"],
+        id=line["pid"],
         dataset=line["dataset"],
         sample_time=line["sample_time"],
         n_images=int(line["n_images"]),
         latitude=float(line["latitude"]),
         longitude=float(line["longitude"]),
-        # ml_analyzed=float(line["ml_analyzed"]),
+        ml_analyzed=float(line["ml_analyzed"] or 0),
+        instrument=f"IFCB{line['ifcb']}"
     )
 
 def get_filtered_bins(csv_path: Path, blacklisted_tags: list[str] = [], blacklisted_sample_types: list[str] = []):
@@ -65,7 +67,7 @@ def get_filtered_bins(csv_path: Path, blacklisted_tags: list[str] = [], blacklis
                 for tags in [line["tag1"], line["tag2"], line["tag3"], line["tag4"]]:
                     all_tags.extend(tags.split(","))
                 all_tags = [tag.strip().lower() for tag in all_tags if tag != ""]
-                if line["skip"] == "1" or any(tag in blacklisted_tags for tag in all_tags) or line["sample_type"] in blacklisted_sample_types or line["pid"] in blacklisted_mvco_bins:
+                if line["skip"] == "1" or any(tag in blacklisted_tags for tag in all_tags) or line["sample_type"] in blacklisted_sample_types or line["pid"] in blacklisted_mvco_bins or line["ml_analyzed"] == "":
                     blacklisted_bins.append(parse_line(line))
                     continue
                 bins.append(parse_line(line))
@@ -78,7 +80,6 @@ def get_filtered_bins(csv_path: Path, blacklisted_tags: list[str] = [], blacklis
     return bins
 
 def download_metadata_csv(dataset: str, api_path: str, output_dir: Path):
-    raise Exception("shouldn't be here")
     url = f"{api_path}/api/export_metadata/{dataset}"
     logging.info(f"Downloading metadata CSV from {url}")
     response = requests.get(url, stream=True)
