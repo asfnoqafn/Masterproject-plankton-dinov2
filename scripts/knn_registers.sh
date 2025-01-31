@@ -5,7 +5,7 @@
 #SBATCH -e /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.out
 #SBATCH --time 00:03:00
-#SBATCH --partition=dev_accelerated-h100
+#SBATCH --partition=dev_accelerated
 N_GPUS=1
 N_CPUS=1
 echo $SLURM_JOB_ID
