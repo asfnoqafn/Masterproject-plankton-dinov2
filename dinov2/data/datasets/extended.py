@@ -13,7 +13,6 @@ from PIL import Image
 from torchvision.datasets import VisionDataset
 from torchvision.io import ImageReadMode, decode_image
 
-
 from .decoders import ImageDataDecoder, TargetDecoder
 
 
@@ -49,12 +48,12 @@ class ExtendedVisionDataset(VisionDataset):
                     image = ImageDataDecoder(img_bytes).decode()
                 except Exception as e:
                     raise RuntimeError(f"can not read image for sample {index}") from e
+
         target = self.get_target(index)
         target = TargetDecoder(target).decode()
 
         if self.transforms is not None:
             image, target = self.transforms(image, target)
-
 
         return image, target
 
