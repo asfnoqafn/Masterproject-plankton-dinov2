@@ -1,5 +1,6 @@
 import glob
 import os
+import time
 from typing import Optional
 
 import lmdb
@@ -77,7 +78,10 @@ class LMDBDataset(ImageNet):
         use_labels = len(file_list_labels) > 0 and self.with_targets
         lists_to_iterate = zip(file_list_labels, file_list_imgs) if use_labels else file_list_imgs
         for iter_obj in lists_to_iterate:
+            start = time.time()
+            print("start")
             if use_labels:
+                print("shouldnt be here")
                 lmdb_path_labels, lmdb_path_imgs = iter_obj
                 lmdb_env_labels = lmdb.open(
                     lmdb_path_labels,
@@ -98,13 +102,19 @@ class LMDBDataset(ImageNet):
                 readahead=False,
                 meminit=False,
             )
+
+            end = time.time() - start
+            print("lmdb open time", end)
+
+            
+            
             # ex: "/home/jluesch/Documents/data/plankton/lmdb/2007-TRAIN")
             print(
                 lmdb_path_imgs,
                 "lmdb_env_imgs.stat()",
                 lmdb_env_imgs.stat(),
             )
-
+            start = time.time()
             lmdb_txn_imgs = lmdb_env_imgs.begin()
             # save img tcxn from which to get labels later
             self._lmdb_txns[lmdb_path_imgs] = lmdb_txn_imgs
@@ -112,17 +122,20 @@ class LMDBDataset(ImageNet):
             if use_labels:
                 lmdb_cursor = lmdb_txn_labels.cursor()
             else:
-                lmdb_cursor = lmdb_txn_imgs.cursor()
-            for key, value in lmdb_cursor:
+                lmdb_cursor: lmdb.Cursor = lmdb_txn_imgs.cursor()
+            for key in lmdb_cursor.iternext(keys=True, values=False):
                 entry = dict()
                 if use_labels:
-                    entry["class_id"] = int.from_bytes(value, byteorder="little")
+                    raise NotImplementedError("Shouldnt be here")
                 entry["index"] = key
                 entry["lmdb_imgs_file"] = lmdb_path_imgs
 
                 accumulated.append(entry)
                 global_idx += 1
             lmdb_cursor.close()
+
+            end = time.time() - start
+            print("looped over lmdb", end)
 
         self._entries = accumulated
 
