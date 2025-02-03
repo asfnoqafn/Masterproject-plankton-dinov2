@@ -18,7 +18,6 @@ from skimage.segmentation import (
     felzenszwalb,
     slic,
 )
-from torch import profiler
 from torchvision.ops import masks_to_boxes
 from torchvision.transforms import v2
 
@@ -616,95 +615,94 @@ class DataAugmentationDINO(object):
 
     def __call__(self, image):
         # image : C H W
-        with profiler.record_function("DataAugmentationDINO"):
-            output = {}
-            image = self.pad_to_patch_mutiple(image)
+        output = {}
+        image = self.pad_to_patch_mutiple(image)
 
-            # global crops:
-            if self.use_native_res:
-                image_global = self.make_rectangle_crop(image)
-            else:
-                image_global = image
+        # global crops:
+        if self.use_native_res:
+            image_global = self.make_rectangle_crop(image)
+        else:
+            image_global = image
 
-            im1_base = self.geometric_augmentation_global(image_global)
-            global_crop_1 = self.global_transfo1(im1_base)
+        im1_base = self.geometric_augmentation_global(image_global)
+        global_crop_1 = self.global_transfo1(im1_base)
 
-            im2_base = self.geometric_augmentation_global(image_global)
-            global_crop_2 = self.global_transfo2(im2_base)
+        im2_base = self.geometric_augmentation_global(image_global)
+        global_crop_2 = self.global_transfo2(im2_base)
 
-            output["global_crops_vis"] = [
-                global_crop_1,
-                global_crop_2,
-            ]
-            global_crops = torch.cat(
+        output["global_crops_vis"] = [
+            global_crop_1,
+            global_crop_2,
+        ]
+        global_crops = torch.cat(
+            [
+                self.crop_to_patches(global_crop_1),
+                self.crop_to_patches(global_crop_2),
+            ],
+            dim=0,
+        )  # (2 b) c (n p) p
+        nb_gc_patches = (global_crops.shape[2] / self.patch_size) * 2
+        output["global_crops"] = global_crops
+
+        # local crops:
+        if self.do_seg_crops is not None:
+            (
+                local_crops,
+                masks,
+                bboxes,
+                local_patch_pos_list,
+                resized_masks_int,
+            ) = self.make_seg_crops(image, seg_algo=self.do_seg_crops)
+            # masks = [mask[None, :, :].repeat((3, 1, 1)) for mask in masks]
+
+            output["pooled_seg"] = resized_masks_int
+            # Augment crops and masks
+            local_crops, masks = list(
+                zip(
+                    *[
+                        self.geometric_augmentation_local(
+                            crop[None, :, :].repeat((3, 1, 1)),
+                            mask[None, :, :].repeat((3, 1, 1)).to(torch.float32),
+                        )
+                        for crop, mask in zip(local_crops, masks)
+                    ]
+                )
+            )
+            # masks back to bool
+            masks = [mask[0, :, :] > 0 for mask in masks]  # to bool
+            # crops to list of patches, masked p are dropped
+
+            output["local_crops_vis"] = local_crops  # before patching, for visualization
+            (
+                local_crops,
+                local_crop_len,
+                filtered_patch_pos_list,
+                filtered_bboxes,
+            ) = self.select_and_concat_nonzero_patches(
+                local_crops,
+                masks,
+                image=image,
+                nb_gc_patches=nb_gc_patches,
+                bboxes=bboxes,
+            )
+            output["local_crops"] = local_crops
+            output["local_crop_len"] = local_crop_len
+            output["local_patch_pos"] = filtered_patch_pos_list
+            # (x1, y1, x2, y2)
+            crop_dims = torch.cat(
                 [
-                    self.crop_to_patches(global_crop_1),
-                    self.crop_to_patches(global_crop_2),
+                    filtered_bboxes[:, 2:3] - filtered_bboxes[:, :1] + 1,
+                    filtered_bboxes[:, 3:] - filtered_bboxes[:, 1:2] + 1,
                 ],
-                dim=0,
-            )  # (2 b) c (n p) p
-            nb_gc_patches = (global_crops.shape[2] / self.patch_size) * 2
-            output["global_crops"] = global_crops
-
-            # local crops:
-            if self.do_seg_crops is not None:
-                (
-                    local_crops,
-                    masks,
-                    bboxes,
-                    local_patch_pos_list,
-                    resized_masks_int,
-                ) = self.make_seg_crops(image, seg_algo=self.do_seg_crops)
-                # masks = [mask[None, :, :].repeat((3, 1, 1)) for mask in masks]
-
-                output["pooled_seg"] = resized_masks_int
-                # Augment crops and masks
-                local_crops, masks = list(
-                    zip(
-                        *[
-                            self.geometric_augmentation_local(
-                                crop[None, :, :].repeat((3, 1, 1)),
-                                mask[None, :, :].repeat((3, 1, 1)).to(torch.float32),
-                            )
-                            for crop, mask in zip(local_crops, masks)
-                        ]
-                    )
-                )
-                # masks back to bool
-                masks = [mask[0, :, :] > 0 for mask in masks]  # to bool
-                # crops to list of patches, masked p are dropped
-
-                output["local_crops_vis"] = local_crops  # before patching, for visualization
-                (
-                    local_crops,
-                    local_crop_len,
-                    filtered_patch_pos_list,
-                    filtered_bboxes,
-                ) = self.select_and_concat_nonzero_patches(
-                    local_crops,
-                    masks,
-                    image=image,
-                    nb_gc_patches=nb_gc_patches,
-                    bboxes=bboxes,
-                )
-                output["local_crops"] = local_crops
-                output["local_crop_len"] = local_crop_len
-                output["local_patch_pos"] = filtered_patch_pos_list
-                # (x1, y1, x2, y2)
-                crop_dims = torch.cat(
-                    [
-                        filtered_bboxes[:, 2:3] - filtered_bboxes[:, :1] + 1,
-                        filtered_bboxes[:, 3:] - filtered_bboxes[:, 1:2] + 1,
-                    ],
-                    dim=1,
-                )  # n_c 2
-                output["local_crop_dims"] = crop_dims
-            else:
-                local_crops = [
-                    self.local_transfo(self.geometric_augmentation_local(image)) for _ in range(self.local_crops_number)
-                ]
-                # c h w (on cpu) / b c h w (on gpu) using torchvision
-                local_crops = [crop[None, :, :, :] if len(crop.size()) == 3 else crop for crop in local_crops]
-                output["local_crops"] = torch.cat(local_crops, dim=0)
-            output["offsets"] = ()
+                dim=1,
+            )  # n_c 2
+            output["local_crop_dims"] = crop_dims
+        else:
+            local_crops = [
+                self.local_transfo(self.geometric_augmentation_local(image)) for _ in range(self.local_crops_number)
+            ]
+            # c h w (on cpu) / b c h w (on gpu) using torchvision
+            local_crops = [crop[None, :, :, :] if len(crop.size()) == 3 else crop for crop in local_crops]
+            output["local_crops"] = torch.cat(local_crops, dim=0)
+        output["offsets"] = ()
         return output

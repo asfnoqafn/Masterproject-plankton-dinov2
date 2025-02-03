@@ -4,7 +4,6 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 import sys
-import time
 from typing import Any, Tuple, Union
 
 import imageio.v3 as iio
@@ -14,8 +13,6 @@ from PIL import Image
 from torchvision.datasets import VisionDataset
 from torchvision.io import ImageReadMode, decode_image
 
-from dinov2 import distributed
-from dinov2.logging.helpers import SmoothedValue
 
 from .decoders import ImageDataDecoder, TargetDecoder
 
@@ -23,8 +20,6 @@ from .decoders import ImageDataDecoder, TargetDecoder
 class ExtendedVisionDataset(VisionDataset):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)  # type: ignore
-        self.fetch_times = SmoothedValue(window_size=50)
-        self.transform_times = SmoothedValue(window_size=50)
 
     def get_image_data(self, index: int) -> bytes:
         raise NotImplementedError
@@ -33,7 +28,6 @@ class ExtendedVisionDataset(VisionDataset):
         raise NotImplementedError
 
     def __getitem__(self, index: int) -> Union[Tuple[Any, Any], torch.Tensor, Image.Image]:
-        start_time = time.time()
         img_bytes = self.get_image_data(index)
         if isinstance(img_bytes, list):  # image
             image = [torch.from_numpy(iio.imread(ch_bytes, index=None)) for ch_bytes in img_bytes]
@@ -55,23 +49,12 @@ class ExtendedVisionDataset(VisionDataset):
                     image = ImageDataDecoder(img_bytes).decode()
                 except Exception as e:
                     raise RuntimeError(f"can not read image for sample {index}") from e
-
-        self.fetch_times.update(time.time() - start_time)
         target = self.get_target(index)
         target = TargetDecoder(target).decode()
-
-        start_time = time.time()
 
         if self.transforms is not None:
             image, target = self.transforms(image, target)
 
-        self.transform_times.update(time.time() - start_time)
-
-        if self.fetch_times.count % 100 == 0:
-            print(
-                f"Fetch time avg: {self.fetch_times.avg:.4f}, Transform time avg: {self.transform_times.avg:.4f} (on CPU {distributed.get_global_rank()})",
-                file=sys.stderr,
-            )
 
         return image, target
 
