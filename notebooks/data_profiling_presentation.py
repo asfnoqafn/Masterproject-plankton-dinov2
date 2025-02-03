@@ -91,7 +91,7 @@ def calculate_channel_overview(bin_channels):
     for i in range(3):
         channel_means[i] = np.sum(bin_channels[i] * np.arange(255)) / np.sum(bin_channels[i])
         channel_var = np.sum(((np.arange(255) - channel_means[i]) ** 2) * bin_channels[i]) / np.sum(bin_channels[i])
-        channel_std = np.sqrt(channel_var)
+        channel_stds[i] = np.sqrt(channel_var)
 
     print(f"Channel means: {channel_means}")
     print(f"Channel stds: {channel_stds}")
@@ -110,6 +110,7 @@ def process_lmdb(data_path, n_imgs_per_bin, max_size:int, minmax_dict:dict, bin_
         for (img_key, img_value) in cursor_imgs:
             if optimized:
                 img = io.BytesIO(img_value)
+                
                 # print(img.getvalue()[0:32])
                 # print(Image.open(img).size)
                 width, height = get_png_dimensions(img.getvalue())
@@ -119,6 +120,7 @@ def process_lmdb(data_path, n_imgs_per_bin, max_size:int, minmax_dict:dict, bin_
                 img = Image.open(io.BytesIO(img_value))
                 width, height = img.size
                 image_array = np.array(img)
+                # print("image_array.shape", image_array.shape)
                 if len(image_array.shape) == 3:  # Color image (RGB or RGBA)
                     mean_per_channel = image_array.mean(axis=(0, 1))
                     for i in range(3):
@@ -126,6 +128,9 @@ def process_lmdb(data_path, n_imgs_per_bin, max_size:int, minmax_dict:dict, bin_
 
                 else:  # Grayscale image
                     mean_per_channel = image_array.mean()
+                    bin_channels[0, int(mean_per_channel)] += 1
+                    bin_channels[1, int(mean_per_channel)] += 1
+                    bin_channels[2, int(mean_per_channel)] += 1
              
 
             # print('Image format = ', img.size)
@@ -279,7 +284,7 @@ def create_heatmap_array(n_imgs_per_bin, path=os.path.join(os.getcwd(), "output"
 
 if __name__ == "__main__":
     # 
-    lmdb_path_channel_means = ["/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ZooScanNet/images"]
+    lmdb_path_channel_means = ["/Users/Johann/masterproject/data/plankton/-TRAIN_imgs"]
     open_and_measure_lmdbs(lmdb_path_channel_means, max_size=2000, optimized=False)
 
     # lmdb_paths_unlabeled:list[str] = [
