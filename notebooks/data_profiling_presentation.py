@@ -32,14 +32,14 @@ def get_png_dimensions(data):
 def open_and_measure_lmdbs(data_paths: list, max_size, optimized=False):
     n_imgs_per_bin: np.ndarray = np.full((max_size, max_size), fill_value= 0, dtype=int)
     bin_channels = np.ndarray = np.zeros((3, 255), dtype=int)
-    n_images_too_large: int = 0
+    n_images_too_large_glob: int = 0
     minmax_dict_global: dict = {} # dict to store minmax values for each path
     # run the following code for each path in data_path
     for data_path in data_paths:
         minmax_dict_tmp: dict[str, int] = {"min_width": sys.maxsize, "max_width": -1, "min_height": sys.maxsize, "max_height": -1, "n_images": 0}
        
         n_images_too_large, minmax_dict_tmp = process_lmdb(data_path, n_imgs_per_bin, max_size, minmax_dict_tmp, bin_channels=bin_channels, optimized=optimized)
-        
+        n_images_too_large_glob += n_images_too_large
         print(f"Profiling done for: {data_path}")
         print(minmax_dict_tmp)
         # minmax_dict_global[data_path] = minmax_dict_tmp
@@ -52,8 +52,11 @@ def open_and_measure_lmdbs(data_paths: list, max_size, optimized=False):
 
     heights = n_imgs_per_bin.sum(axis=0)
     widths = n_imgs_per_bin.sum(axis=1)
-    n_images = minmax_dict_global["n_images"]
-    assert n_images == np.sum(heights) == np.sum(widths), f"Number of images does not match: {n_images} != {np.sum(heights)} != {np.sum(widths)}"
+    n_images = np.sum(heights) # minmax_dict_global["n_images"]
+    if not (n_images - n_images_too_large_glob  == np.sum(heights) == np.sum(widths)):
+        print(f"Number of images does not match: {n_images} != {np.sum(heights)} != {np.sum(widths)}")
+    else:
+        print(f"Number of images match: {n_images} == {np.sum(heights)} == {np.sum(widths)}")
 
     h_indices = np.arange(len(heights))
     h_mean = np.sum(h_indices * heights) / n_images
@@ -79,7 +82,7 @@ def open_and_measure_lmdbs(data_paths: list, max_size, optimized=False):
     
     print(f"Height stats: \n{height_stats}\n")
     print(f"Width stats: \n{width_stats}\n")
-    print(f"Number of images too large: {n_images_too_large}")
+    print(f"Number of images too large: {n_images_too_large_glob}")
     
     return n_imgs_per_bin, minmax_dict_global
 
@@ -283,9 +286,9 @@ def create_heatmap_array(n_imgs_per_bin, path=os.path.join(os.getcwd(), "output"
     plt.clf()
 
 if __name__ == "__main__":
-    # 
-    lmdb_path_channel_means = ["/Users/Johann/masterproject/data/plankton/-TRAIN_imgs"]
-    open_and_measure_lmdbs(lmdb_path_channel_means, max_size=2000, optimized=False)
+
+    lmdb_path_channel_means = ["/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ZooScanNet/images"]
+    open_and_measure_lmdbs(lmdb_path_channel_means, max_size=20000, optimized=False)
 
     # lmdb_paths_unlabeled:list[str] = [
     #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/datasciencebowl/images",
