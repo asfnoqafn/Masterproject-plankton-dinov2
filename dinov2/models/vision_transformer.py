@@ -405,19 +405,15 @@ class DinoVisionTransformer(nn.Module):
         # b c w h OR b c p (n p)
         # TODO: Problem: is using np p as w h --> aspect ratio severly distorted....
         b, c, w, h = x.size()
-        print(f"X: {x.shape}")
         if isinstance(self.patch_embed, dict):  # here we have one tokenizer for each nb channels
             x = self.patch_embed[c](x)
-            print(f"X shape in isinstance: {x.shape}")
         else:
             x = self.patch_embed(x)  # b n d (=384)
-            print(f"X shape in else: {x.shape}")
             if num_ch_list is not None:  # means that x = (b c) n d
                 b = len(num_ch_list)
                 x_list = torch.split(x, num_ch_list, dim=0)  # b [c n d]
                 x = pad_sequence(x_list, batch_first=True)  # b c_max n d
                 x = x.reshape(b, -1, x.shape[-1])  # b (c_max n) d
-                print(f"X shape num_chan_list: {x.shape}")
         x_dim = x.shape[-1]
         if masks is not None:
             x = torch.where(
@@ -475,7 +471,6 @@ class DinoVisionTransformer(nn.Module):
             )
 
         else:
-            print(f"X shape before concat: {x.shape}")
             x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
             interpolated_pos_embeds = self.interpolate_pos_encoding(x, w, h)
 
@@ -484,7 +479,6 @@ class DinoVisionTransformer(nn.Module):
                 and interpolated_pos_embeds.shape[1:] != x.shape[1:]
             ):
                 if exists(num_ch_list):
-                    print(f"Num_ch_list: {num_ch_list}")
                     c_max = max(num_ch_list)
                     pos_embeds = []
                     for ch_nb in num_ch_list:
@@ -525,10 +519,6 @@ class DinoVisionTransformer(nn.Module):
 
         x = x + interpolated_pos_embeds
         if self.register_tokens is not None:
-            print(f"Register tokens: {self.register_tokens.shape}")
-            print(f"X: {x.shape}")
-            print(f"X[:,0 ]{x[:,0].shape}")
-            print(f"X[:,1: ]{x[:,1:].shape}")
             x = torch.cat(
                 (
                     x[:, 0],

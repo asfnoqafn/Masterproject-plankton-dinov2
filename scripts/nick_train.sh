@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-gpu=32
 #SBATCH -e /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.out
-#SBATCH --time 10:00:00
+#SBATCH --time 12:00:00
 #SBATCH --partition=accelerated-h100
 
 BATCH_S=196

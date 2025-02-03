@@ -254,9 +254,16 @@ def do_test(cfg, model, iteration):
         teacher_ckp_path = os.path.join(eval_dir, "teacher_checkpoint.pth")
         torch.save({"teacher": new_state_dict}, teacher_ckp_path)
 
+def freeze_all_except_patch_embed(model):
+    for name, param in model.student.backbone.named_parameters():
+        if "patch_embed" in name:
+            param.requires_grad = True
+        else:
+            param.requires_grad = False
 
 def do_train(cfg, model, resume=False):
     model.train()
+    #freeze_all_except_patch_embed(model)
     if cfg.train.use_torch_compile:
         print("--- COMPILING TORCH MODULE ---")
         model = torch.compile(model=model)
