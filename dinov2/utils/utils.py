@@ -161,27 +161,30 @@ def load_pretrained_weights(
     if not do_eval:
         if model.gray_scale == 1:
             print("Initializing channel adaptation layer with Kaiming( Grayscale opt 1)")
-            channel_adapt = model.patch_embed.channel_adapt
-            nn.init.kaiming_normal_(channel_adapt.weight.data)
-            if channel_adapt.bias is not None:
-                nn.init.zeros_(channel_adapt.bias.data)
+            if not hasattr(model.patch_embed, "channel_adapt"):
+                channel_adapt = model.patch_embed.channel_adapt
+                nn.init.kaiming_normal_(channel_adapt.weight.data)
+                if channel_adapt.bias is not None:
+                    nn.init.zeros_(channel_adapt.bias.data)
             logger.info("Initialized channel adaptation layer with Kaiming")
-        if model.gray_scale == 2:
 
-            state_dict = {k: v for k, v in state_dict.items() if "proj" not in k} # remove prev proj layer config
+        elif model.gray_scale == 2:
+            proj_weight_key = "patch_embed.proj.weight"
+            if proj_weight_key in state_dict:
+                old_weights = state_dict[proj_weight_key]
+                print("Checkpoint shape:", old_weights.shape)
 
+                if old_weights.shape[1] == 3:
+                    state_dict = {k: v for k, v in state_dict.items() if "patch_embed.proj" not in k}
 
-            #proj = model.patch_embed.proj
-            # Average across the 3 input channels to get 1 channel
-            #new_weights = proj.weight.data.mean(dim=1, keepdim=True)  # Shape: [384, 1, 14, 14]
-            #proj.weight.data = new_weights
-            #nn.init.zeros_(proj.bias.data)
-            proj = model.patch_embed.proj
-            new_weights = torch.zeros(384, 1, 14, 14)  # Create tensor with target shape
-            nn.init.kaiming_normal_(new_weights)
-            proj.weight.data = new_weights
-            nn.init.zeros_(proj.bias.data)
-            print("Initialized proj layer with Kaiming")
+                    proj = model.patch_embed.proj
+                    new_weights = torch.zeros(384, 1, 14, 14)
+                    nn.init.kaiming_normal_(new_weights)
+                    proj.weight.data = new_weights
+                    nn.init.zeros_(proj.bias.data)
+                    print("Initialized proj layer with Kaiming")
+            else:
+                print("training from grayscale checkpoint")
         else:
             print("training from fb checkpoint in RBG")
 

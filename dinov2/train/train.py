@@ -503,10 +503,6 @@ def do_train(cfg, model, resume=False):
             
             if model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad is not None:
                 patch_embed_grad = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.view(-1).cpu().numpy()
-                #patch_embed_grad_norm = patch_embed_grad.data.view(-1).norm().item()
-                print("before clip")
-                print("Patch embed gradients min:", patch_embed_grad.min())
-                print("Patch embed gradients max:", patch_embed_grad.max())
                 if distributed.is_main_process():
                     wandb.log(
                         {
@@ -525,9 +521,6 @@ def do_train(cfg, model, resume=False):
             if iteration % (OFFICIAL_EPOCH_LENGTH // 10) == 0 and iteration > 0:
                 if model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad is not None:
                     patch_embed_grad = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.view(-1).cpu().numpy()
-                    print("after clip")
-                    print("Patch embed gradients min:", patch_embed_grad.min())
-                    print("Patch embed gradients max:", patch_embed_grad.max())
                     if distributed.is_main_process():
                         wandb.log(
                             {
