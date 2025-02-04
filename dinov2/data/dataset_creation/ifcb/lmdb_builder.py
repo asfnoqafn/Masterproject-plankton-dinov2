@@ -124,42 +124,7 @@ def save_zip_to_lmdb(bin: Bin, txn, bin_output_dir, txn_meta: Optional[lmdb.Tran
     return total_images
 
 
-def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir: str, processed_bins_path: str, chunk_size: int, bin_output_dir: str, logger: logging.Logger, tmp_dir: Optional[str] = None, timeout=1200, save_metadata: bool = False) -> None:
-    lmdb_name = f"{lmdb_count:03}_images"
-    meta_lmdb_name = f"{lmdb_count:03}_metadata"
-    lmdb_path = os.path.join(lmdb_dir, lmdb_name)
-    meta_lmdb_path = os.path.join(lmdb_dir, meta_lmdb_name)
-    tmp_lmdb_path = os.path.join(tmp_dir, lmdb_name) if tmp_dir is not None else None
-    tmp_meta_lmdb_path = os.path.join(tmp_dir, meta_lmdb_name) if tmp_dir is not None else None
-    total_images = 0
-    bad_bins = []
-    processed_bins: dict[str, int] = {}
-    # open lmdb
-    env: lmdb.Environment = lmdb.open(tmp_lmdb_path if tmp_lmdb_path is not None else lmdb_path, map_size=int(1e12))
-    meta_env: Optional[lmdb.Environment] = None
-
-    if save_metadata:
-        meta_env = lmdb.open(tmp_meta_lmdb_path if tmp_dir is not None else meta_lmdb_path, map_size=int(1e10))
-
-    with (env.begin(write=True) as txn, (meta_env.begin(write=True) if meta_env else contextlib.nullcontext()) as txn_meta):
-        while total_images < chunk_size:
-            bin: Bin = bin_queue.get(block=True, timeout=timeout)
-            zip_filename: str = bin.id + ".zip"
-            # open next zip-file and write images to lmdb
-            try:
-                logger.info(f"Reading zip file {os.path.join(bin_output_dir, zip_filename)} from queue...")
-                num_images = save_zip_to_lmdb(bin=bin, txn=txn, bin_output_dir=bin_output_dir, txn_meta=txn_meta)
-                total_images += num_images
-                logger.info(f"Added {num_images} images from {zip_filename} to {lmdb_name}")
-            except Exception as e:
-                logger.error(
-                    f"Error loading zip file {zip_filename}: {e}. Skipping...",
-                )
-                bad_bins.append(Path(zip_filename).stem)
-                continue
-
-            processed_bins[Path(zip_filename).stem] = lmdb_count  # bin is processed, so add it to processed dict
-    
+def save_lmdb(env: lmdb.Environment, meta_env: Optional[lmdb.Environment], lmdb_path: str, meta_lmdb_path: Optional[str], tmp_lmdb_path: Optional[str], tmp_meta_lmdb_path: Optional[str], lock: threading.Lock, processed_bins: dict[str, int], bad_bins: list[str], total_images: int, processed_bins_path: str, logger: logging.Logger):
     env.close()
     meta_env.close() if meta_env else None
 
@@ -175,7 +140,7 @@ def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir
             except Exception as e:
                 logger.error(f"Error moving lmdb from {tmp_meta_lmdb_path} to {meta_lmdb_path}: {e}")
             pass
-    logger.info(f"Saved new lmdb at: {lmdb_path}")
+    logger.info(f"Saving new lmdb at: {lmdb_path} with {total_images} images")
 
     # dump json, since all imgs of processed bins are saved to lmdb
     with lock:
@@ -192,6 +157,48 @@ def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir
         with open(processed_bins_path, "w") as f:
             json.dump(state, f)
 
+def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir: str, processed_bins_path: str, chunk_size: int, bin_output_dir: str, logger: logging.Logger, tmp_dir: Optional[str] = None, timeout=1200, save_metadata: bool = False, save_on_empty: bool = False) -> None:
+    lmdb_name = f"{lmdb_count:04}_images"
+    meta_lmdb_name = f"{lmdb_count:04}_metadata"
+    lmdb_path = os.path.join(lmdb_dir, lmdb_name)
+    meta_lmdb_path = os.path.join(lmdb_dir, meta_lmdb_name)
+    tmp_lmdb_path = os.path.join(tmp_dir, lmdb_name) if tmp_dir is not None else None
+    tmp_meta_lmdb_path = os.path.join(tmp_dir, meta_lmdb_name) if tmp_dir is not None else None
+    total_images = 0
+    bad_bins = []
+    processed_bins: dict[str, int] = {}
+    # open lmdb
+    env: lmdb.Environment = lmdb.open(tmp_lmdb_path if tmp_lmdb_path is not None else lmdb_path, map_size=int(1e12))
+    meta_env: Optional[lmdb.Environment] = None
+
+    if save_metadata:
+        meta_env = lmdb.open(tmp_meta_lmdb_path if tmp_dir is not None else meta_lmdb_path, map_size=int(1e10))
+
+    try:
+        with (env.begin(write=True) as txn, (meta_env.begin(write=True) if meta_env else contextlib.nullcontext()) as txn_meta):
+            while total_images < chunk_size:
+                bin: Bin = bin_queue.get(block=True, timeout=timeout)
+                zip_filename: str = bin.id + ".zip"
+                # open next zip-file and write images to lmdb
+                try:
+                    logger.info(f"Reading zip file {os.path.join(bin_output_dir, zip_filename)} from queue...")
+                    num_images = save_zip_to_lmdb(bin=bin, txn=txn, bin_output_dir=bin_output_dir, txn_meta=txn_meta)
+                    total_images += num_images
+                    logger.info(f"Added {num_images} images from {zip_filename} to {lmdb_name}")
+                except Exception as e:
+                    logger.error(
+                        f"Error loading zip file {zip_filename}: {e}. Skipping...",
+                    )
+                    bad_bins.append(Path(zip_filename).stem)
+                    continue
+
+                processed_bins[Path(zip_filename).stem] = lmdb_count  # bin is processed, so add it to processed dict
+    except Empty:
+        if save_on_empty and total_images > 0:
+            save_lmdb(env, meta_env, lmdb_path, meta_lmdb_path, tmp_lmdb_path, tmp_meta_lmdb_path, lock, processed_bins, bad_bins, total_images, processed_bins_path, logger)
+        raise Empty
+    save_lmdb(env, meta_env, lmdb_path, meta_lmdb_path, tmp_lmdb_path, tmp_meta_lmdb_path, lock, processed_bins, bad_bins, total_images, processed_bins_path, logger)
+
 def lmdb_worker(
     bin_queue: Queue,
     lock: threading.Lock,
@@ -204,6 +211,8 @@ def lmdb_worker(
     tmp_dir: Optional[str] = None,
     queue_timeout = 1200,
     save_metadata: bool = False,
+    max_lmdbs: Optional[int] = None,
+    save_on_empty: bool = False,
     # worker_configurer
 ) -> None:
     logger = setup_logging(log_queue)
@@ -211,11 +220,14 @@ def lmdb_worker(
         with lmdb_counter_lock:
             lmdb_counter.value += 1
             lmdb_count = lmdb_counter.value
-        logger.info(f"Started building LMDB #{lmdb_count:03}")
+        if max_lmdbs is not None and lmdb_count > max_lmdbs:
+            logger.info(f"Reached maximum number of lmdbs: {max_lmdbs}. Exiting...")
+            break
+        logger.info(f"Started building LMDB #{lmdb_count:04}")
         try:
-            build_lmdb(bin_queue, lock, lmdb_count, lmdb_dir, processed_bins_path, chunk_size, bin_output_dir, logger, tmp_dir, queue_timeout, save_metadata=save_metadata)
+            build_lmdb(bin_queue, lock, lmdb_count, lmdb_dir, processed_bins_path, chunk_size, bin_output_dir, logger, tmp_dir, queue_timeout, save_metadata=save_metadata, save_on_empty=save_on_empty)
         except Empty:
-            logging.info(f"Process finished. Queue was empty for longer than {queue_timeout} seconds")
+            logger.info(f"Process finished. Queue was empty for longer than {queue_timeout} seconds")
             break
         except Exception as e:
             logger.error(f"Process crashed. Error building lmdb: {e}")
@@ -223,7 +235,7 @@ def lmdb_worker(
 
 log_queue = multiprocessing.Queue()
 
-def process_bins(bins: list[Bin], bin_output_dir: str,  lmdb_output_dir: str, num_lmdb_workers: int, chunk_size: int, tmp_dir: Optional[str] = None, queue_timeout: int = 1200, save_metadata: bool = False,  **args) -> None:
+def process_bins(bins: list[Bin], bin_output_dir: str,  lmdb_output_dir: str, num_lmdb_workers: int, chunk_size: int, tmp_dir: Optional[str] = None, queue_timeout: int = 1200, save_metadata: bool = False, max_lmdbs: Optional[int] = None, save_on_empty: bool = False, **args) -> None:
     m = multiprocessing.Manager()
     
     bin_queue: Queue[Bin] = m.Queue()
@@ -247,7 +259,7 @@ def process_bins(bins: list[Bin], bin_output_dir: str,  lmdb_output_dir: str, nu
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=num_lmdb_workers, initializer=init_log_queue, initargs=(log_queue,)) as process_pool:
         for _ in range(num_lmdb_workers):
-            process_pool.submit(lmdb_worker, bin_queue, lock, lmdb_counter, lmdb_output_dir, processed_bins_path, chunk_size, bin_output_dir, lmdb_counter_lock, tmp_dir, queue_timeout, save_metadata)
+            process_pool.submit(lmdb_worker, bin_queue, lock, lmdb_counter, lmdb_output_dir, processed_bins_path, chunk_size, bin_output_dir, lmdb_counter_lock, tmp_dir, queue_timeout, save_metadata, max_lmdbs, save_on_empty)
     log_queue.put(None)
     listener_process.join()
 
@@ -306,6 +318,18 @@ def get_args_parser():
         "--save_metadata",
         action=argparse.BooleanOptionalAction,
         help="Toggle saving metadata",
+        default=False,
+    )
+    parser.add_argument(
+        "--max_lmdbs",
+        type=int,
+        help="Maximum number of lmdbs to create",
+        default=None,
+    )
+    parser.add_argument(
+        "--save_on_empty",
+        action=argparse.BooleanOptionalAction,
+        help="Save last lmdb when queue is empty, which would cause the lmdb to be smaller than chunk_size",
         default=False,
     )
     return parser
