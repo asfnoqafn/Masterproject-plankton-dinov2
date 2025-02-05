@@ -7,7 +7,7 @@ dist/
 **/.ipynb_checkpoints/**
 
 *.swp
-
+*.sh
 .vscode/
 wandb/
 dinov2/.DS_Store

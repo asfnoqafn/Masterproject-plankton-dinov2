@@ -521,7 +521,7 @@ class DinoVisionTransformer(nn.Module):
         if self.register_tokens is not None:
             x = torch.cat(
                 (
-                    x[:, 0],
+                    x[:, :1],
                     self.register_tokens.expand(x.shape[0], -1, -1),
                     x[:, 1:],
                 ),
