@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any, Callable, List, Optional, TypeVar
 
 import torch
-from torch.utils.data import Sampler
+from torch.utils.data import Sampler, DataLoader
 
 from .datasets import ImageNet, ImageNet22k
 from .datasets.hdf5_dataset import HDF5Dataset
@@ -244,7 +244,7 @@ def make_data_loader(
     )
 
     logger.info("using PyTorch data loader")
-    data_loader = torch.utils.data.DataLoader(
+    data_loader = DataLoader(
         dataset,
         sampler=sampler,
         batch_size=batch_size,
@@ -253,6 +253,7 @@ def make_data_loader(
         drop_last=drop_last,
         persistent_workers=persistent_workers,
         collate_fn=collate_fn,
+        prefetch_factor=1
     )
 
     try:

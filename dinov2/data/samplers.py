@@ -4,6 +4,7 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 import itertools
+import time
 import warnings
 from typing import Any, Optional
 
@@ -223,22 +224,28 @@ class ShardedInfiniteSampler(Sampler):
         # Always shuffle everything first
         generator.manual_seed(self._seed)
         dtype = _get_torch_dtype(self._sample_count)
+        print("start global randperm calculation")
+        start = time.time()
         perm = torch.randperm(
             self._sample_count,
             dtype=dtype,
             generator=generator,
         )
+        print("time to calculate global randperm", time.time() - start)
+        print(f"start local randperm calculation on {distributed.get_global_size()} workers")
 
         while True:
             # Re-seed on each iteration to allow skipping whole permutations
             seed = _make_seed(self._seed, self._start, self._iter_count)
             generator.manual_seed(seed)
 
+            start = time.time()
             iterable = self._shuffle_tensor_slice_fn(
                 tensor=perm,
                 start=self._start,
                 step=self._step,
                 generator=generator,
             )
+            print(f"time to calculate local randperm on worker {distributed.get_global_rank()}", time.time() - start)
             yield from iterable
             self._iter_count += 1

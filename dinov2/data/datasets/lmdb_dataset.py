@@ -1,7 +1,9 @@
 import glob
 import os
+import pickle
 import time
 from typing import Optional
+from typing_extensions import TypedDict, NotRequired
 
 import lmdb
 import numpy as np
@@ -10,15 +12,28 @@ from dinov2.data.datasets import ImageNet
 
 _TargetLMDBDataset = int
 
+class Entry(TypedDict):
+    index: bytes
+    lmdb_imgs_file: str
+    class_id: NotRequired[int]
+
 # TODO: Fix inheritance logic
 class LMDBDataset(ImageNet):
     Target = _TargetLMDBDataset
-    lmdb_handles = {}
+
+    def __init__(
+        self,
+        **kwargs,
+    ) -> None:
+        super().__init__(**kwargs)
+        self._entries: Optional[list[Entry]] = None
+        self._class_ids: Optional[np.ndarray] = None
 
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
-        lmdb_txn = self._lmdb_txns[entry["lmdb_imgs_file"]]
-        image_data = lmdb_txn.get(entry["index"]) # we dont need to encode since new script already saves encoded img
+        lmdb_env = self._lmdb_envs[entry["lmdb_imgs_file"]]
+        with lmdb_env.begin() as lmdb_txn:
+            image_data = lmdb_txn.get(entry["index"]) # we dont need to encode since new script already saves encoded img
         return image_data
 
     def get_target(self, index: int) -> Optional[Target]:
@@ -57,6 +72,8 @@ class LMDBDataset(ImageNet):
         return self._class_ids
 
     def _load_extra(self, extra_path: str):
+        total_time = time.time()
+        _entries: list = []
         extra_full_path = self._get_extra_full_path(extra_path)
         print("extra_full_path", extra_full_path)
         file_list = glob.glob(extra_full_path, recursive=True)
@@ -67,8 +84,7 @@ class LMDBDataset(ImageNet):
         file_list_imgs = sorted([el for el in file_list if el.endswith("imgs") or el.endswith("images")])
         print("Datasets imgs file list: ", file_list_imgs)
 
-        accumulated = []
-        self._lmdb_txns = dict()
+        self._lmdb_envs = dict()
         global_idx = 0
 
         if self.do_short_run:
@@ -78,10 +94,8 @@ class LMDBDataset(ImageNet):
         use_labels = len(file_list_labels) > 0 and self.with_targets
         lists_to_iterate = zip(file_list_labels, file_list_imgs) if use_labels else file_list_imgs
         for iter_obj in lists_to_iterate:
-            start = time.time()
-            print("start")
+            entries: list[Entry] = []
             if use_labels:
-                print("shouldnt be here")
                 lmdb_path_labels, lmdb_path_imgs = iter_obj
                 lmdb_env_labels = lmdb.open(
                     lmdb_path_labels,
@@ -90,19 +104,18 @@ class LMDBDataset(ImageNet):
                     readahead=False,
                     meminit=False,
                 )
-                lmdb_txn_labels = lmdb_env_labels.begin()
-
             else:
-                lmdb_path_imgs = iter_obj
+                lmdb_path_imgs: str = iter_obj
 
-            lmdb_env_imgs = lmdb.open(
+            start = time.time()
+            lmdb_env_imgs: lmdb.Environment = lmdb.open(
                 lmdb_path_imgs,
                 readonly=True,
                 lock=False,
                 readahead=False,
                 meminit=False,
             )
-
+            self._lmdb_envs[lmdb_path_imgs] = lmdb_env_imgs
             end = time.time() - start
             print("lmdb open time", end)
 
@@ -114,35 +127,51 @@ class LMDBDataset(ImageNet):
                 "lmdb_env_imgs.stat()",
                 lmdb_env_imgs.stat(),
             )
-            start = time.time()
-            lmdb_txn_imgs = lmdb_env_imgs.begin()
-            # save img tcxn from which to get labels later
-            self._lmdb_txns[lmdb_path_imgs] = lmdb_txn_imgs
+            print(
+                lmdb_path_imgs,
+                "lmdb_env_imgs.info()",
+                lmdb_env_imgs.info(),
+            )
 
-            if use_labels:
-                lmdb_cursor = lmdb_txn_labels.cursor()
+            cache_path = f"{lmdb_path_imgs}.cache"
+            if self.is_cached and os.path.exists(cache_path):
+                    print(f"Loading cache from {cache_path}")
+                    start = time.time()
+                    with open(cache_path, "rb") as f:
+                        keys: list[bytes] = pickle.load(f)
+                    entries = [{"index": key, "lmdb_imgs_file": lmdb_path_imgs} for key in keys]
+                    _entries.extend(entries)
+                    print("time to load cache", time.time() - start)
             else:
-                lmdb_cursor: lmdb.Cursor = lmdb_txn_imgs.cursor()
-            for key in lmdb_cursor.iternext(keys=True, values=False):
-                entry = dict()
-                if use_labels:
-                    raise NotImplementedError("Shouldnt be here")
-                entry["index"] = key
-                entry["lmdb_imgs_file"] = lmdb_path_imgs
+                start = time.time()
+                # lmdb_txn_imgs = lmdb_env_imgs.begin()
+                # save img tcxn from which to get labels later
+                with lmdb_env_imgs.begin() as lmdb_txn_imgs:
+                    with lmdb_txn_imgs.cursor() as lmdb_cursor:
+                        # if use_labels:
+                        #     lmdb_cursor = lmdb_txn_labels.cursor()
+                        # else:
+                        for key in lmdb_cursor.iternext(keys=True, values=False):
+                            if use_labels:
+                                raise NotImplementedError("Shouldnt be here")
+                            entries.append({"index": key, "lmdb_imgs_file": lmdb_path_imgs}) # type: ignore
+                            global_idx += 1
 
-                accumulated.append(entry)
-                global_idx += 1
-            lmdb_cursor.close()
+                end = time.time() - start
+                _entries.extend(entries)
+                print("looped over lmdb", end)
 
-            end = time.time() - start
-            print("looped over lmdb", end)
-
-        self._entries = accumulated
+                if self.is_cached: # save cache
+                    start = time.time()
+                    print("Saving cache to", cache_path)
+                    keys = [entry["index"] for entry in entries]
+                    with open(cache_path, "wb") as f:
+                        pickle.dump(keys, f)
+                    print("time to save cache", time.time() - start)
+                    
+        self._entries = _entries
+        print("Total time to load all entries", time.time() - total_time)
 
     def __len__(self) -> int:
         entries = self._get_entries()
         return len(entries)
-
-    def close(self):
-        for handle in self.lmdb_handles.values():
-            handle.close()

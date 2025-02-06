@@ -78,7 +78,7 @@ class ImageNet(ExtendedVisionDataset):
         self._extra_root = extra
         self._split = split
 
-        self._entries = None
+        self._entries: Optional[list] = None
         self._class_ids = None
         self._class_names = None
 
