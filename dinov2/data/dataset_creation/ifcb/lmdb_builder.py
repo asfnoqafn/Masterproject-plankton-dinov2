@@ -168,7 +168,7 @@ def build_lmdb(bin_queue: Queue, lock: threading.Lock, lmdb_count: int, lmdb_dir
     bad_bins = []
     processed_bins: dict[str, int] = {}
     # open lmdb
-    env: lmdb.Environment = lmdb.open(tmp_lmdb_path if tmp_lmdb_path is not None else lmdb_path, map_size=int(1e12))
+    env: lmdb.Environment = lmdb.open(tmp_lmdb_path if tmp_lmdb_path is not None else lmdb_path, map_size=int(1e11))
     meta_env: Optional[lmdb.Environment] = None
 
     if save_metadata:
@@ -257,6 +257,9 @@ def process_bins(bins: list[Bin], bin_output_dir: str,  lmdb_output_dir: str, nu
         lmdb_output_dir, "processed_bins.json"
     )
 
+    if tmp_dir:
+        logging.info(f"Using temporary directory {tmp_dir} for temporary lmdb files.")
+
     with concurrent.futures.ProcessPoolExecutor(max_workers=num_lmdb_workers, initializer=init_log_queue, initargs=(log_queue,)) as process_pool:
         for _ in range(num_lmdb_workers):
             process_pool.submit(lmdb_worker, bin_queue, lock, lmdb_counter, lmdb_output_dir, processed_bins_path, chunk_size, bin_output_dir, lmdb_counter_lock, tmp_dir, queue_timeout, save_metadata, max_lmdbs, save_on_empty)
@@ -265,6 +268,7 @@ def process_bins(bins: list[Bin], bin_output_dir: str,  lmdb_output_dir: str, nu
 
 
 def main(args):
+    print("Arguments", args)
     os.makedirs(args.lmdb_output_dir, exist_ok=True)
 
     csv_path: Path = args.csv_path if args.csv_path is not None else download_metadata_csv(args.dataset, args.api_path, args.bin_output_dir)
