@@ -254,7 +254,7 @@ def process_tar_folder(data_path, n_imgs_per_bin, max_size: int, minmax_dict: di
 
                                     # Bin the image or count as too large
                                     if width < max_size and height < max_size:
-                                        n_imgs_per_bin[(width, height)] = n_imgs_per_bin.get((width, height), 0) + 1
+                                        n_imgs_per_bin[width, height] =+ 1
                                     else:
                                         n_images_too_large += 1
                 except tarfile.TarError as e:
@@ -287,8 +287,11 @@ def create_heatmap_array(n_imgs_per_bin, path=os.path.join(os.getcwd(), "output"
 
 if __name__ == "__main__":
 
-    lmdb_path_channel_means = ["/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ZooScanNet/images"]
-    open_and_measure_lmdbs(lmdb_path_channel_means, max_size=20000, optimized=False)
+    # lmdb_path_channel_means = [
+    #     # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ZooScanNet/images", 
+    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/IFCB_downloader/171_images",
+    #                            ]
+    # open_and_measure_lmdbs(lmdb_path_channel_means, max_size=20000, optimized=False)
 
     # lmdb_paths_unlabeled:list[str] = [
     #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/datasciencebowl/images",
@@ -356,7 +359,7 @@ if __name__ == "__main__":
     #     print(path)
     #     array_ecotaxa = open_and_measure_lmdbs([path], max_size=1000, optimized=True)
 
-    path_ankita = [""]
+    path_ankita = ["/home/hk-project-p0021769/hgf_vwg6996/huwo_data"]
 
-    # array_ankita, dict_ankita = open_and_measure_tars(path_ankita, max_size=2000, optimized=True)
-    # create_heatmap_array(array_ankita, path=os.path.join(os.getcwd(), "output", "ankita_heatmap.png"), label="Size Distribution of Ankita's Images (Log Scale)")
+    array_ankita, dict_ankita = open_and_measure_tars(path_ankita, max_size=20000, optimized=False)
+    create_heatmap_array(array_ankita, path=os.path.join(os.getcwd(), "output", "ankita_heatmap.png"), label="Size Distribution of Ankita's Images (Log Scale)")
