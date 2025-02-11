@@ -11,13 +11,14 @@ import os
 import sys
 from enum import Enum
 from functools import partial
-
+import numpy as np
 import torch
 import torchvision
 from fvcore.common.checkpoint import PeriodicCheckpointer
 from torch.profiler import ProfilerActivity
 
 import dinov2.distributed as distributed
+from dinov2.data.datasets.config import ImageConfig
 import wandb
 from dinov2.data import (
     DataAugmentationDINO,
@@ -261,8 +262,74 @@ def freeze_all_except_patch_embed(model):
         else:
             param.requires_grad = False
 
+def log_debug_info_to_wandb(data, loss_dict_reduced, model, iteration, cfg):
+    if distributed.is_main_process():
+        debug_dict = {}
+
+        def process_image_for_wandb(img_tensor):
+            img_tensor = img_tensor.cpu()
+            img_np = torch.clamp(img_tensor, 0, 1).numpy()
+            
+
+            if ImageConfig.rgb:
+                if img_np.shape[0] != 3:
+                    logger.warning(f"Expected 3 channels for RGB image, got {img_np.shape[0]}")
+                    return None
+                return wandb.Image(np.transpose(img_np, (1, 2, 0)))
+            else:
+                if img_np.shape[0] != 1:
+                    logger.warning(f"Expected 1 channel for grayscale image, got {img_np.shape[0]}")
+                    return None
+                return wandb.Image(img_np[0])
+        
+        if "collated_global_crops" in data:
+            global_crops = data["collated_global_crops"]
+            for i in range(global_crops.shape[0]):
+                img = process_image_for_wandb(global_crops[i])
+                if img is not None:
+                    debug_dict[f"global_crop_{i}"] = img
+        
+        if "collated_local_crops" in data:
+            local_crops = data["collated_local_crops"]
+            for i in range(local_crops.shape[0]):
+                img = process_image_for_wandb(local_crops[i])
+                if img is not None:
+                    debug_dict[f"local_crop_{i}"] = img
+
+        if "collated_global_crops" in data:
+            crops = data["collated_global_crops"]
+            debug_dict.update({
+                "input_mean": crops.mean().item(),
+                "input_std": crops.std().item(),
+                "input_max": crops.max().item(),
+                "input_min": crops.min().item(),
+                "input_channels": crops.shape[1],
+            })
+
+        for name, param in model.student.backbone.named_parameters():
+            if param.grad is not None:
+                debug_dict.update({
+                    f"grad_norm_{name}": param.grad.norm().item(),
+                    f"grad_max_{name}": param.grad.max().item(),
+                    f"grad_min_{name}": param.grad.min().item(),
+                    f"weight_norm_{name}": param.norm().item(),
+                })
+
+        for loss_name, loss_value in loss_dict_reduced.items():
+            debug_dict[f"detailed_loss_{loss_name}"] = loss_value
+
+        if hasattr(model.student.backbone, "get_last_selfattention"):
+            with torch.no_grad():
+                attentions = model.student.backbone.get_last_selfattention(data["collated_global_crops"][:1])
+                att_map = attentions[0].mean(0).cpu().numpy()
+                debug_dict["attention_map"] = wandb.Image(att_map)
+
+        debug_dict["iteration"] = iteration
+        wandb.log(debug_dict)
+
 def do_train(cfg, model, resume=False):
     model.train()
+
     #freeze_all_except_patch_embed(model)
     if cfg.train.use_torch_compile:
         print("--- COMPILING TORCH MODULE ---")
@@ -564,12 +631,43 @@ def do_train(cfg, model, resume=False):
             k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()
         }
 
+
+
+
         if math.isnan(sum(loss_dict_reduced.values())):
-            logger.info("NaN detected")
+            logger.info("NaN detected - Logging debug information")
+            
+            # Log the state before raising the error
+            log_debug_info_to_wandb(data, loss_dict_reduced, model, iteration, cfg)
+            
+            # Log additional specific information about where NaN occurred
             for k, v in loss_dict_reduced.items():
                 if math.isnan(v):
-                    print("Key:{} is nan. Stopping...".format(k))
-            raise AssertionError
+                    logger.info(f"NaN detected in loss component: {k}")
+                    
+            # Log model state
+            if distributed.is_main_process():
+                model_state = {
+                    "teacher_temp": teacher_temp,
+                    "momentum": mom,
+                    "learning_rate": lr,
+                    "weight_decay": wd,
+                    "last_layer_lr": last_layer_lr,
+                }
+                wandb.log({"model_state_at_nan": model_state})
+                
+                # Save a debug checkpoint
+                debug_ckpt = {
+                    "iteration": iteration,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "loss_dict": loss_dict_reduced,
+                }
+                debug_ckpt_path = os.path.join(cfg.train.output_dir, f"nan_debug_checkpoint_{iteration}.pth")
+                torch.save(debug_ckpt, debug_ckpt_path)
+                
+            raise AssertionError("NaN loss detected - Debug information has been logged to wandb")
+        
         losses_reduced = sum(loss for loss in loss_dict_reduced.values())
 
         metric_logger.update(lr=lr)

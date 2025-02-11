@@ -157,7 +157,9 @@ def load_pretrained_weights(
         sys.exit(1)
 
     ImageConfig.read_mode = ImageReadMode.GRAY if model.gray_scale == 1 or model.gray_scale == 2 else ImageReadMode.RGB
+    ImageConfig.rgb = ImageConfig.read_mode == ImageReadMode.RGB
     print(f"ImageConfig.read_mode: {ImageConfig.read_mode}")
+    print(f"ImageConfig.rgb: {ImageConfig.rgb}")
     if not do_eval:
         if model.gray_scale == 1:
             print("Initializing channel adaptation layer with Kaiming( Grayscale opt 1)")

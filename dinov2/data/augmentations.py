@@ -28,6 +28,8 @@ from .transforms import (
     make_normalize_transform,
 )
 
+from dinov2.data.datasets.config import ImageConfig
+
 logger = logging.getLogger("dinov2")
 MAX_PATCHES = 1000
 MIN_NB_PATCHES_IN_CROP = 10
@@ -183,21 +185,38 @@ class DataAugmentationDINO(object):
             self.normalize = make_normalize_transform(use_kornia=True)
 
             if not self.do_multi_channel:
-                self.global_transfo1 = AugmentationSequential(
-                    #color_jittering,
-                    global_transfo1_extra,
-                    self.normalize,
-                )
-                self.global_transfo2 = AugmentationSequential(
-                    #color_jittering,
-                    global_transfo2_extra,
-                    self.normalize,
-                )
-                self.local_transfo = AugmentationSequential(
-                    #color_jittering,
-                    local_transfo_extra,
-                    self.normalize,
-                )
+                if ImageConfig.rgb:
+                    self.global_transfo1 = AugmentationSequential(
+                        color_jittering,
+                        global_transfo1_extra,
+                        self.normalize,
+                    )
+                    self.global_transfo2 = AugmentationSequential(
+                        color_jittering,
+                        global_transfo2_extra,
+                        self.normalize,
+                    )
+                    self.local_transfo = AugmentationSequential(
+                        color_jittering,
+                        local_transfo_extra,
+                        self.normalize,
+                    )
+                else:    
+                    self.global_transfo1 = AugmentationSequential(
+                        #color_jittering,
+                        global_transfo1_extra,
+                        self.normalize,
+                    )
+                    self.global_transfo2 = AugmentationSequential(
+                        #color_jittering,
+                        global_transfo2_extra,
+                        self.normalize,
+                    )
+                    self.local_transfo = AugmentationSequential(
+                        #color_jittering,
+                        local_transfo_extra,
+                        self.normalize,
+                    )
             else:
                 self.global_transfo1 = AugmentationSequential(
                     global_transfo1_extra,
