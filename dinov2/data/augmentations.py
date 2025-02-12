@@ -56,6 +56,7 @@ class DataAugmentationDINO(object):
         patch_size=14,
         do_seg_crops=None,
         do_multi_channel=False,
+        gray_scale= None,
     ):
         self.global_crops_scale = global_crops_scale
         self.local_crops_scale = local_crops_scale
@@ -69,7 +70,7 @@ class DataAugmentationDINO(object):
         self.patch_size = patch_size
         self.do_seg_crops = do_seg_crops
         self.do_multi_channel = do_multi_channel
-
+        self.gray_scale = gray_scale
         self.patch_maxpool_op = torch.nn.MaxPool2d(
             kernel_size=self.patch_size,
             stride=self.patch_size,
@@ -98,61 +99,25 @@ class DataAugmentationDINO(object):
                 local_crops_size,
             )
 
-            if self.use_native_res:
-                self.random_crop = augmentation.RandomCrop(
+            
+            self.geometric_augmentation_global = AugmentationSequential(
+                augmentation.RandomResizedCrop(
                     global_crops_size,
-                    resample=Resample.BILINEAR.name,
+                    scale=global_crops_scale,
+                    resample=Resample.BICUBIC.name,
                     same_on_batch=False,
-                    p=1.0,
-                    keepdim=False,
-                )
-                self.geometric_augmentation_global = augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0)
-
-                if self.do_seg_crops is not None:
-                    # Needs 2 data_keys to apply same transfo on img and mask
-                    self.geometric_augmentation_local = AugmentationSequential(
-                        augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
-                        data_keys=["input", "input"],
-                    )
-                else:
-                    self.geometric_augmentation_local = AugmentationSequential(
-                        augmentation.RandomResizedCrop(
-                            local_crops_size,
-                            scale=local_crops_scale,
-                            resample=Resample.BICUBIC.name,
-                            same_on_batch=False,
-                        ),
-                        augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
-                    )
-
-                self.std_augmentation_local = AugmentationSequential(
-                    augmentation.RandomResizedCrop(
-                        local_crops_size,
-                        scale=local_crops_scale,
-                        resample=Resample.BICUBIC.name,
-                        same_on_batch=False,
-                    ),
-                    augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
-                )
-            else:
-                self.geometric_augmentation_global = AugmentationSequential(
-                    augmentation.RandomResizedCrop(
-                        global_crops_size,
-                        scale=global_crops_scale,
-                        resample=Resample.BICUBIC.name,
-                        same_on_batch=False,
-                    ),
-                    augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
-                )
-                self.geometric_augmentation_local = AugmentationSequential(
-                    augmentation.RandomResizedCrop(
-                        local_crops_size,
-                        scale=local_crops_scale,
-                        resample=Resample.BICUBIC.name,
-                        same_on_batch=False,
-                    ),
-                    augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
-                )
+                ),
+                augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
+            )
+            self.geometric_augmentation_local = AugmentationSequential(
+                augmentation.RandomResizedCrop(
+                    local_crops_size,
+                    scale=local_crops_scale,
+                    resample=Resample.BICUBIC.name,
+                    same_on_batch=False,
+                ),
+                augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
+            )
 
             # color distorsions / blurring
             color_jittering = AugmentationSequential(
@@ -184,49 +149,38 @@ class DataAugmentationDINO(object):
             # normalization
             self.normalize = make_normalize_transform(use_kornia=True)
 
-            if not self.do_multi_channel:
-                if ImageConfig.rgb:
-                    self.global_transfo1 = AugmentationSequential(
-                        color_jittering,
-                        global_transfo1_extra,
-                        self.normalize,
-                    )
-                    self.global_transfo2 = AugmentationSequential(
-                        color_jittering,
-                        global_transfo2_extra,
-                        self.normalize,
-                    )
-                    self.local_transfo = AugmentationSequential(
-                        color_jittering,
-                        local_transfo_extra,
-                        self.normalize,
-                    )
-                else:    
-                    self.global_transfo1 = AugmentationSequential(
-                        #color_jittering,
-                        global_transfo1_extra,
-                        self.normalize,
-                    )
-                    self.global_transfo2 = AugmentationSequential(
-                        #color_jittering,
-                        global_transfo2_extra,
-                        self.normalize,
-                    )
-                    self.local_transfo = AugmentationSequential(
-                        #color_jittering,
-                        local_transfo_extra,
-                        self.normalize,
-                    )
-            else:
+            if self.gray_scale == 0:
                 self.global_transfo1 = AugmentationSequential(
+                    color_jittering,
                     global_transfo1_extra,
                     self.normalize,
                 )
                 self.global_transfo2 = AugmentationSequential(
+                    color_jittering,
                     global_transfo2_extra,
                     self.normalize,
                 )
-                self.local_transfo = AugmentationSequential(local_transfo_extra, self.normalize)
+                self.local_transfo = AugmentationSequential(
+                    color_jittering,
+                    local_transfo_extra,
+                    self.normalize,
+                )
+            else:    
+                self.global_transfo1 = AugmentationSequential(
+                    #color_jittering,
+                    global_transfo1_extra,
+                    self.normalize,
+                )
+                self.global_transfo2 = AugmentationSequential(
+                    #color_jittering,
+                    global_transfo2_extra,
+                    self.normalize,
+                )
+                self.local_transfo = AugmentationSequential(
+                    #color_jittering,
+                    local_transfo_extra,
+                    self.normalize,
+                )
 
         ######## TORCHVISION
         else:

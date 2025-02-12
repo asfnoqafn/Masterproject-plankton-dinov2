@@ -207,6 +207,7 @@ def select_augmentations(cfg, do_multi_channel=False):
         "use_native_res": cfg.crops.use_native_res,
         "do_seg_crops": none_or_str(cfg.crops.free_shapes),
         "do_multi_channel": do_multi_channel,
+        "gray_scale": cfg.student.gray_scale,
     }
     if cfg.train.augmentations == AugmentationType.TORCHV_CPU.value:
         data_transform_cpu = DataAugmentationDINO(use_kornia=False, **aug_kwargs)
@@ -646,6 +647,7 @@ def do_train(cfg, model, resume=False):
                     logger.info(f"NaN detected in loss component: {k}")
                     
             # Log model state
+            print("Logging model state since model died")
             if distributed.is_main_process():
                 model_state = {
                     "teacher_temp": teacher_temp,
