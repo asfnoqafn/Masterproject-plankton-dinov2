@@ -12,7 +12,6 @@ import sys
 from enum import Enum
 from functools import partial
 import time
-
 import torch
 import torchvision
 from fvcore.common.checkpoint import PeriodicCheckpointer
@@ -207,6 +206,7 @@ def select_augmentations(cfg, do_multi_channel=False):
         "use_native_res": cfg.crops.use_native_res,
         "do_seg_crops": none_or_str(cfg.crops.free_shapes),
         "do_multi_channel": do_multi_channel,
+        "gray_scale": cfg.student.gray_scale,
     }
     if cfg.train.augmentations == AugmentationType.TORCHV_CPU.value:
         data_transform_cpu = DataAugmentationDINO(use_kornia=False, **aug_kwargs)

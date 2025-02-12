@@ -123,16 +123,27 @@ class LMDBDataset(ImageNet):
                 lmdb_cursor = lmdb_txn_labels.cursor()
             else:
                 lmdb_cursor: lmdb.Cursor = lmdb_txn_imgs.cursor()
-            for key in lmdb_cursor.iternext(keys=True, values=False):
-                entry = dict()
-                if use_labels:
-                    raise NotImplementedError("Shouldnt be here")
-                entry["index"] = key
-                entry["lmdb_imgs_file"] = lmdb_path_imgs
 
-                accumulated.append(entry)
-                global_idx += 1
-            lmdb_cursor.close()
+            if use_labels: # ugly fix to make sure we can still eval on "small" datasets 
+                for key, value in lmdb_cursor:
+                    entry = dict()
+                    if use_labels:
+                        entry["class_id"] = int.from_bytes(value, byteorder="little")
+                    entry["index"] = key
+                    entry["lmdb_imgs_file"] = lmdb_path_imgs
+
+                    accumulated.append(entry)
+                    global_idx += 1
+                lmdb_cursor.close()
+            else:        
+                for key in lmdb_cursor.iternext(keys=True, values=False):
+                    entry = dict()
+                    entry["index"] = key
+                    entry["lmdb_imgs_file"] = lmdb_path_imgs
+
+                    accumulated.append(entry)
+                    global_idx += 1
+                lmdb_cursor.close()
 
             end = time.time() - start
             print("looped over lmdb", end)
