@@ -37,16 +37,21 @@ def open_and_measure_lmdbs(data_paths: list, max_size, optimized=False):
     # run the following code for each path in data_path
     for data_path in data_paths:
         minmax_dict_tmp: dict[str, int] = {"min_width": sys.maxsize, "max_width": -1, "min_height": sys.maxsize, "max_height": -1, "n_images": 0}
-       
-        n_images_too_large, minmax_dict_tmp = process_lmdb(data_path, n_imgs_per_bin, max_size, minmax_dict_tmp, bin_channels=bin_channels, optimized=optimized)
-        n_images_too_large_glob += n_images_too_large
-        print(f"Profiling done for: {data_path}")
-        print(minmax_dict_tmp)
-        # minmax_dict_global[data_path] = minmax_dict_tmp
-        for key, value in minmax_dict_tmp.items():
-            if key not in minmax_dict_global:
-                minmax_dict_global[key] = 0
-            minmax_dict_global[key] = minmax_dict_global[key] + value
+        try:
+            n_images_too_large, minmax_dict_tmp = process_lmdb(data_path, n_imgs_per_bin, max_size, minmax_dict_tmp, bin_channels=bin_channels, optimized=optimized)
+            n_images_too_large_glob += n_images_too_large
+            print(f"Profiling done for: {data_path}")
+            print(minmax_dict_tmp)
+            # minmax_dict_global[data_path] = minmax_dict_tmp
+            for key, value in minmax_dict_tmp.items():
+                if key not in minmax_dict_global:
+                    minmax_dict_global[key] = 0
+                minmax_dict_global[key] = minmax_dict_global[key] + value
+        except Exception as e:
+            print(f"Error processing lmdb: {data_path}. Skipping")
+            print(e)
+            continue
+        
 
     calculate_channel_overview(bin_channels)
 
@@ -293,22 +298,22 @@ if __name__ == "__main__":
     #                            ]
     # open_and_measure_lmdbs(lmdb_path_channel_means, max_size=20000, optimized=False)
 
-    # lmdb_paths_unlabeled:list[str] = [
-    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/datasciencebowl/images",
-    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/pisco/images",
-    #     # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/IFCB_downloader/images",
-    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/seanoe_uvp_unlabeled/images",
-    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5SD/images-unlabeled",
-    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5HD/images-unlabeled",
-    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP6/images-unlabeled",
-    #     # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Zooscan/images-unlabeled",
-    #     #"/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Other scanner/images-unlabeled",
-    # ]
+    lmdb_paths_unlabeled:list[str] = [
+        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/datasciencebowl/images",
+        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/pisco/images",
+        # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/IFCB_downloader/images",
+        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/seanoe_uvp_unlabeled/images",
+        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5SD/images",
+        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5HD/images",
+        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP6/images",
+        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Zooscan/images",
+        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Other scanner/images",
+    ]
 
     # test_path = ["/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/datasciencebowl/images"]
     # print(os.getcwd())
 
-    # array_unlabeled, dict_unlabeled = open_and_measure_lmdbs(lmdb_paths_unlabeled, max_size=2000)
+    array_unlabeled, dict_unlabeled = open_and_measure_lmdbs(lmdb_paths_unlabeled, max_size=2000)
     # path_heatmap_unlabeled = "/home/hk-project-p0021769/hgf_col5747/output/heatmap_unlabeled.png"
     # create_heatmap_array(array_unlabeled, path_heatmap_unlabeled, label=f"Size Distribution of unlabeled Images (Log Scale, {dict_unlabeled['n_images']} images)")
 
@@ -319,22 +324,22 @@ if __name__ == "__main__":
 
 
 
-    # lmdb_paths_labeled:list[str] = [
-        # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/CPICS/images"
-            # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/datasciencebowl/images",
-            # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/FlowCamNet/images",
-            # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ISIISNet/images",
-            # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/seanoe_uvp_labeled/images",
-            # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/UVPEC/images",
-            # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ZooCamNet/images",
-            # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ZooScanNet/images",
-            # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5SD/images-labeled",
-            # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5HD/images-labeled",
-            # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Zooscan/images-labeled",
-            #"/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Other scanner/images-labeled",
-        # ]
+    lmdb_paths_labeled:list[str] = [
+        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/CPICS/images",
+            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/datasciencebowl/images",
+            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/FlowCamNet/images",
+            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ISIISNet/images",
+            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/seanoe_uvp_labeled/images",
+            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/UVPEC/images",
+            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ZooCamNet/images",
+            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ZooScanNet/images",
+            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5SD/images-labeled",
+            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5HD/images-labeled",
+            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Zooscan/images-labeled",
+            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Other scanner/images-labeled",
+        ]
     
-    # array_labeled, dict_labeled = open_and_measure_lmdbs(lmdb_paths_labeled, max_size=2000)
+    array_labeled, dict_labeled = open_and_measure_lmdbs(lmdb_paths_labeled, max_size=2000)
     # path_heatmap_labeled: str = "/home/hk-project-p0021769/hgf_col5747/output/heatmap_labeled.png"
     # create_heatmap_array(array_labeled, path_heatmap_labeled, label=f"Size Distribution of Labeled Images (Log Scale, {dict_labeled['n_images']} images)")
 
@@ -359,7 +364,7 @@ if __name__ == "__main__":
     #     print(path)
     #     array_ecotaxa = open_and_measure_lmdbs([path], max_size=1000, optimized=True)
 
-    path_ankita = ["/home/hk-project-p0021769/hgf_vwg6996/huwo_data"]
+    # path_ankita = ["/home/hk-project-p0021769/hgf_vwg6996/huwo_data"]
 
-    array_ankita, dict_ankita = open_and_measure_tars(path_ankita, max_size=20000, optimized=False)
-    create_heatmap_array(array_ankita, path=os.path.join(os.getcwd(), "output", "ankita_heatmap.png"), label="Size Distribution of Ankita's Images (Log Scale)")
+    # array_ankita, dict_ankita = open_and_measure_tars(path_ankita, max_size=20000, optimized=False)
+    # create_heatmap_array(array_ankita, path=os.path.join(os.getcwd(), "output", "ankita_heatmap.png"), label="Size Distribution of Ankita's Images (Log Scale)")
