@@ -265,6 +265,46 @@ def freeze_all_except_patch_embed(model):
 def quick_nan_check(loss_dict_reduced):
     return not all(math.isfinite(v) for v in loss_dict_reduced.values())
 
+
+
+def calculate_embedding_entropy(embeddings):
+    normalized_embeddings = torch.nn.functional.normalize(embeddings, dim=-1)
+    
+    similarities = torch.mm(normalized_embeddings, normalized_embeddings.t())
+    
+    probabilities = torch.nn.functional.softmax(similarities, dim=-1)
+    
+
+    entropy = -torch.mean(torch.sum(probabilities * torch.log(probabilities + 1e-12), dim=-1))
+    
+    return entropy.item()
+
+def log_embeddings_entropy(data, loss_dict_reduced, model, iteration, cfg):
+    if distributed.is_main_process() and iteration % (cfg.train.OFFICIAL_EPOCH_LENGTH // 10) == 0 and iteration > 0:
+        entropy_dict = {}
+        
+        with torch.no_grad():
+
+            local_crops = data["collated_local_crops"].float()
+
+            intermediate_output = model.student.backbone._fsdp_wrapped_module(local_crops)
+            print(intermediate_output.shape)
+ 
+
+        entropy_dict.update({
+            "local_crops_entropy": calculate_embedding_entropy(intermediate_output),
+        })
+        
+        entropy_dict.update({
+            "local_crops_mean": torch.norm(intermediate_output, dim=-1).mean().item(),
+            "local_crops_std": torch.std(intermediate_output, dim=-1).mean().item(),
+
+        })
+        
+        print("Entropy dict:", entropy_dict)
+        wandb.log(entropy_dict)
+
+
 def do_train(cfg, model, resume=False):
     model.train()
     #freeze_all_except_patch_embed(model)
@@ -508,6 +548,7 @@ def do_train(cfg, model, resume=False):
             
             if model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad is not None:
                 patch_embed_grad = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.view(-1).cpu().numpy()
+                log_embeddings_entropy(data, loss_dict_reduced, model, iteration, cfg)
                 if distributed.is_main_process():
                     wandb.log(
                         {
