@@ -81,7 +81,6 @@ class LMDBDataset(ImageNet):
             start = time.time()
             print("start")
             if use_labels:
-                print("shouldnt be here")
                 lmdb_path_labels, lmdb_path_imgs = iter_obj
                 lmdb_env_labels = lmdb.open(
                     lmdb_path_labels,

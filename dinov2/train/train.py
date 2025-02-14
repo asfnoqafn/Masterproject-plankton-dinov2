@@ -262,6 +262,9 @@ def freeze_all_except_patch_embed(model):
         else:
             param.requires_grad = False
 
+def quick_nan_check(loss_dict_reduced):
+    return not all(math.isfinite(v) for v in loss_dict_reduced.values())
+
 def do_train(cfg, model, resume=False):
     model.train()
     #freeze_all_except_patch_embed(model)
@@ -565,6 +568,20 @@ def do_train(cfg, model, resume=False):
         loss_dict_reduced = {
             k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()
         }
+
+        # if iteration == 24:
+        #     logger.info("Artificially injecting NaN for testing...")
+        #     first_loss_key = next(iter(loss_dict_reduced))
+        #     loss_dict_reduced[first_loss_key] = float('nan')
+        #     loss_dict[first_loss_key] = torch.tensor(float('nan')).cuda()
+
+        if quick_nan_check(loss_dict_reduced):
+    
+            from dinov2.train.debug import debug_nan_losses
+            
+            logger.info("NaN detected")
+            debug_nan_losses(loss_dict, data, cfg, iteration, cfg.train.output_dir)
+            raise AssertionError
 
         if math.isnan(sum(loss_dict_reduced.values())):
             logger.info("NaN detected")

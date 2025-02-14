@@ -265,6 +265,7 @@ def extract_features(
 ):
     dataset_with_enumerated_targets = DatasetWithEnumeratedTargets(dataset)
     sample_count = len(dataset_with_enumerated_targets)
+    print(f"sample_count: {sample_count}")
     data_loader = make_data_loader(
         dataset=dataset_with_enumerated_targets,
         batch_size=batch_size,
