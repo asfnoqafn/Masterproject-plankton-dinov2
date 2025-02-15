@@ -1,11 +1,10 @@
 #!/bin/sh
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2
 #SBATCH --nodes=1
-#SBATCH --ntasks=1
 #SBATCH --cpus-per-gpu=19
 #SBATCH -e /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.out
-#SBATCH --time 00:10:00
+#SBATCH --time 00:03:00
 #SBATCH --partition=dev_accelerated
 
 BATCH_S=64
@@ -16,7 +15,7 @@ echo $SLURM_JOB_ID
 source ~/.bashrc
 micromamba activate dinov2_2
 
-OMP_NUM_THREADS=1 PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/repo/Masterproject-plankton-dinov2 torchrun \
+OMP_NUM_THREADS=20 PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/repo/Masterproject-plankton-dinov2 torchrun \
  --rdzv-backend=c10d \
  --rdzv-endpoint=localhost:0 \
  --standalone --nnodes=1 --nproc_per_node=$N_GPUS /home/hk-project-p0021769/hgf_grc7525/repo/Masterproject-plankton-dinov2/dinov2/train/train.py --no-resume \

@@ -28,34 +28,31 @@ def debug_nan_losses(loss_dict, data, cfg, iteration, output_dir):
             if crops is None:
                 return
             
-            print(crops.shape)
+            debug_dir = os.path.join(output_dir, f'nan_debug_iter_{iteration}')
+            
+            num_images = crops.shape[0]  # Total number of images
+            batch_size = 64  # Define reasonable batch size per plot
+            num_batches = (num_images + batch_size - 1) // batch_size  # Number of batches
 
-            grid = vutils.make_grid(crops, nrow=8, padding=2, normalize=True)
-            print(grid.shape)
-            plt.figure(figsize=(20, 20))
-            plt.imshow(grid.cpu().to(torch.float32).numpy().transpose(1, 2, 0))
-            plt.axis('off')
-            plt.savefig(os.path.join(debug_dir, f'{prefix}.png'))
-            plt.close()
+            for i in range(num_batches):
+                start_idx = i * batch_size
+                end_idx = min((i + 1) * batch_size, num_images)
+                batch = crops[start_idx:end_idx]  # Extract batch
+                
+                grid = vutils.make_grid(batch, nrow=8, padding=2, normalize=True)
+                
+                plt.figure(figsize=(20, 20))
+                plt.imshow(grid.cpu().to(torch.float32).numpy().transpose(1, 2, 0))
+                plt.axis('off')
+                plt.savefig(os.path.join(debug_dir, f'{prefix}_batch_{i}.png'))
+                plt.close()
         
-        # Save global crops
-        print('saving global crops')
-        #save_patches(data['collated_global_crops'], 'global_crops')
+
         if 'collated_local_crops' in data:
             print('saving local crops')
             save_patches(data['collated_local_crops'], 'local_crops')
         
-        # Save mask visualizations if available
-        # if 'collated_masks' in data:
-        #     mask_dir = os.path.join(debug_dir, 'masks')
-        #     os.makedirs(mask_dir, exist_ok=True)
-        #     masks = data['collated_masks']
-        #     for i, mask in enumerate(masks):
-        #         plt.figure(figsize=(10, 10))
-        #         plt.imshow(mask.cpu().numpy(), cmap='gray')
-        #         plt.axis('off')
-        #         plt.savefig(os.path.join(mask_dir, f'mask_{i}.png'))
-        #         plt.close()
+
         
         return True, nan_losses
     

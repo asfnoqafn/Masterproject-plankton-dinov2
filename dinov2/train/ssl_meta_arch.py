@@ -391,7 +391,7 @@ class SSLMetaArch(nn.Module):
                 student_local_cls_tokens_after_head.append(outputs_list.pop(0).squeeze())
         else:
             student_local_cls_tokens_after_head = outputs_list.pop(0).squeeze(0)
-
+            print(student_local_cls_tokens_after_head.shape)
         # 3b: global crops cls tokens
         student_global_cls_tokens_after_head = outputs_list.pop(0).squeeze(0)
 
