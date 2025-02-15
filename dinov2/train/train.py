@@ -40,6 +40,10 @@ from dinov2.utils.utils import (
     exists,
     none_or_str,
 )
+
+
+from dinov2.train.debug import log_data_entropy
+
 import matplotlib.pyplot as plt
 
 torch.backends.cuda.matmul.allow_tf32 = (
@@ -266,85 +270,6 @@ def freeze_all_except_patch_embed(model):
 def quick_nan_check(loss_dict_reduced):
     return not all(math.isfinite(v) for v in loss_dict_reduced.values())
 
-
-def compute_image_entropy(image_patches, num_bins=256):
-    batch_size, channels, height, width = image_patches.shape
-    flattened_patches = image_patches.view(batch_size, -1).cpu()
-
-    histograms = torch.stack([
-        torch.histogram(flattened_patches[b], bins=num_bins, range=(0, 1), density=True)[0]
-        for b in range(batch_size)
-    ]).view(batch_size, num_bins)
-
-    probs = histograms / histograms.sum(dim=1, keepdim=True)  # Shape: (batch_size, channels, num_bins)
-
-    entropy = -torch.sum(probs * torch.log(probs + 1e-9), dim=1)  # Shape: (batch_size, channels)
-
-    return entropy
-
-def softmax_entropy(embeddings):
-    probs = torch.softmax(embeddings, dim=1)
-    entropy = -torch.sum(probs * torch.log(probs + 1e-12), dim=1)
-    return entropy
-
-
-def visualize_entropy_distribution(entropy_values, title="Embedding Entropy Distribution"):
-    """
-    Create a histogram of entropy values
-    Args:
-        entropy_values: torch.Tensor or numpy array of entropy values
-        title: string for plot title
-    """
-    if torch.is_tensor(entropy_values):
-        entropy_values = entropy_values.cpu().numpy()
-    
-    plt.figure(figsize=(10, 6))
-    plt.hist(entropy_values, bins=30, density=False, alpha=0.7)
-    plt.xlabel("Entropy")
-    plt.ylabel("Density")
-    plt.title(title)
-    plt.grid(True, alpha=0.3)
-    return plt.gcf()
-
-def log_embeddings_entropy(data, loss_dict_reduced, model, iteration, cfg):
-    entropy_dict = {}
-    
-    with torch.no_grad():
-
-        local_crops = data["collated_local_crops"].float()
-        print("Local crops shape:", local_crops.shape)
-        lc_reshaped = local_crops.reshape(local_crops.shape[0], -1)
-        per_patch_entropy = softmax_entropy(lc_reshaped)
-        current_stats = {}
-        print("local crops shape", local_crops.shape)
-        print("Patch embed weight shape:", model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.shape)
-        print("Patch embed weight device:", model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.device)
-        print("Local crops device:", local_crops.device)
-        intermediate_output = model.student._fsdp_wrapped_module.backbone(local_crops)
-        per_cls_entropy = softmax_entropy(intermediate_output)
-        current_stats["cls_entropy_min"] = per_cls_entropy.min()
-        current_stats["cls_entropy_max"] = per_cls_entropy.max()
-        current_stats["cls_entropy_mean"] = per_cls_entropy.mean()
-
-        fig = visualize_entropy_distribution(
-            per_cls_entropy,
-            title=f"CLS Entropy Distribution (Iteration {iteration})"
-        )
-        current_stats["CLS Entropy Distribution"] = wandb.Image(fig)
-        plt.close(fig)
-
-        fig = visualize_entropy_distribution(
-            per_patch_entropy,
-            title=f"Local Crops Per-Patch Entropy (Iteration {iteration})"
-        )
-        current_stats["local_crops_entropy_distribution"] = wandb.Image(fig)
-        plt.close(fig)
-
-        entropy_dict.update(current_stats)
-    
-    print("Entropy dict:", entropy_dict)
-    wandb.log(entropy_dict, step=iteration)
-
 def do_train(cfg, model, resume=False):
     model.train()
     #freeze_all_except_patch_embed(model)
@@ -396,7 +321,7 @@ def do_train(cfg, model, resume=False):
         checkpointer,
         period=3 * OFFICIAL_EPOCH_LENGTH,
         max_iter=max_iter,
-        max_to_keep=10, # TODO more during actual training run for better monitoring
+        max_to_keep=3, # TODO more during actual training run for better monitoring
     )
 
     # setup data preprocessing
@@ -539,7 +464,7 @@ def do_train(cfg, model, resume=False):
         # TODO iter for each el if data['collated_global_crops'] is a list in forward backward
         if not cfg.crops.use_variable_channels:
             loss_accumulator, loss_dict = model.forward_teacher_student(
-                data, teacher_temp=teacher_temp
+                data, teacher_temp=teacher_temp,iteration=iteration
             )
         else:
             loss_dict = dict()
@@ -579,7 +504,7 @@ def do_train(cfg, model, resume=False):
 
         if iteration % (OFFICIAL_EPOCH_LENGTH // 10) == 0 and iteration > 0:
             if distributed.is_main_process():
-                log_embeddings_entropy(data, loss_dict_reduced, model, iteration, cfg)
+                #log_embeddings_entropy(data, loss_dict_reduced, model, iteration, cfg)
                 if model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad is not None:
                     patch_embed_grad = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.view(-1).cpu().numpy()
                     wandb.log(
@@ -654,7 +579,7 @@ def do_train(cfg, model, resume=False):
             
             logger.info("NaN detected")
             debug_nan_losses(loss_dict, data, cfg, iteration, cfg.train.output_dir)
-            log_embeddings_entropy(data, loss_dict_reduced, model, iteration, cfg)
+            log_data_entropy(data, loss_dict_reduced, model, iteration, cfg)
             raise AssertionError
 
         if math.isnan(sum(loss_dict_reduced.values())):

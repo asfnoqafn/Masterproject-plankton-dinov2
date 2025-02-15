@@ -30,6 +30,8 @@ from dinov2.utils.utils import (
     none_or_str,
 )
 
+from dinov2.train.debug import log_entropy
+
 try:
     from xformers.ops import fmha
 except ImportError:
@@ -147,7 +149,7 @@ class SSLMetaArch(nn.Module):
         else:
             loss.backward()
 
-    def forward_teacher_student(self, images, teacher_temp):
+    def forward_teacher_student(self, images, teacher_temp,iteration):
         n_global_crops = 2
         n_local_crops = self.cfg.crops.local_crops_number
         do_free_shapes = none_or_str(self.cfg.crops.free_shapes)
@@ -391,7 +393,10 @@ class SSLMetaArch(nn.Module):
                 student_local_cls_tokens_after_head.append(outputs_list.pop(0).squeeze())
         else:
             student_local_cls_tokens_after_head = outputs_list.pop(0).squeeze(0)
-            print(student_local_cls_tokens_after_head.shape)
+
+        if iteration % 125 == 0 and iteration > 0:
+            log_entropy(data=local_crops, cls=student_local_cls_tokens.squeeze(), iteration=iteration)
+
         # 3b: global crops cls tokens
         student_global_cls_tokens_after_head = outputs_list.pop(0).squeeze(0)
 

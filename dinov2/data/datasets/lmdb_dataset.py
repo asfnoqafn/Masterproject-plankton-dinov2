@@ -1,6 +1,5 @@
 import glob
 import os
-import time
 from typing import Optional
 
 import lmdb
@@ -78,8 +77,7 @@ class LMDBDataset(ImageNet):
         use_labels = len(file_list_labels) > 0 and self.with_targets
         lists_to_iterate = zip(file_list_labels, file_list_imgs) if use_labels else file_list_imgs
         for iter_obj in lists_to_iterate:
-            start = time.time()
-            print("start")
+            #print("start")
             if use_labels:
                 lmdb_path_labels, lmdb_path_imgs = iter_obj
                 lmdb_env_labels = lmdb.open(
@@ -102,9 +100,6 @@ class LMDBDataset(ImageNet):
                 meminit=False,
             )
 
-            end = time.time() - start
-            print("lmdb open time", end)
-
             
             
             # ex: "/home/jluesch/Documents/data/plankton/lmdb/2007-TRAIN")
@@ -113,7 +108,6 @@ class LMDBDataset(ImageNet):
                 "lmdb_env_imgs.stat()",
                 lmdb_env_imgs.stat(),
             )
-            start = time.time()
             lmdb_txn_imgs = lmdb_env_imgs.begin()
             # save img tcxn from which to get labels later
             self._lmdb_txns[lmdb_path_imgs] = lmdb_txn_imgs
@@ -144,8 +138,6 @@ class LMDBDataset(ImageNet):
                     global_idx += 1
                 lmdb_cursor.close()
 
-            end = time.time() - start
-            print("looped over lmdb", end)
 
         self._entries = accumulated
 

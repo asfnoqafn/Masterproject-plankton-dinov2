@@ -3,6 +3,9 @@ import torchvision.utils as vutils
 import os
 import matplotlib.pyplot as plt
 import numpy as np
+import wandb
+import dinov2.distributed as distributed
+
 
 def debug_nan_losses(loss_dict, data, cfg, iteration, output_dir):
     nan_detected = False
@@ -57,3 +60,102 @@ def debug_nan_losses(loss_dict, data, cfg, iteration, output_dir):
         return True, nan_losses
     
     return False, []
+
+
+
+def compute_image_entropy(image_patches, num_bins=256):
+    batch_size, channels, height, width = image_patches.shape
+    flattened_patches = image_patches.view(batch_size, -1).cpu()
+
+    histograms = torch.stack([
+        torch.histogram(flattened_patches[b], bins=num_bins, range=(0, 1), density=True)[0]
+        for b in range(batch_size)
+    ]).view(batch_size, num_bins)
+
+    probs = histograms / histograms.sum(dim=1, keepdim=True)  # Shape: (batch_size, channels, num_bins)
+
+    entropy = -torch.sum(probs * torch.log(probs + 1e-9), dim=1)  # Shape: (batch_size, channels)
+
+    return entropy
+
+def softmax_entropy(embeddings):
+    probs = torch.softmax(embeddings, dim=1)
+    entropy = -torch.sum(probs * torch.log(probs + 1e-12), dim=1)
+    return entropy
+
+
+def visualize_entropy_distribution(entropy_values, title="Embedding Entropy Distribution"):
+    """
+    Create a histogram of entropy values
+    Args:
+        entropy_values: torch.Tensor or numpy array of entropy values
+        title: string for plot title
+    """
+    if torch.is_tensor(entropy_values):
+        entropy_values = entropy_values.cpu().numpy()
+    
+    plt.figure(figsize=(10, 6))
+    plt.hist(entropy_values, bins=100, density=False, alpha=0.7)
+    plt.xlabel("Entropy")
+    plt.ylabel("Density")
+    plt.title(title)
+    plt.grid(True, alpha=0.3)
+    return plt.gcf()
+
+
+def log_data_entropy(data, iteration):
+    if distributed.is_main_process():
+        entropy_dict = {}
+        
+        with torch.no_grad():
+
+            local_crops = data["collated_local_crops"].float()
+            lc_reshaped = local_crops.reshape(local_crops.shape[0], -1)
+            per_patch_entropy = softmax_entropy(lc_reshaped)
+            current_stats = {}
+            
+            fig = visualize_entropy_distribution(
+                per_patch_entropy,
+                title=f"Local Crops Per-Patch Entropy (Iteration {iteration})"
+            )
+            current_stats["local_crops_entropy_distribution"] = wandb.Image(fig)
+            plt.close(fig)
+
+            entropy_dict.update(current_stats)
+        
+        print("Entropy dict:", entropy_dict)
+        wandb.log(entropy_dict, step=iteration)
+
+def log_entropy(data,cls,iteration):
+    if distributed.is_main_process():
+        #print("Logging entropy")
+        with torch.no_grad():
+            #### cls
+            #print("CLS shape:", cls.shape)
+            per_cls_entropy = softmax_entropy(cls)
+            current_stats = {}
+            current_stats["cls_entropy_min"] = per_cls_entropy.min()
+            current_stats["cls_entropy_max"] = per_cls_entropy.max()
+            current_stats["cls_entropy_mean"] = per_cls_entropy.mean()
+            fig = visualize_entropy_distribution(
+                per_cls_entropy,
+                title=f"CLS Entropy Distribution (Iteration {iteration})"
+            )
+            current_stats["CLS Entropy Distribution"] = wandb.Image(fig)
+            plt.close(fig)
+
+            local_crops = data.float()
+            lc_reshaped = local_crops.reshape(local_crops.shape[0], -1)
+            per_patch_entropy = softmax_entropy(lc_reshaped)
+            
+            fig = visualize_entropy_distribution(
+                per_patch_entropy,
+                title=f"Local Crops Per-Patch Entropy (Iteration {iteration})"
+            )
+            current_stats["local_crops_entropy_distribution"] = wandb.Image(fig)
+            plt.close(fig)
+
+        
+            print("Entropy dict:", current_stats)
+            wandb.log(current_stats, step=iteration)
+

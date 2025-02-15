@@ -5,7 +5,7 @@
 #SBATCH -e /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.out
 #SBATCH --time 00:03:00
-#SBATCH --partition=dev_accelerated
+#SBATCH --partition=dev_accelerated-h100
 
 BATCH_S=64
 N_GPUS=1
