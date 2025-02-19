@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --gres=gpu:1
 #SBATCH --nodes=1
-#SBATCH --cpus-per-gpu=16
+#SBATCH --cpus-per-gpu=19
 #SBATCH -e /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.out
 #SBATCH --time 00:20:00
@@ -19,4 +19,6 @@ PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/repo/Masterproject-plankton-din
  /home/hk-project-p0021769/hgf_grc7525/repo/output/ \
  --train-dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooCamNet/:extra=*" \
  --val-dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooCamNet/:extra=*" \
- --output-dir='/home/hk-project-p0021769/hgf_grc7525/output/'
+ --output-dir='/home/hk-project-p0021769/hgf_grc7525/output/' \
+ --tensorboard-log-dir="/home/hk-project-p0021769/hgf_grc7525/tensorboard" \
+ --save_images

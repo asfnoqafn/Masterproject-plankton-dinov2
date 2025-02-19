@@ -145,8 +145,8 @@ def log_entropy(data,cls,iteration):
             plt.close(fig)
 
             local_crops = data.float()
-            lc_reshaped = local_crops.reshape(local_crops.shape[0], -1)
-            per_patch_entropy = softmax_entropy(lc_reshaped)
+          
+            per_patch_entropy = compute_image_entropy(local_crops)
             
             fig = visualize_entropy_distribution(
                 per_patch_entropy,
@@ -159,3 +159,34 @@ def log_entropy(data,cls,iteration):
             print("Entropy dict:", current_stats)
             wandb.log(current_stats, step=iteration)
 
+
+def log_cls_similarities(cls_tokens, iteration):
+    if distributed.is_main_process():
+        with torch.no_grad():
+            number_nan = torch.isnan(cls_tokens).sum()
+            # wierd hacky way to calculate similarity
+            normalized_embeddings = torch.nn.functional.normalize(cls_tokens, p=2, dim=1)
+            similarities = torch.mm(normalized_embeddings, normalized_embeddings.t())
+            
+            # Exclude self
+            mask = ~torch.eye(similarities.shape[0], dtype=torch.bool, device=similarities.device)
+            mean_similarity = similarities[mask].mean()
+            print("Mean similarity:", mean_similarity)
+            wandb.log({"cls_mean_similarity": mean_similarity, "number_nan_cls": number_nan}, step=iteration)
+
+def log_cls_similarities2(cls_tokens, iteration):
+    if distributed.is_main_process():
+        with torch.no_grad():
+            # Normalize embeddings
+            normalized_embeddings = torch.nn.functional.normalize(cls_tokens, p=2, dim=1)
+            
+            # Compute pairwise cosine similarity
+            similarity_matrix = torch.nn.functional.cosine_similarity(
+                normalized_embeddings.unsqueeze(1), normalized_embeddings.unsqueeze(0), dim=2
+            )
+            
+            # Exclude self-similarities
+            mask = ~torch.eye(similarity_matrix.shape[0], dtype=torch.bool, device=similarity_matrix.device)
+            mean_similarity = similarity_matrix[mask].mean()
+            print("Mean similarity:", mean_similarity)
+            wandb.log({"cls_mean_similarity": mean_similarity}, step=iteration)

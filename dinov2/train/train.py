@@ -579,7 +579,7 @@ def do_train(cfg, model, resume=False):
             
             logger.info("NaN detected")
             debug_nan_losses(loss_dict, data, cfg, iteration, cfg.train.output_dir)
-            log_data_entropy(data, loss_dict_reduced, model, iteration, cfg)
+            log_data_entropy(data, iteration)
             raise AssertionError
 
         if math.isnan(sum(loss_dict_reduced.values())):
@@ -619,8 +619,6 @@ def do_train(cfg, model, resume=False):
                     "mom": mom,
                     "ll_lr": last_layer_lr,
                     "total_loss": losses_reduced,
-                    "iter_time": iter_time,
-                    "data_time": metric_logger.data_time.value,
                     **loss_dict_reduced,
                 },step=iteration
             )

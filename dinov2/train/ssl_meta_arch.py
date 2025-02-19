@@ -30,7 +30,7 @@ from dinov2.utils.utils import (
     none_or_str,
 )
 
-from dinov2.train.debug import log_entropy
+from dinov2.train.debug import log_entropy, log_cls_similarities
 
 try:
     from xformers.ops import fmha
@@ -396,6 +396,7 @@ class SSLMetaArch(nn.Module):
 
         if iteration % 125 == 0 and iteration > 0:
             log_entropy(data=local_crops, cls=student_local_cls_tokens.squeeze(), iteration=iteration)
+            log_cls_similarities(cls_tokens=student_local_cls_tokens.squeeze(), iteration=iteration)
 
         # 3b: global crops cls tokens
         student_global_cls_tokens_after_head = outputs_list.pop(0).squeeze(0)
