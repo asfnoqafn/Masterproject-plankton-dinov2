@@ -53,7 +53,7 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, lmdb_path_meta, img_data, lab
             # Convert label to integer ID using the provided label map
             label_str: str = label.decode("utf-8").lower()  # Assuming label is bytes
             if label_str not in label_map:
-                print(f"Warning: Label {label_str} not found in label_map.")
+                #print(f"Warning: Label {label_str} not found in label_map.")
                 continue
             if label_map[label_str] == -1:
                 continue
@@ -64,7 +64,7 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, lmdb_path_meta, img_data, lab
             txn_imgs.put(img_key, img_encoded)
             label_entry = label_id.to_bytes(4, byteorder="little")
             txn_labels.put(label_key, label_entry)
-            meta_entry = metadata.to_bytes(4, byteorder="little")
+            meta_entry = metadata
             txn_meta.put(meta_key, meta_entry)
 
     # Save label map to a JSON file, if required

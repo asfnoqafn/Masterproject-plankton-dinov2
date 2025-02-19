@@ -34,7 +34,6 @@ class LMDBDataset(ImageNet):
         entry = self._entries[index]
         lmdb_txn = self._lmdb_txns[entry["lmdb_meta_file"]]
         metadata = lmdb_txn.get(entry["index"]).decode("utf-8")
-        print("metadata", metadata)
         return metadata
 
     @property
@@ -76,7 +75,7 @@ class LMDBDataset(ImageNet):
         file_list_imgs = sorted([el for el in file_list if el.endswith("imgs") or el.endswith("images")])
         print("Datasets imgs file list: ", file_list_imgs)
 
-        file_list_meta = sorted([el for el in file_list if el.endswith("metadata")])
+        file_list_meta = sorted([el for el in file_list if el.endswith("meta") or el.endswith("metadata")])
         print("Datasets metadata file list: ", file_list_meta)
 
         accumulated = []
