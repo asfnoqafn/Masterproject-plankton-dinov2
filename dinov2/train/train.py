@@ -11,6 +11,7 @@ import os
 import sys
 from enum import Enum
 from functools import partial
+import time
 
 import torch
 import torchvision
@@ -254,9 +255,16 @@ def do_test(cfg, model, iteration):
         teacher_ckp_path = os.path.join(eval_dir, "teacher_checkpoint.pth")
         torch.save({"teacher": new_state_dict}, teacher_ckp_path)
 
+def freeze_all_except_patch_embed(model):
+    for name, param in model.student.backbone.named_parameters():
+        if "patch_embed" in name:
+            param.requires_grad = True
+        else:
+            param.requires_grad = False
 
 def do_train(cfg, model, resume=False):
     model.train()
+    #freeze_all_except_patch_embed(model)
     if cfg.train.use_torch_compile:
         print("--- COMPILING TORCH MODULE ---")
         model = torch.compile(model=model)
@@ -305,7 +313,7 @@ def do_train(cfg, model, resume=False):
         checkpointer,
         period=3 * OFFICIAL_EPOCH_LENGTH,
         max_iter=max_iter,
-        max_to_keep=3,
+        max_to_keep=3, # TODO more during actual training run for better monitoring
     )
 
     # setup data preprocessing
@@ -389,6 +397,7 @@ def do_train(cfg, model, resume=False):
         )
         profiler.start()
 
+    end = time.time()
     for data in metric_logger.log_every(
         data_loader,
         20,
@@ -484,25 +493,72 @@ def do_train(cfg, model, resume=False):
         # torch.distributed.all_reduce(loss_accumulator)
         # Think it should be here, but cause hang
         model.backward(loss_accumulator)
+        #print("Patch embed gradients:", 
+        #model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.data.view(-1).cpu().numpy())
+        #print("Patch embed weights:", model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.data.view(-1).cpu().numpy())
 
+        #print("Grayscale: gradients:", 
+        #model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt.weight.grad.data.view(-1).cpu().numpy())
+        #print("Grayscale: weights:",
+        #model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt.weight.data.view(-1).cpu().numpy())
+        if iteration % (OFFICIAL_EPOCH_LENGTH // 10) == 0 and iteration > 0:
+            
+            if model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad is not None:
+                patch_embed_grad = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.view(-1).cpu().numpy()
+                if distributed.is_main_process():
+                    wandb.log(
+                        {
+                            "patch_embed_grad_min_before_clip": patch_embed_grad.min(),
+                            "patch_embed_grad_max_before_clip": patch_embed_grad.max(),
+                        }
+                    )
+            
         # clip gradients
         if fp16_scaler is not None:
             if cfg.optim.clip_grad:
                 fp16_scaler.unscale_(optimizer)
                 for v in model.student.values():
                     v.clip_grad_norm_(cfg.optim.clip_grad)
+            
+            if iteration % (OFFICIAL_EPOCH_LENGTH // 10) == 0 and iteration > 0:
+                if model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad is not None:
+                    patch_embed_grad = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.view(-1).cpu().numpy()
+                    if distributed.is_main_process():
+                        wandb.log(
+                            {
+                                "patch_embed_grad_min": patch_embed_grad.min(),
+                                "patch_embed_grad_max": patch_embed_grad.max(),
+                            }
+                    )
             fp16_scaler.step(optimizer)
             fp16_scaler.update()
         else:
             if cfg.optim.clip_grad:
                 for v in model.student.values():
                     v.clip_grad_norm_(cfg.optim.clip_grad)
+
+            if iteration % (OFFICIAL_EPOCH_LENGTH // 10) == 0 and iteration > 0:
+                patch_embed_grad = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.view(-1).cpu().numpy()
+                print("after clip")
+                print("Patch embed gradients min:", patch_embed_grad.min())
+                print("Patch embed gradients max:", patch_embed_grad.max())
+                if distributed.is_main_process():
+                    wandb.log(
+                        {
+                            "patch_embed_grad_min": patch_embed_grad.min(),
+                            "patch_embed_grad_max": patch_embed_grad.max(),
+                        }
+                )
             optimizer.step()
 
         # perform teacher EMA update
         model.update_teacher(mom)
 
         # logging
+
+        
+
+
         if distributed.get_global_size() > 1:
             for v in loss_dict.values():
                 torch.distributed.all_reduce(v)
@@ -516,14 +572,27 @@ def do_train(cfg, model, resume=False):
                 if math.isnan(v):
                     print("Key:{} is nan. Stopping...".format(k))
             raise AssertionError
-        losses_reduced = sum(loss for loss in loss_dict_reduced.values())
 
+        # checkpointing and testing
+        if (
+            cfg.evaluation.eval_period_iterations > 0
+            and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
+        ):
+            do_test(cfg, model, f"training_{iteration}")
+            torch.cuda.synchronize()
+
+        periodic_checkpointer.step(iteration)
+
+        losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+        iter_time = time.time() - end
+        end = time.time()
         metric_logger.update(lr=lr)
         metric_logger.update(wd=wd)
         metric_logger.update(mom=mom)
         metric_logger.update(last_layer_lr=last_layer_lr)
         metric_logger.update(current_batch_size=current_batch_size)
         metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
+        metric_logger.update(iter_time=iter_time)
 
         if distributed.is_main_process():
             wandb.log(
@@ -534,20 +603,11 @@ def do_train(cfg, model, resume=False):
                     "mom": mom,
                     "ll_lr": last_layer_lr,
                     "total_loss": losses_reduced,
+                    "iter_time": iter_time,
+                    "data_time": metric_logger.data_time.value,
                     **loss_dict_reduced,
                 }
             )
-
-        # checkpointing and testing
-
-        if (
-            cfg.evaluation.eval_period_iterations > 0
-            and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
-        ):
-            do_test(cfg, model, f"training_{iteration}")
-            torch.cuda.synchronize()
-
-        periodic_checkpointer.step(iteration)
         iteration = iteration + 1
     metric_logger.synchronize_between_processes()
 
@@ -559,7 +619,7 @@ def do_train(cfg, model, resume=False):
         # create a wandb Artifact
         profile_art = wandb.Artifact("trace", type="profile")
         # add the pt.trace.json files to the Artifact
-        trace_files = glob.glob(profiler_dir + ".pt.trace.json")
+        trace_files = glob.glob(os.path.join(profiler_dir, "*.pt.trace.json"))
         for trace_file in trace_files:
             profile_art.add_file(os.path.join(profiler_dir, trace_file))
         # log the artifact
@@ -571,7 +631,7 @@ def do_train(cfg, model, resume=False):
 def main(args):
     torchvision.disable_beta_transforms_warning()
     cfg = setup(args)
-
+    print(cfg)
     model = SSLMetaArch(cfg).to(torch.device("cuda"))
     model.prepare_for_distributed_training()
 

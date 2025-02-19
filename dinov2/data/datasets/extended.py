@@ -12,7 +12,7 @@ import torch
 from PIL import Image
 from torchvision.datasets import VisionDataset
 from torchvision.io import ImageReadMode, decode_image
-
+from dinov2.data.datasets.config import ImageConfig
 from .decoders import ImageDataDecoder, TargetDecoder
 
 
@@ -37,10 +37,11 @@ class ExtendedVisionDataset(VisionDataset):
             image = (image / 255.0).to(torch.float32)
         else:
             try:
-                # have to copy bc stream not writeable
                 image = torch.frombuffer(np.copy(img_bytes), dtype=torch.uint8)
-                image = decode_image(image, ImageReadMode.RGB)
+                image = decode_image(image, ImageConfig.read_mode)
                 image = (image / 255.0).to(torch.float32)
+
+                
             except Exception as e:
                 print(e)
                 print(

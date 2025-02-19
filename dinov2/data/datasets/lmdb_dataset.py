@@ -1,5 +1,6 @@
 import glob
 import os
+import time
 from typing import Optional
 
 import lmdb
@@ -87,9 +88,11 @@ class LMDBDataset(ImageNet):
             file_list_imgs = file_list_imgs[:1]
 
         for iter_obj in zip_longest(file_list_imgs, file_list_labels, file_list_meta):
-            
+            start = time.time()
+            print("Start readin lmdbs")
+
             lmdb_path_imgs, lmdb_path_labels, lmdb_path_meta = iter_obj
-            use_labels = self.with_targets and lmdb_path_labels is not None
+            use_labels = False #self.with_targets and lmdb_path_labels is not None
             use_metadata = self.with_metadata and lmdb_path_meta is not None
             
             lmdb_env_imgs = lmdb.open(
@@ -101,6 +104,7 @@ class LMDBDataset(ImageNet):
             )
 
             if use_labels:
+                print("WARNING: There should be no labels!")
                 lmdb_env_labels = lmdb.open(
                     lmdb_path_labels,
                     readonly=True,
@@ -120,13 +124,15 @@ class LMDBDataset(ImageNet):
                 )
                 lmdb_txn_meta = lmdb_env_meta.begin()
 
+            print("Time to open the lmdb:", time.time() - start)
+
             # ex: "/home/jluesch/Documents/data/plankton/lmdb/2007-TRAIN")
             print(
                 lmdb_path_imgs,
                 "lmdb_env_imgs.stat()",
                 lmdb_env_imgs.stat(),
             )
-
+            start = time.time()
             lmdb_txn_imgs = lmdb_env_imgs.begin()
             # save img tcxn from which to get labels later
             self._lmdb_txns[lmdb_path_imgs] = lmdb_txn_imgs
@@ -135,14 +141,15 @@ class LMDBDataset(ImageNet):
                 self._lmdb_txns[lmdb_path_meta] = lmdb_txn_meta
 
             if use_labels:
-                lmdb_cursor = lmdb_txn_labels.cursor()
+                lmdb_cursor: lmdb.Cursor = lmdb_txn_labels.cursor()
             else:
-                lmdb_cursor = lmdb_txn_imgs.cursor()
+                lmdb_cursor: lmdb.Cursor = lmdb_txn_imgs.cursor()
                 
-            for key, value in lmdb_cursor:
+            for key in lmdb_cursor.iternext(keys=True, values=False):
                 entry = dict()
                 if use_labels:
-                    entry["class_id"] = int.from_bytes(value, byteorder="little")
+                    raise NotImplementedError("There should not be labels here")
+                    #entry["class_id"] = int.from_bytes(value, byteorder="little")
                 
                 entry["index"] = key
                 entry["lmdb_imgs_file"] = lmdb_path_imgs
@@ -153,6 +160,9 @@ class LMDBDataset(ImageNet):
                 accumulated.append(entry)
                 global_idx += 1
             lmdb_cursor.close()
+
+            end = time.time() - start
+            print("looped over lmdb", end)
 
         self._entries = accumulated
 
