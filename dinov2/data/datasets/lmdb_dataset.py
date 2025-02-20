@@ -89,7 +89,6 @@ class LMDBDataset(ImageNet):
 
         for iter_obj in zip_longest(file_list_imgs, file_list_labels, file_list_meta):
             start = time.time()
-            print("Start readin lmdbs")
 
             lmdb_path_imgs, lmdb_path_labels, lmdb_path_meta = iter_obj
             use_labels = False #self.with_targets and lmdb_path_labels is not None
@@ -124,7 +123,8 @@ class LMDBDataset(ImageNet):
                 )
                 lmdb_txn_meta = lmdb_env_meta.begin()
 
-            print("Time to open the lmdb:", time.time() - start)
+            end = time.time() - start
+            print("lmdb open time", end)
 
             # ex: "/home/jluesch/Documents/data/plankton/lmdb/2007-TRAIN")
             print(

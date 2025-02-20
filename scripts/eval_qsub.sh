@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-gpu=19
 #SBATCH -e /home/hk-project-p0021769/hgf_auh3910/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_auh3910/output/log_%j.out
-#SBATCH --time 00:10:00
+#SBATCH --time 00:20:00
 #SBATCH --partition=accelerated
 N_GPUS=1
 N_CPUS=19
@@ -25,8 +25,10 @@ torchrun \
  --standalone \
  --nnodes=1 \
  dinov2/eval/knn.py \
- --config-file dinov2/configs/eval/vits14_pretrain.yaml \
- --pretrained-weights="/home/hk-project-p0021769/hgf_grc7525/checkpoints/dinov2_vits14_pretrain.pth" \
+ --config-file="dinov2/configs/eval/vits14_reg4_rgb.yaml" \
+ --pretrained-weights="/home/hk-project-p0021769/hgf_grc7525/checkpoints/dinov2_vits14_reg4_pretrain.pth" \
  --output-dir="/home/hk-project-p0021769/hgf_auh3910/output/" \
  --train-dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet_meta:extra=*" \
- --val-dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet_meta:extra=*"
+ --val-dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet_meta:extra=*" \
+ --tensorboard-log-dir="/home/hk-project-p0021769/hgf_grc7525/tensorboard" \
+ --save_images

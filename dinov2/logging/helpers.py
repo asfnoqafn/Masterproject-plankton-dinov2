@@ -23,9 +23,6 @@ class MetricLogger(object):
         self.output_file = output_file
         self.verbose = verbose
 
-        self.meters["data_time"] = SmoothedValue(fmt="{avg:.6f}")
-        self.meters["iter_time"] = SmoothedValue(fmt="{avg:.6f}")
-
     def update(self, **kwargs):
         for k, v in kwargs.items():
             if isinstance(v, torch.Tensor):
@@ -90,6 +87,8 @@ class MetricLogger(object):
             header = ""
         start_time = time.time()
         end = time.time()
+        iter_time = SmoothedValue(fmt="{avg:.6f}")
+        data_time = SmoothedValue(fmt="{avg:.6f}")
 
         if n_iterations is None:
             n_iterations = len(iterable)
@@ -101,6 +100,8 @@ class MetricLogger(object):
             "[{0" + space_fmt + "}/{1}]",
             "eta: {eta}",
             "{meters}",
+            "time: {time}",
+            "data: {data}",
         ]
         if torch.cuda.is_available():
             log_list += ["max mem: {memory:.0f} (mb)"]
@@ -108,16 +109,17 @@ class MetricLogger(object):
         log_msg = self.delimiter.join(log_list)
         MB = 1024.0 * 1024.0
         for obj in iterable:
-            self.update(data_time=time.time() - end)
+            data_time.update(time.time() - end)
             yield obj
+            iter_time.update(time.time() - end)
             if i % print_freq == 0 or i == n_iterations - 1:
                 if self.verbose:
                     self.dump_in_output_file(
                         iteration=i,
-                        iter_time=self.meters["iter_time"].avg,
-                        data_time=self.meters["data_time"].avg,
+                        iter_time=iter_time.avg,
+                        data_time=data_time.avg,
                     )
-                eta_seconds = self.meters["iter_time"].global_avg * (n_iterations - i)
+                eta_seconds = iter_time.global_avg * (n_iterations - i)
                 eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
                 if torch.cuda.is_available():
                     logger.info(
@@ -126,6 +128,8 @@ class MetricLogger(object):
                             n_iterations,
                             eta=eta_string,
                             meters=str(self),
+                            time=str(iter_time),
+                            data=str(data_time),
                             memory=torch.cuda.max_memory_allocated() / MB,
                         )
                     )
@@ -136,6 +140,8 @@ class MetricLogger(object):
                             n_iterations,
                             eta=eta_string,
                             meters=str(self),
+                            time=str(iter_time),
+                            data=str(data_time),
                         )
                     )
             i += 1
