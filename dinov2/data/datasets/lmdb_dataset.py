@@ -91,7 +91,7 @@ class LMDBDataset(ImageNet):
             start = time.time()
 
             lmdb_path_imgs, lmdb_path_labels, lmdb_path_meta = iter_obj
-            use_labels = False #self.with_targets and lmdb_path_labels is not None
+            use_labels = self.with_targets and lmdb_path_labels is not None
             use_metadata = self.with_metadata and lmdb_path_meta is not None
             
             lmdb_env_imgs = lmdb.open(
@@ -103,7 +103,6 @@ class LMDBDataset(ImageNet):
             )
 
             if use_labels:
-                print("WARNING: There should be no labels!")
                 lmdb_env_labels = lmdb.open(
                     lmdb_path_labels,
                     readonly=True,
@@ -145,12 +144,11 @@ class LMDBDataset(ImageNet):
             else:
                 lmdb_cursor: lmdb.Cursor = lmdb_txn_imgs.cursor()
                 
-            for key in lmdb_cursor.iternext(keys=True, values=False):
+            for key, value in lmdb_cursor:
                 entry = dict()
                 if use_labels:
-                    raise NotImplementedError("There should not be labels here")
-                    #entry["class_id"] = int.from_bytes(value, byteorder="little")
-                
+                    entry["class_id"] = int.from_bytes(value, byteorder="little")
+            
                 entry["index"] = key
                 entry["lmdb_imgs_file"] = lmdb_path_imgs
 

@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import sys
+from tqdm import tqdm
 from functools import partial
 from typing import List, Optional
 import matplotlib.pyplot as plt
@@ -136,7 +137,7 @@ def get_args_parser(
         help="Directory to save TensorBoard embedding projector logs"
     )
     parser.add_argument(
-        "--output_dir",
+        "--knn_output_dir",
         type=str,
         help="Output directory to write results and logs",
     )
@@ -390,6 +391,7 @@ def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, tr
     embedding.metadata_path = 'metadata.tsv'
 
     torch.save({'embeddings': embedding_tensor}, embeddings_dir + '/embeddings.pt')
+    print(f"Saved embeddings at {embeddings_dir + '/embeddings.pt'}")
 
     if save_images:
         max_sprite_images = 256
@@ -410,7 +412,7 @@ def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, tr
             class_sprite_images = max(1, int(max_sprite_images * class_proportion))
             sampling_ratios[label] = min(class_sprite_images, count)
 
-        for label, count in sampling_ratios.items():
+        for label, count in tqdm(sampling_ratios.items()):
             label_indices = torch.where(train_labels == label)[0]
             
             if len(label_indices) > count:
@@ -703,10 +705,10 @@ def main(args):
 
     model, autocast_dtype = setup_and_build_model(args, do_eval=True , model_type=args.model_type)
 
-    print("args.output_dir", args.output_dir)
+    print("args.knn_output_dir", args.knn_output_dir)
     eval_knn_with_model(
         model=model,
-        output_dir=args.output_dir,
+        output_dir=args.knn_output_dir,
         train_dataset_str=args.train_dataset_str,
         val_dataset_str=args.val_dataset_str,
         nb_knn=args.nb_knn,
