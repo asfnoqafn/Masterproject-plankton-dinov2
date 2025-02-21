@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-task=72
 #SBATCH -e /home/hk-project-p0021769/hgf_rth0695/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_rth0695/output/log_%j.out
-#SBATCH --time 01:00:00
+#SBATCH --time 02:00:00
 #SBATCH --partition=cpuonly
 
 PYTHONPATH=/home/hk-project-p0021769/hgf_rth0695/Masterproject-plankton-dinov2

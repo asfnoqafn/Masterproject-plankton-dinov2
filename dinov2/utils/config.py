@@ -51,14 +51,13 @@ def default_setup(args, output_dir, do_eval: bool = False):
     rank = distributed.get_global_rank()
 
     global logger
-
-    if distributed.is_main_process():
-        setup_logging(
-            args=args,
-            output=output_dir,
-            level=logging.INFO,
-            do_eval=do_eval,
-        )
+    # if distributed.is_main_process():
+    #     setup_logging(
+    #         args=args,
+    #         output=output_dir,
+    #         level=logging.INFO,
+    #         do_eval=do_eval,
+    #     )
 
     logger = logging.getLogger("dinov2")
 

@@ -26,8 +26,4 @@ OMP_NUM_THREADS=64 PYTHONPATH=/home/hk-project-p0021769/hgf_rth0695/Masterprojec
  --log-missclassified-images True \
  --log-confusion-matrix True \
  --run_name 'linear_eval_vits14_ZooScanNet_losses' \
- --hierarchy-file-path="/home/hk-project-p0021769/hgf_rth0695/Masterproject-plankton-dinov2/hierarchy_zoo_scan.json" \
- --loss-function="custom_hierarchical_combined" \
- --hierarchy-weight=1.0 \
- --scaling-factor=0.35 \
- --log-both-losses=True \
+ --loss-function="cross_entropy" \

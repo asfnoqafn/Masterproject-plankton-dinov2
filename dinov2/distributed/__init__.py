@@ -15,6 +15,12 @@ import torch.distributed as dist
 global RANK, WORLD_SIZE, LOCAL_RANK, LOCAL_WORLD_SIZE
 
 
+def destroy_process_group() -> None:
+    """
+    Clean up the process group.
+    """
+    dist.destroy_process_group()
+    
 def is_enabled() -> bool:
     """
     Returns:

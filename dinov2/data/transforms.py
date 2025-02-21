@@ -76,6 +76,10 @@ def make_normalize_transform(
     std: Sequence[float] = [WHOI_DEFAULT_STD],
     use_kornia=False,
 ) -> Union[v2.Normalize, augmentation.Normalize]:
+    if isinstance(mean, (float, int)):  # If single value, expand to [R, G, B]
+        mean = [mean] * 3
+    if isinstance(std, (float, int)):
+        std = [std] * 3
     if use_kornia:
         return augmentation.Normalize(mean, std, p=1.0, keepdim=False)
     else:
@@ -104,7 +108,7 @@ def make_classification_train_transform(
     transforms_list.extend(
         [
             MaybeToTensor(),
-            make_normalize_transform(mean=mean, std=std),
+            # make_normalize_transform(mean=mean, std=std),
         ]
     )
     return v2.Compose(transforms_list)
@@ -122,9 +126,9 @@ def make_classification_eval_transform(
 ) -> v2.Compose:
     transforms_list = [
         v2.Resize(223,max_size= 224, antialias=True),
-        v2.Pad(112, fill=255, padding_mode='constant'),
+        v2.Pad(112, fill=1, padding_mode='constant'),
         v2.CenterCrop(crop_size),
         MaybeToTensor(),
-        make_normalize_transform(mean=mean, std=std),
+        # make_normalize_transform(mean=mean, std=std),
     ]
     return v2.Compose(transforms_list)

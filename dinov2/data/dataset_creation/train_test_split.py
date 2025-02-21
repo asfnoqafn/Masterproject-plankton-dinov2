@@ -40,6 +40,12 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, img_data, label_data, label_m
     env_imgs = lmdb.open(lmdb_path_img, map_size=MAP_SIZE_IMG)
     env_labels = lmdb.open(lmdb_path_label, map_size=MAP_SIZE_META)
 
+    transforms_list = [
+        v2.Resize(223,max_size= 224, antialias=True),
+        v2.Pad(112, fill=255, padding_mode='constant'),
+    ]
+    transform = v2.Compose(transforms_list)
+
     with (
         env_imgs.begin(write=True) as txn_imgs,
         env_labels.begin(write=True) as txn_labels,
@@ -54,12 +60,14 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, img_data, label_data, label_m
             image = decode_image(image, ImageReadMode.RGB)
             image = (image / 255.0).to(torch.float32)
             try:
-                resized_image = v2.Resize(223,max_size= 224, antialias=True)(image)
+                resized_image = transform(image)
             except:
                 print(f"Warning: Image too small! img_key: {img_key}, label_key: {label_key}")
+                print("Image shape: ", image.shape)
                 continue
-            if resized_image.shape[0] == 0 or resized_image.shape[1] == 0:
+            if resized_image.shape[-1] == 0 or resized_image.shape[-2] == 0:
                 print(f"Warning: Image too small! img_key: {img_key}, label_key: {label_key}")
+                print("Resized image shape: ", resized_image.shape)
                 continue
 
             # Convert label to integer ID using the provided label map
@@ -84,6 +92,8 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, img_data, label_data, label_m
 
     # Save label map to a JSON file, if required
     if label_map_path:
+        os.makedirs(os.path.dirname(label_map_path), exist_ok=True)
+        
         with open(label_map_path, "w") as f:
             json.dump(label_map, f)
 

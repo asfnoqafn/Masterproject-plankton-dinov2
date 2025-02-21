@@ -147,13 +147,15 @@ def setup_logging_sweep(
         logging.captureWarnings(capture_warnings)
         _configure_logger(name, level=level, output=output)
 
-        project = "mp_aqqua"
-        wandb.init(project=project)
+        if wandb.run is None:  # Prevent double initialization
+            project = "mp_aqqua"
+            wandb.init(project=project)
         # Update args with WandB sweep parameters
         if args is not None:
             sweep_params = dict(wandb.config)  # Get sweep parameters
             for key, value in sweep_params.items():
-                setattr(args, key, value)  # Dynamically set attributes in args
-
-        print("Updated args with sweep parameters: ", args)
+                setattr(args, key, value) 
+            if wandb.run is not None:
+                args.output_dir = f"{output}/{wandb.run.name}"  # Dynamically set attributes in args
+        print("Output Dir: ", args.output_dir)
         return args

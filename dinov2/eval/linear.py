@@ -125,6 +125,12 @@ def get_args_parser(
         help="Whether to use average pooling for the linear classifier",
     )
     parser.add_argument(
+        "--save-checkpoint",
+        type=bool,
+        default=True,
+        help="Whether to save and load checkpoints disk (output_dir)",
+    )
+    parser.add_argument(
         "--num_nodes",
         type=int,
         default=1,
@@ -414,7 +420,7 @@ def evaluate_linear_classifier(
     # Log metrics to WandB
     wandb.log({f"{prefixstring}/{k}": v for k, v in metrics_to_log.items()})
 
-    
+    os.makedirs(os.path.dirname(metrics_file_path), exist_ok=True)
     # Save metrics to file
     if distributed.is_main_process():
         with open(metrics_file_path, "a") as f:
@@ -457,12 +463,14 @@ def eval_linear(
     hierarchy_weight,
     log_both_losses=False,
     distance_matrix=None,
+    save_to_disk=True
 ):
     checkpointer = Checkpointer(
         linear_classifier,
         output_dir,
         optimizer=optimizer,
         scheduler=scheduler,
+        save_to_disk=save_to_disk,
     )
     start_iter = checkpointer.resume_or_load(classifier_fpath or "", resume=resume).get("iteration", -1) + 1
     periodic_checkpointer = PeriodicCheckpointer(checkpointer, checkpoint_period, max_iter=max_iter)
@@ -498,7 +506,7 @@ def eval_linear(
             cross_entropy_loss, base_hierarchical_loss, custom_hierarchical_loss_combined = hierarchical_loss_improved(outputs, labels, distance_matrix,  hierarchy_weight)
 
         if loss_function == "cross_entropy":
-            loss = cross_entropy_loss
+            loss = cross_entropy_loss_single
         elif loss_function == "custom_hierarchical":
             loss = custom_hierarchical_loss
         elif loss_function == "custom_hierarchical_combined":
@@ -575,6 +583,8 @@ def eval_linear(
     all_labels = []
 
     for data, labels in val_data_loader:
+        if len(misclassified_images) >= num_images_to_log:
+            break
         data = data.cuda(non_blocking=True)
         labels = labels.cuda(non_blocking=True)
 
@@ -586,13 +596,16 @@ def eval_linear(
         all_preds.extend(preds.cpu().numpy())
 
         # Get misclassified images
+        print("Adding images to missclassified_images")
         misclassified_images.extend(
             logging_helpers.get_missclassified_images_for_logging(data, labels, outputs, num_images_to_log)
         )
 
     # Log misclassified images to WandB
     if(log_missclassified_images):
+        "Logging missclassified images to WandB"
         logging_helpers.log_images_to_wandb(misclassified_images, class_map=val_class_mapping)
+        "Done logging"
 
     if(log_confusion_matrix):
         logging_helpers.log_confusion_matrix_to_wandb(all_labels, all_preds, val_class_mapping)
@@ -704,8 +717,6 @@ def hierarchical_loss_improved(predictions, labels, distance_matrix, hierarchy_w
 
     # Base cross-entropy loss
     base_loss = F.cross_entropy(predictions, labels)
-    print("Predictions: ", predictions)
-    print("Labels: ", labels) 
 
     # If distance matrix is not provided, calculate it
     if distance_matrix is None:
@@ -846,6 +857,7 @@ def run_eval_linear(
     hierarchy_weight=2.0,
     scaling_factor=2.0,
     log_both_losses=False,
+    save_to_disk=True,
 ):
     seed = 0
     test_dataset_strs = test_dataset_strs or [val_dataset_str]
@@ -959,6 +971,7 @@ def run_eval_linear(
         scaling_factor=scaling_factor,
         log_both_losses = log_both_losses,
         distance_matrix=distance_matrix,
+        save_to_disk=save_to_disk,
     )
 
     # Test on additional datasets
@@ -1017,6 +1030,7 @@ def main(args):
         hierarchy_weight=args.hierarchy_weight,
         scaling_factor=args.scaling_factor,
         log_both_losses=args.log_both_losses,
+        save_to_disk=args.save_checkpoint,
     )
     return 0
 
