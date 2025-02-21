@@ -234,6 +234,11 @@ def get_args_parser(
         type=bool,
         help="This flag enables logging of both the cross entropy and hierarchical loss",
     )
+    parser.add_argument(
+        "--gray-scale",
+        action="store_true",
+        help="This flag enables logging of both the cross entropy and hierarchical loss",
+    )
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
         val_dataset_str="ImageNet:split=VAL",
@@ -998,6 +1003,9 @@ def run_eval_linear(
 def main(args):
     model, autocast_dtype = setup_and_build_model(args)
     print(f"Output dir: {args.output_dir}")
+
+    if args.gray_scale:
+        ImageConfig.read_mode = ImageReadMode.GRAY
     run_eval_linear(
         model=model,
         output_dir=args.output_dir,
