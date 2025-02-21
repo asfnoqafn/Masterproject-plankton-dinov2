@@ -33,12 +33,13 @@ def load_lmdb_data(lmdb_path):
     print(f"Loaded {len(data)} items from {lmdb_path}")
     return data
 
-def save_lmdb_data(lmdb_path_img, lmdb_path_label, img_data, label_data, label_map, label_map_path=None):
+def save_lmdb_data(lmdb_path_img, lmdb_path_label, lmdb_path_meta, img_data, label_data, meta_data, label_map, label_map_path=None):
     """
     Saves images and labels to LMDB and saves the label mapping as a JSON file.
     """
     env_imgs = lmdb.open(lmdb_path_img, map_size=MAP_SIZE_IMG)
     env_labels = lmdb.open(lmdb_path_label, map_size=MAP_SIZE_META)
+    env_meta = lmdb.open(lmdb_path_meta, map_size=MAP_SIZE_META)
 
     transforms_list = [
         v2.Resize(223,max_size= 224, antialias=True),
@@ -49,9 +50,9 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, img_data, label_data, label_m
     with (
         env_imgs.begin(write=True) as txn_imgs,
         env_labels.begin(write=True) as txn_labels,
+        env_meta.begin(write=True) as txn_meta,
     ):
-        print(label_map)
-        for (img_key, img_encoded), (label_key, label) in tqdm(zip(img_data, label_data), total=len(img_data)):
+        for (img_key, img_encoded), (label_key, label), (meta_key, metadata) in tqdm(zip(img_data, label_data, meta_data), total=len(img_data)):
             if img_key != label_key:
                 print(f"Warning: Mismatched keys! img_key: {img_key}, label_key: {label_key}")
                 continue  # Skip if keys don't match
@@ -78,7 +79,7 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, img_data, label_data, label_m
             label_str = label_str.replace("-", "")
             label_str = label_str.replace("'", "") # TODO ugly
             if label_str not in label_map:
-                print(f"Warning: Label {label_str} not found in label_map.")
+                #print(f"Warning: Label {label_str} not found in label_map.")
                 continue
             if label_map[label_str] == -1:
                 continue
@@ -89,6 +90,8 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, img_data, label_data, label_m
             txn_imgs.put(img_key, img_encoded)
             label_entry = label_id.to_bytes(4, byteorder="little")
             txn_labels.put(label_key, label_entry)
+            meta_entry = metadata
+            txn_meta.put(meta_key, meta_entry)
 
     # Save label map to a JSON file, if required
     if label_map_path:
@@ -99,6 +102,7 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, img_data, label_data, label_m
 
     env_imgs.close()
     env_labels.close()
+    env_meta.close()
 
 def load_all_datasets(main_folder, multiple_folders=False):
     """
@@ -106,6 +110,7 @@ def load_all_datasets(main_folder, multiple_folders=False):
     """
     img_data = []
     label_data = []
+    meta_data = []
     print(f"Loading datasets from {main_folder}")
     for dataset in sorted(os.listdir(main_folder)):
         if(dataset == "ISIISNet_subset_lmdb"):
@@ -130,11 +135,13 @@ def load_all_datasets(main_folder, multiple_folders=False):
                 img_data.extend(load_lmdb_data(datasetpath_lmdb))
             elif datasetpath_lmdb.endswith("_labels") or datasetpath_lmdb.endswith('labels'):
                 label_data.extend(load_lmdb_data(datasetpath_lmdb))
+            elif datasetpath_lmdb.endswith("_metadata") or datasetpath_lmdb.endswith('metadata'):
+                meta_data.extend(load_lmdb_data(datasetpath_lmdb))
             else:
                 print(f"Skipping {datasetpath_lmdb}")
             print(f"Loaded dataset: {dataset}")
                     
-    return img_data, label_data
+    return img_data, label_data, meta_data
 
 def is_in_blacklist(label, blacklist):
     # return True if label is in blacklist
@@ -146,6 +153,19 @@ def is_in_blacklist(label, blacklist):
 
 def calculate_label_map(label_data, blacklist):
     blacklist = []
+
+def split_and_save_data(main_folder, output_folder, test_size=0.2):
+    """
+    Loads all datasets, splits the data into train and test, and saves them in the output folder.
+    """
+    os.makedirs(output_folder, exist_ok=True)
+
+    img_data, label_data, meta_data = load_all_datasets(main_folder)
+
+    print(f"Total data loaded: {len(img_data)} images, {len(label_data)} labels and {len(meta_data)} metadata items.")
+
+    blacklist = ['artifacts', 'artifacts_edge', 'unknown_blobs_and_smudges', 'unknown_sticks', 'unknown_unclassified', 
+                 'artefact', 'badfocus', 'dark', 'light', 'streak', 'vertical line', 'artefact']
     # consistent label mapping TODO add similar string machting and blacklist classes such as blurry
     label_map = {}
     next_id = 0
@@ -200,22 +220,27 @@ def split_and_save_data(main_folder, output_folder, test_size=0.2, multiple_fold
 
     print(f"Train label map: {train_label_map}")
     print(f"Test label map: {test_label_map}")
+    train_meta, test_meta = train_test_split(meta_data, test_size=test_size, shuffle=True, random_state=43)
 
     # Save the split data to LMDB
     save_lmdb_data(
         os.path.join(output_folder, "-TRAIN_imgs"),
         os.path.join(output_folder, "-TRAIN_labels"),
+        os.path.join(output_folder, "-TRAIN_meta"),
         train_imgs,
         train_labels,
         train_label_map,
+        train_meta,
         os.path.join(output_folder, "TRAIN_label_map.json")
     )
     save_lmdb_data(
         os.path.join(output_folder, "-VAL_imgs"),
         os.path.join(output_folder, "-VAL_labels"),
+        os.path.join(output_folder, "-VAL_meta"),
         test_imgs,
         test_labels,
         test_label_map,
+        test_meta,
         os.path.join(output_folder, "VAL_label_map.json")
     )
 

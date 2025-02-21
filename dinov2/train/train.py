@@ -11,6 +11,7 @@ import os
 import sys
 from enum import Enum
 from functools import partial
+import time
 
 import torch
 import torchvision
@@ -250,9 +251,16 @@ def do_test(cfg, model, iteration):
         teacher_ckp_path = os.path.join(eval_dir, "teacher_checkpoint.pth")
         torch.save({"teacher": new_state_dict}, teacher_ckp_path)
 
+def freeze_all_except_patch_embed(model):
+    for name, param in model.student.backbone.named_parameters():
+        if "patch_embed" in name:
+            param.requires_grad = True
+        else:
+            param.requires_grad = False
 
 def do_train(cfg, model, resume=False):
     model.train()
+    #freeze_all_except_patch_embed(model)
     if cfg.train.use_torch_compile:
         print("--- COMPILING TORCH MODULE ---")
         model = torch.compile(model=model)
@@ -296,7 +304,7 @@ def do_train(cfg, model, resume=False):
         checkpointer,
         period=3 * OFFICIAL_EPOCH_LENGTH,
         max_iter=max_iter,
-        max_to_keep=3,
+        max_to_keep=3, # TODO more during actual training run for better monitoring
     )
 
     # setup data preprocessing
@@ -367,9 +375,7 @@ def do_train(cfg, model, resume=False):
         )
         profiler.start()
 
-    print("cfg.train.in_chans", cfg.train.in_chans)
-    if not isinstance(cfg.train.in_chans, int):
-        dataset.set_curr_in_chans(cfg.train.in_chans[0])
+    end = time.time()
     for data in metric_logger.log_every(
         data_loader,
         20,
@@ -419,94 +425,122 @@ def do_train(cfg, model, resume=False):
 
         loss_accumulator, loss_dict = model.forward_teacher_student(data, teacher_temp=teacher_temp)
         model.backward(loss_accumulator)
+        #print("Patch embed gradients:", 
+        #model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.data.view(-1).cpu().numpy())
+        #print("Patch embed weights:", model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.data.view(-1).cpu().numpy())
 
-        if cfg.crops.use_variable_channels:
-            total_loss_accumulator += loss_accumulator
-            if iteration % len(cfg.train.in_chans) == 0:
-                total_loss_dict = loss_dict
-            else:
-                total_loss_dict = {
-                    k: v1 + v2
-                    for k, v1, v2 in zip(
-                        loss_dict.keys(),
-                        total_loss_dict.values(),
-                        loss_dict.values(),
+        #print("Grayscale: gradients:", 
+        #model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt.weight.grad.data.view(-1).cpu().numpy())
+        #print("Grayscale: weights:",
+        #model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt.weight.data.view(-1).cpu().numpy())
+        if iteration % (OFFICIAL_EPOCH_LENGTH // 10) == 0 and iteration > 0:
+            
+            if model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad is not None:
+                patch_embed_grad = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.view(-1).cpu().numpy()
+                if distributed.is_main_process():
+                    wandb.log(
+                        {
+                            "patch_embed_grad_min_before_clip": patch_embed_grad.min(),
+                            "patch_embed_grad_max_before_clip": patch_embed_grad.max(),
+                        }
                     )
-                }
-            if iteration % len(cfg.train.in_chans) == len(cfg.train.in_chans) - 1:  # last iteration
-                loss_dict = {k: v / nb_diff_ch_nbs for k, v in total_loss_dict.items()}
+            
+        # clip gradients
+        if fp16_scaler is not None:
+            if cfg.optim.clip_grad:
+                fp16_scaler.unscale_(optimizer)
+                for v in model.student.values():
+                    v.clip_grad_norm_(cfg.optim.clip_grad)
+            
+            if iteration % (OFFICIAL_EPOCH_LENGTH // 10) == 0 and iteration > 0:
+                if model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad is not None:
+                    patch_embed_grad = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.view(-1).cpu().numpy()
+                    if distributed.is_main_process():
+                        wandb.log(
+                            {
+                                "patch_embed_grad_min": patch_embed_grad.min(),
+                                "patch_embed_grad_max": patch_embed_grad.max(),
+                            }
+                    )
+            fp16_scaler.step(optimizer)
+            fp16_scaler.update()
+        else:
+            if cfg.optim.clip_grad:
+                for v in model.student.values():
+                    v.clip_grad_norm_(cfg.optim.clip_grad)
 
-        if (not cfg.crops.use_variable_channels) or (
-            cfg.crops.use_variable_channels and iteration % len(cfg.train.in_chans) == len(cfg.train.in_chans) - 1
-        ):
-            # clip gradients
-
-            if fp16_scaler is not None:
-                if cfg.optim.clip_grad:
-                    fp16_scaler.unscale_(optimizer)
-                    for v in model.student.values():
-                        v.clip_grad_norm_(cfg.optim.clip_grad)
-                fp16_scaler.step(optimizer)
-                fp16_scaler.update()
-            else:
-                if cfg.optim.clip_grad:
-                    for v in model.student.values():
-                        v.clip_grad_norm_(cfg.optim.clip_grad)
-                optimizer.step()
-
-            # perform teacher EMA update
-            model.update_teacher(mom)
-
-            # logging
-            if distributed.get_global_size() > 1:
-                for v in loss_dict.values():
-                    torch.distributed.all_reduce(v)
-            loss_dict_reduced = {k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()}
-
-            if math.isnan(sum(loss_dict_reduced.values())):
-                logger.info("NaN detected")
-                for k, v in loss_dict_reduced.items():
-                    if math.isnan(v):
-                        print("Key:{} is nan. Stopping...".format(k))
-                raise AssertionError
-            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
-
-            metric_logger.update(lr=lr)
-            metric_logger.update(wd=wd)
-            metric_logger.update(mom=mom)
-            metric_logger.update(last_layer_lr=last_layer_lr)
-            metric_logger.update(current_batch_size=current_batch_size)
-            metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
-
-            if distributed.is_main_process():
-                wandb.log(
-                    {
-                        "#samples": tot_nb_seen_samples,
-                        "lr": lr,
-                        "wd": wd,
-                        "mom": mom,
-                        "ll_lr": last_layer_lr,
-                        "total_loss": losses_reduced,
-                        **loss_dict_reduced,
-                    }
+            if iteration % (OFFICIAL_EPOCH_LENGTH // 10) == 0 and iteration > 0:
+                patch_embed_grad = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.view(-1).cpu().numpy()
+                print("after clip")
+                print("Patch embed gradients min:", patch_embed_grad.min())
+                print("Patch embed gradients max:", patch_embed_grad.max())
+                if distributed.is_main_process():
+                    wandb.log(
+                        {
+                            "patch_embed_grad_min": patch_embed_grad.min(),
+                            "patch_embed_grad_max": patch_embed_grad.max(),
+                        }
                 )
+            optimizer.step()
 
-            # checkpointing and testing
+        # perform teacher EMA update
+        model.update_teacher(mom)
 
-            if (
-                cfg.evaluation.eval_period_iterations > 0
-                and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
-            ):
-                do_test(cfg, model, f"training_{iteration}")
-                torch.cuda.synchronize()
+        # logging
 
-            periodic_checkpointer.step(iteration)
-            iteration = iteration + 1
+        
 
-        # update in_chans
-        if isinstance(cfg.train.in_chans, list):
-            curr_in_chans = cfg.train.in_chans[iteration % len(cfg.train.in_chans)]
-            dataset.set_curr_in_chans(curr_in_chans)
+
+        if distributed.get_global_size() > 1:
+            for v in loss_dict.values():
+                torch.distributed.all_reduce(v)
+        loss_dict_reduced = {
+            k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()
+        }
+
+        if math.isnan(sum(loss_dict_reduced.values())):
+            logger.info("NaN detected")
+            for k, v in loss_dict_reduced.items():
+                if math.isnan(v):
+                    print("Key:{} is nan. Stopping...".format(k))
+            raise AssertionError
+
+        # checkpointing and testing
+        if (
+            cfg.evaluation.eval_period_iterations > 0
+            and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
+        ):
+            do_test(cfg, model, f"training_{iteration}")
+            torch.cuda.synchronize()
+
+        periodic_checkpointer.step(iteration)
+
+        losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+        iter_time = time.time() - end
+        end = time.time()
+        metric_logger.update(lr=lr)
+        metric_logger.update(wd=wd)
+        metric_logger.update(mom=mom)
+        metric_logger.update(last_layer_lr=last_layer_lr)
+        metric_logger.update(current_batch_size=current_batch_size)
+        metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
+        metric_logger.update(iter_time=iter_time)
+
+        if distributed.is_main_process():
+            wandb.log(
+                {
+                    "#samples": tot_nb_seen_samples,
+                    "lr": lr,
+                    "wd": wd,
+                    "mom": mom,
+                    "ll_lr": last_layer_lr,
+                    "total_loss": losses_reduced,
+                    "iter_time": iter_time,
+                    "data_time": metric_logger.data_time.value,
+                    **loss_dict_reduced,
+                }
+            )
+        iteration = iteration + 1
     metric_logger.synchronize_between_processes()
 
     if cfg.train.do_profiling:
@@ -517,7 +551,7 @@ def do_train(cfg, model, resume=False):
         # create a wandb Artifact
         profile_art = wandb.Artifact("trace", type="profile")
         # add the pt.trace.json files to the Artifact
-        trace_files = glob.glob(profiler_dir + ".pt.trace.json")
+        trace_files = glob.glob(os.path.join(profiler_dir, "*.pt.trace.json"))
         for trace_file in trace_files:
             profile_art.add_file(os.path.join(profiler_dir, trace_file))
         # log the artifact
@@ -529,7 +563,7 @@ def do_train(cfg, model, resume=False):
 def main(args):
     torchvision.disable_beta_transforms_warning()
     cfg = setup(args)
-
+    print(cfg)
     model = SSLMetaArch(cfg).to(torch.device("cuda"))
     model.prepare_for_distributed_training()
 

@@ -2,13 +2,15 @@
 #
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
-
+from dinov2.data.datasets.config import ImageConfig
+from torchvision.io import ImageReadMode
 import argparse
 import json
 import logging
 import os
 import re
 import sys
+from tqdm import tqdm
 from functools import partial
 from typing import List, Optional
 import matplotlib.pyplot as plt
@@ -40,6 +42,8 @@ from dinov2.eval.metrics import (
 from dinov2.eval.setup import (
     get_args_parser as get_setup_args_parser,
 )
+
+from dinov2.data.datasets.config import ImageReadMode
 from dinov2.eval.setup import setup_and_build_model
 from dinov2.eval.utils import (
     ModelWithNormalize,
@@ -133,7 +137,7 @@ def get_args_parser(
         help="Directory to save TensorBoard embedding projector logs"
     )
     parser.add_argument(
-        "--output_dir",
+        "--knn_output_dir",
         type=str,
         help="Output directory to write results and logs",
     )
@@ -141,7 +145,18 @@ def get_args_parser(
         "--save_images",
         action="store_true",
         help="Flag to save raw images for TensorBoard Embedding Projector",
-    )   
+    )
+    parser.add_argument(
+        "--model_type",
+        type=str,
+        default="dinov2",
+    )
+    parser.add_argument(
+        "--gray_scale",
+        action="store_true",
+        help="Flag to convert images to gray scale",
+    )
+
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
         val_dataset_str="ImageNet:split=VAL",
@@ -376,6 +391,7 @@ def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, tr
     embedding.metadata_path = 'metadata.tsv'
 
     torch.save({'embeddings': embedding_tensor}, embeddings_dir + '/embeddings.pt')
+    print(f"Saved embeddings at {embeddings_dir + '/embeddings.pt'}")
 
     if save_images:
         max_sprite_images = 256
@@ -396,7 +412,7 @@ def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, tr
             class_sprite_images = max(1, int(max_sprite_images * class_proportion))
             sampling_ratios[label] = min(class_sprite_images, count)
 
-        for label, count in sampling_ratios.items():
+        for label, count in tqdm(sampling_ratios.items()):
             label_indices = torch.where(train_labels == label)[0]
             
             if len(label_indices) > count:
@@ -494,11 +510,13 @@ def eval_knn(
         num_workers,
         gather_on_cpu=gather_on_cpu,
     )
-
+    print(train_features[0])
+    print("---------------------------------")
+    print(train_features[1])
 
     if tensorboard_log_dir is not None:
+        tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, train_dataset, save_images)
 
-        4
     logger.info(f"Train features created, shape {train_features.shape}.")
     #plotting(train_features, train_labels) #broken
 
@@ -607,12 +625,14 @@ def eval_knn_with_model(
     train_dataset = make_dataset(
         dataset_str=train_dataset_str,
         transform=transform,
-        with_targets=True
+        with_targets=True,
+        with_metadata=True
     )
     val_dataset = make_dataset(
         dataset_str=val_dataset_str,
         transform=transform,
-        with_targets=True
+        with_targets=True,
+        with_metadata=True
     )
 
     with torch.cuda.amp.autocast(dtype=autocast_dtype):
@@ -679,12 +699,16 @@ def eval_knn_with_model(
 
 # @record
 def main(args):
-    model, autocast_dtype = setup_and_build_model(args, do_eval=True)
+    
+    if args.gray_scale:
+        ImageConfig.read_mode = ImageReadMode.GRAY
 
-    print("args.output_dir", args.output_dir)
+    model, autocast_dtype = setup_and_build_model(args, do_eval=True , model_type=args.model_type)
+
+    print("args.knn_output_dir", args.knn_output_dir)
     eval_knn_with_model(
         model=model,
-        output_dir=args.output_dir,
+        output_dir=args.knn_output_dir,
         train_dataset_str=args.train_dataset_str,
         val_dataset_str=args.val_dataset_str,
         nb_knn=args.nb_knn,

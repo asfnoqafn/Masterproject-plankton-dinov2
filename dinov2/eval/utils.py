@@ -293,10 +293,7 @@ def extract_features_with_dataloader(model, data_loader, sample_count, gather_on
         verbose=distributed.is_main_process(),
     )
     features, all_labels = None, None
-    for samples, (
-        index,
-        labels_rank,
-    ) in metric_logger.log_every(data_loader, 10):
+    for samples, (index, labels_rank, meta_data) in metric_logger.log_every(data_loader, 10):
         samples = samples.cuda(non_blocking=True)
         labels_rank = labels_rank.cuda(non_blocking=True)
         index = index.cuda(non_blocking=True)
