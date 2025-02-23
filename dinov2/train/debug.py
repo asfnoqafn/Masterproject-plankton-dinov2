@@ -132,8 +132,17 @@ def log_entropy(data,cls,iteration):
         with torch.no_grad():
             #### cls
             #print("CLS shape:", cls.shape)
+            probs = torch.softmax(cls, dim=1)
             per_cls_entropy = softmax_entropy(cls)
+
+            nan_per_cls_entropy = torch.isnan(per_cls_entropy).sum()
             current_stats = {}
+            current_stats["number_nan_cls_entropy"] = nan_per_cls_entropy
+            current_stats["cls_min"] = cls.min()
+            current_stats["cls_max"] = cls.max()
+            current_stats["cls_mean"] = cls.mean()
+            current_stats["softmax_min"] = probs.min()
+            current_stats["softmax_max"] = probs.max()
             current_stats["cls_entropy_min"] = per_cls_entropy.min()
             current_stats["cls_entropy_max"] = per_cls_entropy.max()
             current_stats["cls_entropy_mean"] = per_cls_entropy.mean()
@@ -177,15 +186,12 @@ def log_cls_similarities(cls_tokens, iteration):
 def log_cls_similarities2(cls_tokens, iteration):
     if distributed.is_main_process():
         with torch.no_grad():
-            # Normalize embeddings
             normalized_embeddings = torch.nn.functional.normalize(cls_tokens, p=2, dim=1)
             
-            # Compute pairwise cosine similarity
             similarity_matrix = torch.nn.functional.cosine_similarity(
                 normalized_embeddings.unsqueeze(1), normalized_embeddings.unsqueeze(0), dim=2
             )
             
-            # Exclude self-similarities
             mask = ~torch.eye(similarity_matrix.shape[0], dtype=torch.bool, device=similarity_matrix.device)
             mean_similarity = similarity_matrix[mask].mean()
             print("Mean similarity:", mean_similarity)

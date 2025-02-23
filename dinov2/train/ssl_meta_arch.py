@@ -89,7 +89,7 @@ class SSLMetaArch(nn.Module):
                 nlayers=cfg.dino.head_nlayers,
                 use_bn=cfg.dino.head_use_bn,
             )
-            self.dino_loss = DINOLoss(self.dino_out_dim)
+            self.dino_loss = DINOLoss(self.dino_out_dim, student_temp=cfg.student.student_temp)
             if self.do_koleo:
                 logger.info("OPTIONS -- DINO -- applying KOLEO regularization")
                 self.koleo_loss = KoLeoLoss()

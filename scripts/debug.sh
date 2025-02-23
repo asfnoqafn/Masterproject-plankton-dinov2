@@ -4,10 +4,10 @@
 #SBATCH --cpus-per-gpu=19
 #SBATCH -e /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.out
-#SBATCH --time 00:03:00
-#SBATCH --partition=dev_accelerated-h100
+#SBATCH --time 00:10:00
+#SBATCH --partition=accelerated
 
-BATCH_S=64
+BATCH_S=128
 N_GPUS=1
 N_CPUS=19
 echo $SLURM_JOB_ID
@@ -20,8 +20,10 @@ OMP_NUM_THREADS=20 PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/repo/Masterp
  --rdzv-endpoint=localhost:0 \
  --standalone --nnodes=1 --nproc_per_node=$N_GPUS /home/hk-project-p0021769/hgf_grc7525/repo/Masterproject-plankton-dinov2/dinov2/train/train.py --no-resume \
  --config-file /home/hk-project-p0021769/hgf_grc7525/repo/Masterproject-plankton-dinov2/dinov2/configs/train/train_rgb.yaml --run_name=${SLURM_JOB_ID}_${N_GPUS}gpu_pre \
-	train.output_dir='/home/hk-project-p0021769/hgf_grc7525/output/' train.use_torch_compile=true \
-	train.dataset_path=LMDBDataset:split=ALL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/plankton/:extra=* train.num_workers=$N_CPUS \
-	train.batch_size_per_gpu=$BATCH_S train.augmentations=kornia_cpu student.arch=vit_small crops.use_native_res=false crops.free_shapes=none \
-	crops.use_ch_patch_embed=false train.in_chans=3 optim.base_lr=0.001 crops.use_variable_channels=false
+	train.output_dir='/home/hk-project-p0021769/hgf_grc7525/output/'\
+	train.use_torch_compile=true \
+	train.dataset_path=LMDBDataset:split=ALL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/plankton/:extra=* \
+	train.num_workers=$N_CPUS \
+	train.batch_size_per_gpu=$BATCH_S \
+	crops.use_ch_patch_embed=false train.in_chans=3 
 
