@@ -2,7 +2,8 @@
 #
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
-
+from dinov2.data.datasets.config import ImageConfig
+from torchvision.io import ImageReadMode
 import argparse
 import json
 import logging
@@ -1006,6 +1007,7 @@ def main(args):
 
     if args.gray_scale:
         ImageConfig.read_mode = ImageReadMode.GRAY
+        
     run_eval_linear(
         model=model,
         output_dir=args.output_dir,
