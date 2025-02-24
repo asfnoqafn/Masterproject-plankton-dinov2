@@ -29,8 +29,8 @@ torchrun \
  --pretrained-weights="/home/hk-project-p0021769/hgf_grc7525/checkpoints/dinov2_vits14_reg4_pretrain.pth" \
  --output-dir="/home/hk-project-p0021769/hgf_auh3910/output/" \
  --knn_output_dir="/home/hk-project-p0021769/hgf_auh3910/output/" \
- --train-dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet_meta:extra=*" \
- --val-dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet_meta:extra=*" \
+ --train-dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooCamNet_meta:extra=*" \
+ --val-dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooCamNet_meta:extra=*" \
  --tensorboard-log-dir="/home/hk-project-p0021769/hgf_auh3910/tensorboard" \
  --save_images \
  train.output_dir='/home/hk-project-p0021769/hgf_auh3910/output/'

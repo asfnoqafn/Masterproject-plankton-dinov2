@@ -284,12 +284,12 @@ def extract_features_with_dataloader(model, data_loader, sample_count, gather_on
         delimiter="  ",
         verbose=distributed.is_main_process(),
     )
-    features, all_labels = None, None
+    features, all_labels, all_meta = None, None, []
     for samples, (index, labels_rank, meta_data) in metric_logger.log_every(data_loader, 10):
         samples = samples.cuda(non_blocking=True)
-        labels_rank = labels_rank.cuda(non_blocking=True)
         index = index.cuda(non_blocking=True)
         features_rank = model(samples).float()
+        labels_rank = labels_rank.cuda(non_blocking=True)
 
         # init storage feature matrix
         if features is None:
@@ -311,18 +311,20 @@ def extract_features_with_dataloader(model, data_loader, sample_count, gather_on
         index_all = all_gather_and_flatten(index).to(gather_device)
         features_all_ranks = all_gather_and_flatten(features_rank).to(gather_device)
         labels_all_ranks = all_gather_and_flatten(labels_rank).to(gather_device)
+        all_meta += meta_data
 
         # update storage feature matrix
         if len(index_all) > 0:
             features.index_copy_(0, index_all, features_all_ranks)
             all_labels.index_copy_(0, index_all, labels_all_ranks)
-
+    
     logger.info(f"Features shape: {tuple(features.shape)}")
     logger.info(f"Labels shape: {tuple(all_labels.shape)}")
+    logger.info(f"Meta shape: {len(all_meta)}")
 
     assert torch.all(all_labels > -1)
 
-    return features, all_labels
+    return features, all_labels, all_meta
 
 
 
