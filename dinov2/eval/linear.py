@@ -68,19 +68,19 @@ def get_args_parser(
         default="lin_run",
     )
     parser.add_argument(
-        "--train-dataset",
+        "--train_dataset",
         dest="train_dataset_str",
         type=str,
         help="Training dataset",
     )
     parser.add_argument(
-        "--val-dataset",
+        "--val_dataset",
         dest="val_dataset_str",
         type=str,
         help="Validation dataset",
     )
     parser.add_argument(
-        "--test-datasets",
+        "--test_datasets",
         dest="test_dataset_strs",
         type=str,
         nargs="+",
@@ -92,44 +92,44 @@ def get_args_parser(
         help="Number of training epochs",
     )
     parser.add_argument(
-        "--batch-size",
+        "--batch_size",
         type=int,
         help="Batch Size (per GPU)",
     )
     parser.add_argument(
-        "--num-workers",
+        "--num_workers",
         type=int,
-        help="Number de Workers",
+        help="Number of workers",
     )
     parser.add_argument(
-        "--optimizer-momentum",
+        "--optimizer_momentum",
         type=float,
         default=0.9,
         help="Momentum for the linear classifier optimizer",
     )
     parser.add_argument(
-        "--n-last-blocks",
+        "--n_last_blocks",
         type=int,
         default=4,
         help="Number of blocks to use for the linear classifier",
     )
     parser.add_argument(
-        "--weight-decay",
+        "--weight_decay",
         type=float,
         default=0.0,
         help="Weight decay for the linear classifier",
     )
     parser.add_argument(
-        "--avg-pool",
+        "--avg_pool",
         type=bool,
         default=True,
         help="Whether to use average pooling for the linear classifier",
     )
     parser.add_argument(
-        "--save-checkpoint",
+        "--save_checkpoint",
         type=bool,
         default=True,
-        help="Whether to save and load checkpoints disk (output_dir)",
+        help="Whether to save and load checkpoints to disk (output_dir)",
     )
     parser.add_argument(
         "--num_nodes",
@@ -138,105 +138,105 @@ def get_args_parser(
         help="Set number of nodes used.",
     )
     parser.add_argument(
-        "--epoch-length",
+        "--epoch_length",
         type=int,
         help="Length of an epoch in number of iterations",
     )
     parser.add_argument(
-        "--save-checkpoint-frequency",
+        "--save_checkpoint_frequency",
         type=int,
         help="Number of epochs between two named checkpoint saves.",
     )
     parser.add_argument(
-        "--eval-period-iterations",
+        "--eval_period_iterations",
         type=int,
         help="Number of iterations between two evaluations.",
     )
     parser.add_argument(
-        "--learning-rate",
+        "--learning_rate",
         type=float,
         help="Learning rate for the linear classifier.",
     )
     parser.add_argument(
-        "--use-nesterov",
+        "--use_nesterov",
         type=bool,
         default=True,
         help="Whether to use Nesterov momentum",
     )
     parser.add_argument(
-        "--no-resume",
+        "--no_resume",
         action="store_true",
         help="Whether to not resume from existing checkpoints",
     )
     parser.add_argument(
-        "--val-metric-type",
+        "--val_metric_type",
         type=MetricType,
         choices=list(MetricType),
         help="Validation metric",
     )
     parser.add_argument(
-        "--test-metric-types",
+        "--test_metric_types",
         type=MetricType,
         choices=list(MetricType),
         nargs="+",
         help="Evaluation metric",
     )
     parser.add_argument(
-        "--classifier-fpath",
+        "--classifier_fpath",
         type=str,
         help="Path to a file containing pretrained linear classifiers",
     )
     parser.add_argument(
-        "--val-class-mapping-fpath",
+        "--val_class_mapping_fpath",
         type=str,
         help="Path to a file containing a mapping to adjust classifier outputs",
     )
     parser.add_argument(
-        "--test-class-mapping-fpaths",
+        "--test_class_mapping_fpaths",
         nargs="+",
         type=str,
         help="Path to a file containing a mapping to adjust classifier outputs",
     )
     parser.add_argument(
-        "--log-missclassified-images",
+        "--log_missclassified_images",
         type=bool,
         help="This flag enables logging of misclassified images to WandB",
     )
     parser.add_argument(
-        "--log-confusion-matrix",
+        "--log_confusion_matrix",
         type=bool,
         help="This flag enables logging of the confusion matrix to WandB",
     )
     parser.add_argument(
-        "--loss-function",
+        "--loss_function",
         type=str,
         default="cross_entropy",
         help="Loss function to use for training the linear classifier, can be 'cross_entropy' or 'custom_hierarchical'",
     )
     parser.add_argument(
-        "--hierarchy-file-path",
+        "--hierarchy_file_path",
         type=str,
         help="Path to the hierarchy file for the custom hierarchical loss function",
     )
     parser.add_argument(
-        "--hierarchy-weight",
+        "--hierarchy_weight",
         type=float,
         default=2.0,
         help="Weight applied to hierarchical loss",
     )
     parser.add_argument(
-        "--scaling-factor",
+        "--scaling_factor",
         type=float,
         default=2.0,
         help="Scaling factor for negative log likelihood",
     )
     parser.add_argument(
-        "--log-both-losses",
+        "--log_both_losses",
         type=bool,
         help="This flag enables logging of both the cross entropy and hierarchical loss",
     )
     parser.add_argument(
-        "--gray-scale",
+        "--gray_scale",
         action="store_true",
         help="This flag enables logging of both the cross entropy and hierarchical loss",
     )
@@ -1002,7 +1002,7 @@ def run_eval_linear(
 
 
 def main(args):
-    model, autocast_dtype = setup_and_build_model(args)
+    model, autocast_dtype = setup_and_build_model(args, do_eval=True)
     print(f"Output dir: {args.output_dir}")
 
     if args.gray_scale:

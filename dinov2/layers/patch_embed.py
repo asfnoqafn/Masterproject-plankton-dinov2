@@ -63,7 +63,6 @@ class PatchEmbed(nn.Module):
         self.flatten_embedding = flatten_embedding
         self.gray_scale = gray_scale
 
-
         if self.gray_scale == 1:
             self.channel_adapt = nn.Conv2d(in_channels=1,out_channels=3,kernel_size=1, stride=1, bias=True)
             self.proj = nn.Conv2d(

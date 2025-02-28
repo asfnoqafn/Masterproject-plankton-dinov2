@@ -40,9 +40,10 @@ def build_model(
             use_ch_patch_embed=use_ch_patch_embed,
             in_chans=in_chans,
         )
-        print("Grayscale should follow")
         print(args)
-        if hasattr(args, 'gray_scale'):  # for eval compatibility
+        if hasattr(args, 'gray_scale'):
+            print("Grayscale should follow")
+              # for eval compatibility
             print("gray_scale", args.gray_scale)
             vit_kwargs['gray_scale'] = args.gray_scale
         teacher = vits.__dict__[args.arch](**vit_kwargs)

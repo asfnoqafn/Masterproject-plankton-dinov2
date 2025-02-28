@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-gpu=32
 #SBATCH -e /home/hk-project-p0021769/hgf_rth0695/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_rth0695/output/log_%j.out
-#SBATCH --time 01:00:00
+#SBATCH --time 00:10:00
 #SBATCH --partition=dev_accelerated
 BATCH_S=128
 N_GPUS=1
@@ -19,12 +19,12 @@ OMP_NUM_THREADS=64 PYTHONPATH=/home/hk-project-p0021769/hgf_rth0695/Masterprojec
  --standalone --nnodes=1 dinov2/run/eval/linear.py \
  --config-file dinov2/configs/train/train_grayscale2.yaml \
  --output-dir /home/hk-project-p0021769/hgf_rth0695/output/linear/ZooScanNet \
- --train-dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet_meta:extra=*" \
- --val-dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet_meta:extra=*" \
- --val-class-mapping-fpath="/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet/VAL_label_map.json" \
- --pretrained-weights 'checkpoints/dinov2_vits14_reg4_pretrain.pth' \
- --log-missclassified-images True \
- --log-confusion-matrix True \
- --run_name 'linear_eval_vits14_ZooScanNet_grayscale' \
- --loss-function="cross_entropy" \
- --gray-scale True \
+ --train_dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet:extra=*" \
+ --val_dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet:extra=*" \
+ --val_class_mapping_fpath="/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet/VAL_label_map.json" \
+ --pretrained-weights 'checkpoints/modelgray12h.rank_0.pth' \
+ --log_missclassified_images True \
+ --log_confusion_matrix True \
+ --run_name 'linear_eval_vits14_ZooScanNet' \
+ --loss_function="cross_entropy" \
+ --gray_scale True \
