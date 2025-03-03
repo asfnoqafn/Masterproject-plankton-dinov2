@@ -40,6 +40,10 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, lmdb_path_meta, img_data, lab
     env_labels = lmdb.open(lmdb_path_label, map_size=MAP_SIZE_META)
     env_meta = lmdb.open(lmdb_path_meta, map_size=MAP_SIZE_META)
 
+    img_data = sorted(img_data, key=lambda x: x[0])
+    label_data = sorted(label_data, key=lambda x: x[0])
+    meta_data = sorted(meta_data, key=lambda x: x[0])
+
     with (
         env_imgs.begin(write=True) as txn_imgs,
         env_labels.begin(write=True) as txn_labels,

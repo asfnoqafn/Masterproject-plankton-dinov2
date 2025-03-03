@@ -89,7 +89,7 @@ student:
   num_register_tokens: 4 # this should be 4 but for some reason we then create a multichannel list and use the wrong code
   interpolate_antialias: false
   interpolate_offset: 0.1
-  gray_scale: 0
+  gray_scale: 2
 teacher:
   momentum_teacher: 0.992
   final_momentum_teacher: 1
