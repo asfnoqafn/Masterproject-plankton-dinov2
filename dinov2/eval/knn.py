@@ -473,16 +473,6 @@ def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, tr
     )
     writer.close()
 
-    #metadata_path = os.path.join(embeddings_dir, 'metadata.tsv')
-    #with open(metadata_path, 'w') as f:
-    #    f.write("index\tlabel\tis_sprite\n")
-    #   
-    #    for i in range(len(train_labels)):
-    #       is_sprite = 1 if i in sprite_indices else 0
-    #       f.write(f"{i}\t{train_labels[i].item()}\t{is_sprite}\n")
-
-
-
 
 
 def eval_knn(

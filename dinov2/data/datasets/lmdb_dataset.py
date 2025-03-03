@@ -7,6 +7,8 @@ import lmdb
 import numpy as np
 from itertools import zip_longest
 
+import torch
+
 from dinov2.data.datasets import ImageNet
 
 _TargetLMDBDataset = int
@@ -19,15 +21,21 @@ class LMDBDataset(ImageNet):
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
         lmdb_txn = self._lmdb_txns[entry["lmdb_imgs_file"]]
-        image_data = lmdb_txn.get(entry["index"]) # we dont need to encode since new script already saves encoded img
+        image_data = lmdb_txn.get(entry["index"])
+        if image_data is None:
+            print(f"WARNING: Missing image data for index {index}, key {entry['index']}")
         return image_data
 
     def get_target(self, index: int) -> Optional[Target]:
-        if not self.with_targets:
-            return None
-        entries = self._get_entries()
-        class_index = entries[index].get("class_id")
-        return int(class_index) if class_index is not None else None
+        try:
+            if not self.with_targets:
+                return 0  # Return a default value instead of None
+            entries = self._get_entries()
+            class_index = entries[index].get("class_id")
+            return int(class_index) if class_index is not None else 0  # Return default value
+        except Exception as e:
+            print(f"Error in get_target for index {index}: {str(e)}")
+            return 0  # Return default value
     
     def get_metadata(self, index: int) -> dict:
         if not self.with_metadata:
@@ -112,6 +120,7 @@ class LMDBDataset(ImageNet):
                 )
                 lmdb_txn_labels = lmdb_env_labels.begin()
 
+            print("Use Metadata: ", use_metadata)
             if use_metadata:
                 lmdb_env_meta = lmdb.open(
                     lmdb_path_meta,

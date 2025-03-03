@@ -64,16 +64,12 @@ class ExtendedVisionDataset(VisionDataset):
         metadata = self.get_metadata(index)
 
         if self.transforms is not None:
-            #  avg_before = image.mean().item()
             image, target = self.transforms(image, target)
-            # Compute and print average pixel value after transforms
-            # avg_after = image.mean().item()
-            # if(avg_after < 1):
-            #     print("avg_after is smaller 1")
-            #     print(f"🟢 Avg pixel value BEFORE transforms: {avg_before:.4f}")
-            #     print(f"🔵 Avg pixel value AFTER transforms: {avg_after:.4f}")
 
-        return image, target, metadata
+        if metadata is not None:
+            return image, target, metadata
+        else:
+            return image, target
 
     def __len__(self) -> int:
         raise NotImplementedError
