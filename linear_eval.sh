@@ -23,7 +23,5 @@ OMP_NUM_THREADS=64 PYTHONPATH=/home/hk-project-p0021769/hgf_rth0695/Masterprojec
  --val_dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet:extra=*" \
  --val_class_mapping_fpath="/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet/VAL_label_map.json" \
  --pretrained-weights 'checkpoints/dinov2_vits14_pretrain.pth' \
- --log_missclassified_images True \
- --log_confusion_matrix True \
  --run_name 'linear_eval_vits14_ZooScanNet' \
  --loss_function="cross_entropy" \
