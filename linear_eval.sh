@@ -1,5 +1,5 @@
 #!/bin/sh
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2
 #SBATCH --nodes=1
 #SBATCH --cpus-per-gpu=32
 #SBATCH -e /home/hk-project-p0021769/hgf_rth0695/output/log_%j.err
@@ -7,7 +7,7 @@
 #SBATCH --time 01:00:00
 #SBATCH --partition=dev_accelerated
 BATCH_S=128
-N_GPUS=1
+N_GPUS=2
 N_CPUS=$((32 * $N_GPUS))
 echo $SLURM_JOB_ID
 export NUMEXPR_MAX_THREADS=128
@@ -18,9 +18,12 @@ OMP_NUM_THREADS=64 PYTHONPATH=/home/hk-project-p0021769/hgf_rth0695/Masterprojec
  --nproc_per_node=$N_GPUS \
  --standalone --nnodes=1 dinov2/run/eval/linear.py \
  --config-file dinov2/configs/eval/vits14_pretrain.yaml \
- --output-dir /home/hk-project-p0021769/hgf_rth0695/output/linear/ZooScanNet/no_register \
+ --output-dir /home/hk-project-p0021769/hgf_rth0695/output/linear/ZooScanNet_new \
  --train_dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet:extra=*" \
  --val_dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet:extra=*" \
+ --val_class_mapping_fpath="/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet/VAL_label_map.json" \
  --pretrained-weights 'checkpoints/dinov2_vits14_pretrain.pth' \
+ --log_missclassified_images True \
+ --log_confusion_matrix True \
  --run_name 'linear_eval_vits14_ZooScanNet' \
  --loss_function="cross_entropy" \

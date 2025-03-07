@@ -79,13 +79,13 @@ student:
   drop_path_rate: 0
   layerscale: 1.0e-05
   drop_path_uniform: true
-  pretrained_weights: '/home/hk-project-p0021769/hgf_grc7525/checkpoints/dinov2_vits14_reg4_pretrain.pth'
+  pretrained_weights: 'checkpoints/dinov2_vits14_pretrain.pth'
   ffn_layer: "mlp"
   block_chunks: 0
   qkv_bias: true
   proj_bias: true
   ffn_bias: true
-  num_register_tokens: 4
+  num_register_tokens: 0
   interpolate_antialias: false
   interpolate_offset: 0.1
   gray_scale: 0
