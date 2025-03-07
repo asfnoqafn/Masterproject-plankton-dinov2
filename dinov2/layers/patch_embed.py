@@ -78,7 +78,6 @@ class PatchEmbed(nn.Module):
                 kernel_size=patch_HW,
                 stride=patch_HW,
             )
-
         if self.gray_scale == 0:
             self.proj = nn.Conv2d(
                 3,

@@ -25,6 +25,7 @@ student:
   proj_bias: true
   ffn_bias: true
   num_register_tokens: 4
+  gray_scale: 0
   interpolate_antialias: false
   interpolate_offset: 0.1
 teacher:

@@ -830,32 +830,6 @@ def test_on_datasets(
         results_dict[f"{test_dataset_str}_accuracy"] = 100.0 * dataset_results_dict["best_classifier"]["accuracy"]
     return results_dict
 
-def inspect_dataset(dataset, num_samples=10):
-    indices = list(range(min(len(dataset), num_samples)))
-    for idx in indices:
-        try:
-            sample = dataset[idx]
-            print(f"Sample {idx}:")
-            if sample is None:
-                print("  RETURNED NONE")
-            elif isinstance(sample, tuple):
-                print(f"  Tuple of length {len(sample)}")
-                for i, item in enumerate(sample):
-                    if item is None:
-                        print(f"    Item {i}: None")
-                    else:
-                        print(f"    Item {i}: {type(item)}")
-                        if hasattr(item, 'shape'):
-                            print(f"    Shape: {item.shape}")
-                        elif hasattr(item, 'size'):
-                            print(f"    Size: {item.size}")
-            else:
-                print(f"  Type: {type(sample)}")
-        except Exception as e:
-            print(f"Error accessing sample {idx}: {e}")
-            import traceback
-            traceback.print_exc()
-
 def run_eval_linear(
     model,
     output_dir,
@@ -902,7 +876,6 @@ def run_eval_linear(
         with_targets=True,
     )
 
-    # inspect_dataset(train_dataset, num_samples=100000)
     # Determine number of classes
     targets = torch.tensor(train_dataset.get_targets(), dtype=torch.int64)
     training_num_classes = torch.unique(targets).max().item() + 1
