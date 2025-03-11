@@ -1,21 +1,23 @@
 #!/bin/sh
 #SBATCH --gres=gpu:1
 #SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-gpu=8
-#SBATCH -e /home/hk-project-p0021769/hgf_grc7525/output/log_%j.err
-#SBATCH --output /home/hk-project-p0021769/hgf_grc7525/output/log_%j.out
+#SBATCH --cpus-per-gpu=19
+#SBATCH -e /home/hk-project-p0021769/hgf_rth0695/repo/output/log_%j.err
+#SBATCH --output /home/hk-project-p0021769/hgf_rth0695/repo/output/log_%j.out
 #SBATCH --time 00:20:00
 #SBATCH --partition=dev_accelerated
-
 N_GPUS=1
-N_CPUS=8
+N_CPUS=19
 echo $SLURM_JOB_ID
-PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/Masterproject-plankton-dinov2 \
-torchrun --standalone --nnodes=1 --nproc_per_node=$N_GPUS Masterproject-plankton-dinov2/dinov2/run/train/train.py --no-resume --ngpus $N_GPUS \
-	--config-file Masterproject-plankton-dinov2/dinov2/configs/train/whoi.yaml	--run_name=${SLURM_JOB_ID}_${N_GPUS}gpu_pre \
-	train.output_dir='/home/hk-project-p0021769/hgf_grc7525/output' train.use_torch_compile=true \
-	train.dataset_path=LMDBDataset:split=ALL:root=/home/hk-project-p0021769/hgf_vwg6996/data/seanoe_uvp/seanoe_uvp_lmdb/0:500000-train_images:extra=* \
-	 --train.pretrained_weights='checkpoints/dinov2_vits14_pretrain.pth' train.cache_dataset=false\
-	train.num_workers=$N_CPUS \
-	student.pretrained_weights='checkpoints/dinov2_vits14_pretrain.pth'
+
+PYTHONPATH=/home/hk-project-p0021769/hgf_rth0695/repo/Masterproject-plankton-dinov2 torchrun \
+ --rdzv-backend=c10d \
+ --rdzv-endpoint=localhost:0 \
+ --standalone --nnodes=1 repo/Masterproject-plankton-dinov2/dinov2/eval/knn.py \
+ --config-file repo/Masterproject-plankton-dinov2/dinov2/configs/eval/vits14_pretrain_grayscale2.yaml \
+ --pretrained-weights="/home/hk-project-p0021769/hgf_rth0695/checkpoints/modelgray12h.rank_0.pth" --output-dir \
+ /home/hk-project-p0021769/hgf_rth0695/repo/output/ \
+ --train-dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_rth0695/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet/:extra=*" \
+ --val-dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_rth0695/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet/:extra=*" \
+ --output-dir='/home/hk-project-p0021769/hgf_rth0695/output/' \
+ --save_images

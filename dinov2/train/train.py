@@ -11,6 +11,7 @@ import os
 import sys
 from enum import Enum
 from functools import partial
+import time
 
 import torch
 import torchvision
@@ -250,9 +251,16 @@ def do_test(cfg, model, iteration):
         teacher_ckp_path = os.path.join(eval_dir, "teacher_checkpoint.pth")
         torch.save({"teacher": new_state_dict}, teacher_ckp_path)
 
+def freeze_all_except_patch_embed(model):
+    for name, param in model.student.backbone.named_parameters():
+        if "patch_embed" in name:
+            param.requires_grad = True
+        else:
+            param.requires_grad = False
 
 def do_train(cfg, model, resume=False):
     model.train()
+    #freeze_all_except_patch_embed(model)
     if cfg.train.use_torch_compile:
         print("--- COMPILING TORCH MODULE ---")
         model = torch.compile(model=model)
@@ -296,7 +304,7 @@ def do_train(cfg, model, resume=False):
         checkpointer,
         period=3 * OFFICIAL_EPOCH_LENGTH,
         max_iter=max_iter,
-        max_to_keep=3,
+        max_to_keep=3, # TODO more during actual training run for better monitoring
     )
 
     # setup data preprocessing
@@ -529,7 +537,7 @@ def do_train(cfg, model, resume=False):
 def main(args):
     torchvision.disable_beta_transforms_warning()
     cfg = setup(args)
-
+    print(cfg)
     model = SSLMetaArch(cfg).to(torch.device("cuda"))
     model.prepare_for_distributed_training()
 

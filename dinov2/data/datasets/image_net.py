@@ -70,7 +70,8 @@ class ImageNet(ExtendedVisionDataset):
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
         do_short_run: bool = False,
-        with_targets: bool = True,
+        with_targets: bool = False,
+        with_metadata: bool = False,
         is_cached: bool = False,
         curr_in_chans: int = None,
     ) -> None:
@@ -85,6 +86,7 @@ class ImageNet(ExtendedVisionDataset):
 
         self.do_short_run = do_short_run
         self.with_targets = with_targets
+        self.with_metadata = with_metadata
         self.is_cached = is_cached
         self.curr_in_chans = curr_in_chans
 

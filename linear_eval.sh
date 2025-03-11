@@ -17,13 +17,12 @@ OMP_NUM_THREADS=64 PYTHONPATH=/home/hk-project-p0021769/hgf_rth0695/Masterprojec
  --rdzv-endpoint=localhost:0 \
  --nproc_per_node=$N_GPUS \
  --standalone --nnodes=1 dinov2/run/eval/linear.py \
- --config-file dinov2/configs/eval/vits14_pretrain.yaml \
- --output-dir /home/hk-project-p0021769/hgf_rth0695/output/linear/ZooScanNet \
- --train-dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet:extra=*" \
- --val-dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet:extra=*" \
- --val-class-mapping-fpath="/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet/VAL_label_map.json" \
- --pretrained-weights 'checkpoints/dinov2_vits14_pretrain.pth' \
- --log-missclassified-images True \
- --log-confusion-matrix True \
- --run_name 'linear_eval_vits14_ZooScanNet_losses' \
- --loss-function="cross_entropy" \
+ --config-file dinov2/configs/eval/vits14_reg4_pretrain.yaml \
+ --output-dir /home/hk-project-p0021769/hgf_rth0695/output/linear/ZooScanNet_same_transform\
+ --linear_output_dir /home/hk-project-p0021769/hgf_rth0695/output/linear/ZooScanNet_same_transform\
+ --train_dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet:extra=*" \
+ --val_dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet:extra=*" \
+ --val_class_mapping_fpath="/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet/VAL_label_map.json" \
+ --pretrained-weights 'checkpoints/dinov2_vits14_reg4_pretrain.pth' \
+ --run_name 'linear_eval_vits14_ZooScanNet_same_transform' \
+ --loss_function="cross_entropy" \

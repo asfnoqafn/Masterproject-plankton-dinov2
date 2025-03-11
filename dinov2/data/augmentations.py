@@ -184,17 +184,17 @@ class DataAugmentationDINO(object):
 
             if not self.do_multi_channel:
                 self.global_transfo1 = AugmentationSequential(
-                    color_jittering,
+                    #color_jittering,
                     global_transfo1_extra,
                     self.normalize,
                 )
                 self.global_transfo2 = AugmentationSequential(
-                    color_jittering,
+                    #color_jittering,
                     global_transfo2_extra,
                     self.normalize,
                 )
                 self.local_transfo = AugmentationSequential(
-                    color_jittering,
+                    #color_jittering,
                     local_transfo_extra,
                     self.normalize,
                 )

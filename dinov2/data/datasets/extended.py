@@ -12,7 +12,7 @@ import torch
 from PIL import Image
 from torchvision.datasets import VisionDataset
 from torchvision.io import ImageReadMode, decode_image
-
+from dinov2.data.datasets.config import ImageConfig
 from .decoders import ImageDataDecoder, TargetDecoder
 
 
@@ -24,6 +24,9 @@ class ExtendedVisionDataset(VisionDataset):
         raise NotImplementedError
 
     def get_target(self, index: int) -> Any:
+        raise NotImplementedError
+    
+    def get_metadata(self, index: int) -> Any:
         raise NotImplementedError
 
     def __getitem__(self, index: int) -> Union[Tuple[Any, Any], torch.Tensor, Image.Image]:
@@ -39,10 +42,11 @@ class ExtendedVisionDataset(VisionDataset):
             image = (image / 255.0).to(torch.float32)
         else:
             try:
-                # have to copy bc stream not writeable
                 image = torch.frombuffer(np.copy(img_bytes), dtype=torch.uint8)
-                image = decode_image(image, ImageReadMode.RGB)
+                image = decode_image(image, ImageConfig.read_mode)
                 image = (image / 255.0).to(torch.float32)
+
+                
             except Exception as e:
                 print(e)
                 print(
@@ -56,19 +60,16 @@ class ExtendedVisionDataset(VisionDataset):
 
         target = self.get_target(index)
         target = TargetDecoder(target).decode()
-        #print("target", target)
+        
+        metadata = self.get_metadata(index)
 
         if self.transforms is not None:
-            #  avg_before = image.mean().item()
             image, target = self.transforms(image, target)
-            # Compute and print average pixel value after transforms
-            # avg_after = image.mean().item()
-            # if(avg_after < 1):
-            #     print("avg_after is smaller 1")
-            #     print(f"🟢 Avg pixel value BEFORE transforms: {avg_before:.4f}")
-            #     print(f"🔵 Avg pixel value AFTER transforms: {avg_after:.4f}")
 
-        return image, target
+        if metadata is not None:
+            return image, target, metadata
+        else:
+            return image, target
 
     def __len__(self) -> int:
         raise NotImplementedError

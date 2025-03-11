@@ -2,7 +2,8 @@
 #
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
-
+from dinov2.data.datasets.config import ImageConfig
+from torchvision.io import ImageReadMode
 import argparse
 import json
 import logging
@@ -67,19 +68,19 @@ def get_args_parser(
         default="lin_run",
     )
     parser.add_argument(
-        "--train-dataset",
+        "--train_dataset",
         dest="train_dataset_str",
         type=str,
         help="Training dataset",
     )
     parser.add_argument(
-        "--val-dataset",
+        "--val_dataset",
         dest="val_dataset_str",
         type=str,
         help="Validation dataset",
     )
     parser.add_argument(
-        "--test-datasets",
+        "--test_datasets",
         dest="test_dataset_strs",
         type=str,
         nargs="+",
@@ -91,44 +92,44 @@ def get_args_parser(
         help="Number of training epochs",
     )
     parser.add_argument(
-        "--batch-size",
+        "--batch_size",
         type=int,
         help="Batch Size (per GPU)",
     )
     parser.add_argument(
-        "--num-workers",
+        "--num_workers",
         type=int,
-        help="Number de Workers",
+        help="Number of workers",
     )
     parser.add_argument(
-        "--optimizer-momentum",
+        "--optimizer_momentum",
         type=float,
         default=0.9,
         help="Momentum for the linear classifier optimizer",
     )
     parser.add_argument(
-        "--n-last-blocks",
+        "--n_last_blocks",
         type=int,
         default=4,
         help="Number of blocks to use for the linear classifier",
     )
     parser.add_argument(
-        "--weight-decay",
+        "--weight_decay",
         type=float,
         default=0.0,
         help="Weight decay for the linear classifier",
     )
     parser.add_argument(
-        "--avg-pool",
+        "--avg_pool",
         type=bool,
         default=True,
         help="Whether to use average pooling for the linear classifier",
     )
     parser.add_argument(
-        "--save-checkpoint",
+        "--save_checkpoint",
         type=bool,
         default=True,
-        help="Whether to save and load checkpoints disk (output_dir)",
+        help="Whether to save and load checkpoints to disk (output_dir)",
     )
     parser.add_argument(
         "--num_nodes",
@@ -137,102 +138,112 @@ def get_args_parser(
         help="Set number of nodes used.",
     )
     parser.add_argument(
-        "--epoch-length",
+        "--epoch_length",
         type=int,
         help="Length of an epoch in number of iterations",
     )
     parser.add_argument(
-        "--save-checkpoint-frequency",
+        "--save_checkpoint_frequency",
         type=int,
         help="Number of epochs between two named checkpoint saves.",
     )
     parser.add_argument(
-        "--eval-period-iterations",
+        "--eval_period_iterations",
         type=int,
         help="Number of iterations between two evaluations.",
     )
     parser.add_argument(
-        "--learning-rate",
+        "--learning_rate",
         type=float,
         help="Learning rate for the linear classifier.",
     )
     parser.add_argument(
-        "--use-nesterov",
+        "--use_nesterov",
         type=bool,
         default=True,
         help="Whether to use Nesterov momentum",
     )
     parser.add_argument(
-        "--no-resume",
+        "--no_resume",
         action="store_true",
         help="Whether to not resume from existing checkpoints",
     )
     parser.add_argument(
-        "--val-metric-type",
+        "--val_metric_type",
         type=MetricType,
         choices=list(MetricType),
         help="Validation metric",
     )
     parser.add_argument(
-        "--test-metric-types",
+        "--test_metric_types",
         type=MetricType,
         choices=list(MetricType),
         nargs="+",
         help="Evaluation metric",
     )
     parser.add_argument(
-        "--classifier-fpath",
+        "--classifier_fpath",
         type=str,
         help="Path to a file containing pretrained linear classifiers",
     )
     parser.add_argument(
-        "--val-class-mapping-fpath",
+        "--val_class_mapping_fpath",
         type=str,
         help="Path to a file containing a mapping to adjust classifier outputs",
     )
     parser.add_argument(
-        "--test-class-mapping-fpaths",
+        "--test_class_mapping_fpaths",
         nargs="+",
         type=str,
         help="Path to a file containing a mapping to adjust classifier outputs",
     )
     parser.add_argument(
-        "--log-missclassified-images",
+        "--log_missclassified_images",
         type=bool,
         help="This flag enables logging of misclassified images to WandB",
     )
     parser.add_argument(
-        "--log-confusion-matrix",
+        "--log_confusion_matrix",
         type=bool,
         help="This flag enables logging of the confusion matrix to WandB",
     )
     parser.add_argument(
-        "--loss-function",
+        "--loss_function",
         type=str,
         default="cross_entropy",
         help="Loss function to use for training the linear classifier, can be 'cross_entropy' or 'custom_hierarchical'",
     )
     parser.add_argument(
-        "--hierarchy-file-path",
+        "--hierarchy_file_path",
         type=str,
         help="Path to the hierarchy file for the custom hierarchical loss function",
     )
     parser.add_argument(
-        "--hierarchy-weight",
+        "--hierarchy_weight",
         type=float,
         default=2.0,
         help="Weight applied to hierarchical loss",
     )
     parser.add_argument(
-        "--scaling-factor",
+        "--scaling_factor",
         type=float,
         default=2.0,
         help="Scaling factor for negative log likelihood",
     )
     parser.add_argument(
-        "--log-both-losses",
+        "--log_both_losses",
         type=bool,
         help="This flag enables logging of both the cross entropy and hierarchical loss",
+    )
+    parser.add_argument(
+        "--gray_scale",
+        action="store_true",
+        help="This flag enables gray scale training",
+    )
+    parser.add_argument(
+        "--linear_output_dir",
+        type=str,
+        help="Linear Output dir",
     )
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
@@ -824,7 +835,6 @@ def test_on_datasets(
         results_dict[f"{test_dataset_str}_accuracy"] = 100.0 * dataset_results_dict["best_classifier"]["accuracy"]
     return results_dict
 
-
 def run_eval_linear(
     model,
     output_dir,
@@ -870,8 +880,6 @@ def run_eval_linear(
         transform=train_transform,
         with_targets=True,
     )
-    # sampler_type = SamplerType.SHARDED_INFINITE
-    # sampler_type = SamplerType.INFINITE
 
     # Determine number of classes
     targets = torch.tensor(train_dataset.get_targets(), dtype=torch.int64)
@@ -883,7 +891,11 @@ def run_eval_linear(
     sample_output = feature_model(train_dataset[0][0].unsqueeze(0).cuda())
 
     distance_matrix = None
+    val_class_mapping = None
 
+    if(loss_function == "custom_hierarchical" or loss_function == "custom_hierarchical_combined"):  
+        if(not val_class_mapping_fpath):
+            raise ValueError("Custom hierarchical loss requires a class mapping for the validation set.")
     if(val_class_mapping_fpath.endswith(".json")):
         # Class mapping
         with open(val_class_mapping_fpath, 'r') as f:
@@ -896,10 +908,9 @@ def run_eval_linear(
     test_class_mappings = [
         np.load(fpath) if fpath and fpath != "None" else None for fpath in test_class_mapping_fpaths
     ]
-
-    if(loss_function == "custom_hierarchical" or loss_function == "custom_hierarchical_combined"):  
-        class_indices = {row[0]: int(row[1]) for row in val_class_mapping}
-        index_to_class = {v: k for k, v in class_indices.items()}
+    class_indices = {row[0]: int(row[1]) for row in val_class_mapping}
+    index_to_class = {v: k for k, v in class_indices.items()}
+    if(loss_function == "custom_hierarchical" or loss_function == "custom_hierarchical_combined"): 
         try:	
             hierarchy_root = load_hierarchy_from_file(hierarchy_file_path)
         except:
@@ -996,11 +1007,15 @@ def run_eval_linear(
 
 
 def main(args):
-    model, autocast_dtype = setup_and_build_model(args)
+    model, autocast_dtype = setup_and_build_model(args, do_eval=True)
     print(f"Output dir: {args.output_dir}")
+
+    if args.gray_scale:
+        ImageConfig.read_mode = ImageReadMode.GRAY
+        
     run_eval_linear(
         model=model,
-        output_dir=args.output_dir,
+        output_dir=args.linear_output_dir,
         train_dataset_str=args.train_dataset_str,
         val_dataset_str=args.val_dataset_str,
         test_dataset_strs=args.test_dataset_strs,

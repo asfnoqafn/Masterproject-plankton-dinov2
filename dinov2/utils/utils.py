@@ -11,7 +11,8 @@ import subprocess
 import sys
 from typing import Union
 from urllib.parse import urlparse
-
+from dinov2.data.datasets.config import ImageConfig
+from torchvision.io import ImageReadMode
 import numpy as np
 import torch
 from torch import nn
@@ -124,6 +125,7 @@ def load_pretrained_weights(
     pretrained_weights,
     checkpoint_key,
     teacher_student_key="teacher",
+    do_eval=False,
 ):
     if urlparse(pretrained_weights).scheme:  # If it looks like an URL
         state_dict = torch.hub.load_state_dict_from_url(pretrained_weights, map_location="cpu")
@@ -153,6 +155,45 @@ def load_pretrained_weights(
     else:
         print(f"Error: Key {teacher_student_key} not recognized, options are: 'student', 'teacher'")
         sys.exit(1)
+
+    ImageConfig.read_mode = ImageReadMode.GRAY if model.gray_scale == 1 or model.gray_scale == 2 else ImageReadMode.RGB
+    print(f"ImageConfig.read_mode: {ImageConfig.read_mode}")
+    if not do_eval:
+        if model.gray_scale == 1:
+            print("Initializing channel adaptation layer with Kaiming( Grayscale opt 1)")
+            if not hasattr(model.patch_embed, "channel_adapt"):
+                channel_adapt = model.patch_embed.channel_adapt
+                nn.init.kaiming_normal_(channel_adapt.weight.data)
+                if channel_adapt.bias is not None:
+                    nn.init.zeros_(channel_adapt.bias.data)
+            logger.info("Initialized channel adaptation layer with Kaiming")
+
+        elif model.gray_scale == 2:
+            proj_weight_key = "patch_embed.proj.weight"
+            if proj_weight_key in state_dict:
+                old_weights = state_dict[proj_weight_key]
+                print("Checkpoint shape:", old_weights.shape)
+
+                if old_weights.shape[1] == 3:
+                    state_dict = {k: v for k, v in state_dict.items() if "patch_embed.proj" not in k}
+
+                    proj = model.patch_embed.proj
+                    new_weights = torch.zeros(384, 1, 14, 14)
+                    nn.init.kaiming_normal_(new_weights)
+                    proj.weight.data = new_weights
+                    nn.init.zeros_(proj.bias.data)
+                    print("Initialized proj layer with Kaiming")
+            else:
+                print("training from grayscale checkpoint")
+        else:
+            print("training from fb checkpoint in RBG")
+
+
+    if do_eval:
+        print("loading checkpoint with eval mode")
+        print("shape patch embed",model.patch_embed.proj.weight.data.shape)
+
+
     if model.use_ch_patch_embed:
         state_dict = {k: v for k, v in state_dict.items() if "patch_embed" not in k}
 
@@ -160,6 +201,7 @@ def load_pretrained_weights(
     keys_model = set(model.state_dict().keys())
     if len(keys_load.intersection(keys_model)) / len(keys_model) < 0.6:
         state_dict = match_state_dict_keys(state_dict, keys_load, keys_model)
+
 
     if "pos_embed" in model.state_dict().keys() and "pos_embed" in state_dict.keys():
         loaded_img_shape = int(np.sqrt(state_dict["pos_embed"].shape[1] - 1))
@@ -198,7 +240,6 @@ def load_pretrained_weights(
 
     msg = model.load_state_dict(state_dict, strict=False)
     logger.info("Pretrained weights found at {} and loaded with msg: {}".format(pretrained_weights, msg))
-
 
 def fix_random_seeds(seed=31):
     """
