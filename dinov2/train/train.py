@@ -604,7 +604,6 @@ def do_train(cfg, model, resume=False):
                     "ll_lr": last_layer_lr,
                     "total_loss": losses_reduced,
                     "iter_time": iter_time,
-                    "data_time": metric_logger.data_time.value,
                     **loss_dict_reduced,
                 }
             )
