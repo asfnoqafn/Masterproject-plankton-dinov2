@@ -12,12 +12,11 @@ import sys
 from enum import Enum
 from functools import partial
 import time
-
 import torch
 import torchvision
 from fvcore.common.checkpoint import PeriodicCheckpointer
 from torch.profiler import ProfilerActivity
-
+import torch.nn.functional as F
 import dinov2.distributed as distributed
 import wandb
 from dinov2.data import (
@@ -41,6 +40,11 @@ from dinov2.utils.utils import (
     exists,
     none_or_str,
 )
+
+
+from dinov2.train.debug import log_data_entropy
+
+import matplotlib.pyplot as plt
 
 torch.backends.cuda.matmul.allow_tf32 = (
     True  # PyTorch 1.12 sets this to False by default
@@ -207,6 +211,7 @@ def select_augmentations(cfg, do_multi_channel=False):
         "use_native_res": cfg.crops.use_native_res,
         "do_seg_crops": none_or_str(cfg.crops.free_shapes),
         "do_multi_channel": do_multi_channel,
+        "gray_scale": cfg.student.gray_scale,
     }
     if cfg.train.augmentations == AugmentationType.TORCHV_CPU.value:
         data_transform_cpu = DataAugmentationDINO(use_kornia=False, **aug_kwargs)
@@ -261,6 +266,9 @@ def freeze_all_except_patch_embed(model):
             param.requires_grad = True
         else:
             param.requires_grad = False
+
+def quick_nan_check(loss_dict_reduced):
+    return not all(math.isfinite(v) for v in loss_dict_reduced.values())
 
 def do_train(cfg, model, resume=False):
     model.train()
@@ -456,7 +464,7 @@ def do_train(cfg, model, resume=False):
         # TODO iter for each el if data['collated_global_crops'] is a list in forward backward
         if not cfg.crops.use_variable_channels:
             loss_accumulator, loss_dict = model.forward_teacher_student(
-                data, teacher_temp=teacher_temp
+                data, teacher_temp=teacher_temp,iteration=iteration
             )
         else:
             loss_dict = dict()
@@ -493,24 +501,17 @@ def do_train(cfg, model, resume=False):
         # torch.distributed.all_reduce(loss_accumulator)
         # Think it should be here, but cause hang
         model.backward(loss_accumulator)
-        #print("Patch embed gradients:", 
-        #model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.data.view(-1).cpu().numpy())
-        #print("Patch embed weights:", model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.data.view(-1).cpu().numpy())
 
-        #print("Grayscale: gradients:", 
-        #model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt.weight.grad.data.view(-1).cpu().numpy())
-        #print("Grayscale: weights:",
-        #model.student.backbone._fsdp_wrapped_module.patch_embed.channel_adapt.weight.data.view(-1).cpu().numpy())
         if iteration % (OFFICIAL_EPOCH_LENGTH // 10) == 0 and iteration > 0:
-            
-            if model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad is not None:
-                patch_embed_grad = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.view(-1).cpu().numpy()
-                if distributed.is_main_process():
+            if distributed.is_main_process():
+                #log_embeddings_entropy(data, loss_dict_reduced, model, iteration, cfg)
+                if model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad is not None:
+                    patch_embed_grad = model.student.backbone._fsdp_wrapped_module.patch_embed.proj.weight.grad.view(-1).cpu().numpy()
                     wandb.log(
                         {
                             "patch_embed_grad_min_before_clip": patch_embed_grad.min(),
                             "patch_embed_grad_max_before_clip": patch_embed_grad.max(),
-                        }
+                        }, step=iteration
                     )
             
         # clip gradients
@@ -528,7 +529,7 @@ def do_train(cfg, model, resume=False):
                             {
                                 "patch_embed_grad_min": patch_embed_grad.min(),
                                 "patch_embed_grad_max": patch_embed_grad.max(),
-                            }
+                            },step=iteration
                     )
             fp16_scaler.step(optimizer)
             fp16_scaler.update()
@@ -547,7 +548,7 @@ def do_train(cfg, model, resume=False):
                         {
                             "patch_embed_grad_min": patch_embed_grad.min(),
                             "patch_embed_grad_max": patch_embed_grad.max(),
-                        }
+                        },step=iteration
                 )
             optimizer.step()
 
@@ -565,6 +566,21 @@ def do_train(cfg, model, resume=False):
         loss_dict_reduced = {
             k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()
         }
+
+        # if iteration == 24:
+        #     logger.info("Artificially injecting NaN for testing...")
+        #     first_loss_key = next(iter(loss_dict_reduced))
+        #     loss_dict_reduced[first_loss_key] = float('nan')
+        #     loss_dict[first_loss_key] = torch.tensor(float('nan')).cuda()
+
+        if quick_nan_check(loss_dict_reduced):
+    
+            from dinov2.train.debug import debug_nan_losses
+            
+            logger.info("NaN detected")
+            debug_nan_losses(loss_dict, data, cfg, iteration, cfg.train.output_dir)
+            log_data_entropy(data, iteration)
+            raise AssertionError
 
         if math.isnan(sum(loss_dict_reduced.values())):
             logger.info("NaN detected")
@@ -603,9 +619,8 @@ def do_train(cfg, model, resume=False):
                     "mom": mom,
                     "ll_lr": last_layer_lr,
                     "total_loss": losses_reduced,
-                    "iter_time": iter_time,
                     **loss_dict_reduced,
-                }
+                },step=iteration
             )
         iteration = iteration + 1
     metric_logger.synchronize_between_processes()

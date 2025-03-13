@@ -61,21 +61,22 @@ ibot:
   head_hidden_dim: 2048
 train:
   batch_size_per_gpu: 16 #256
-  dataset_path: LMDBDataset:split=ALL:root=/fast/AG_Kainmueller/plankton/data/WHOI/preprocessed/preprocessed_lmdb/:extra=*
+  dataset_path: " "
   output_dir: '/home/hk-project-p0021769/hgf_grc7525/output/'
   saveckp_freq: 10
   seed: 0
-  num_workers: 8
+  num_workers: 16
   OFFICIAL_EPOCH_LENGTH: 1250
   centering: "sinkhorn_knopp" # or "centering"
   cache_dataset: false
   use_torch_compile: true
   do_profiling: false
   augmentations: "kornia_cpu"
-  in_chans: 1
+  in_chans: 3
   do_debug: false
 student:
   arch: vit_small
+  student_temp: 0.1
   patch_size: 14
   drop_path_rate: 0
   layerscale: 1.0e-05
@@ -89,7 +90,8 @@ student:
   num_register_tokens: 4
   interpolate_antialias: false
   interpolate_offset: 0.1
-  gray_scale: 2
+  gray_scale: 0
+  
 teacher:
   momentum_teacher: 0.992
   final_momentum_teacher: 1
@@ -113,7 +115,7 @@ optim:
   adamw_beta2: 0.999
 crops:
   use_native_res: false
-  free_shapes: false
+  free_shapes: none
   global_crops_scale:
   - 0.32
   - 1.0

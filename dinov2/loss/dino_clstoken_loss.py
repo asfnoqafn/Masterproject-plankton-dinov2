@@ -24,7 +24,9 @@ class DINOLoss(nn.Module):
         self.reduce_handle = None
         self.len_teacher_output = None
         self.async_batch_center = None
-
+        print("DINOLoss initialized")
+        print("student_temp", student_temp)
+    
     @torch.no_grad()
     def softmax_center_teacher(self, teacher_output, teacher_temp):
         self.apply_center_update()
