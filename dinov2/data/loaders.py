@@ -98,6 +98,7 @@ def make_dataset(
     transform: Optional[Callable] = None,
     target_transform: Optional[Callable] = None,
     with_targets: bool = False,
+    with_metadata: bool = False,
     cache_dataset: bool = False,
 ):
     """
@@ -119,6 +120,7 @@ def make_dataset(
         transform=transform,
         target_transform=target_transform,
         with_targets=with_targets,
+        with_metadata=with_metadata,
         is_cached=cache_dataset,
         **kwargs,
     )
