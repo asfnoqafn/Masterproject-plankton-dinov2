@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import sys
+from tqdm import tqdm
 from functools import partial
 from typing import List, Optional
 import matplotlib.pyplot as plt
@@ -136,7 +137,7 @@ def get_args_parser(
         help="Directory to save TensorBoard embedding projector logs"
     )
     parser.add_argument(
-        "--output_dir",
+        "--knn_output_dir",
         type=str,
         help="Output directory to write results and logs",
     )
@@ -370,26 +371,17 @@ def plotting(features, labels, step=0):
     wandb.log({"Feature Visualization": wandb.Image(plot_path)})
 
 
-def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, train_dataset, save_images):
+def tensorboard_embeddings(train_features, train_labels, train_meta, tensorboard_log_dir, train_dataset, save_images):
     
     wandb_run_name = wandb.run.name if wandb.run else "default_run"
     wandb_log_dir = os.path.join(tensorboard_log_dir, wandb_run_name)
     embeddings_dir = os.path.join(wandb_log_dir, 'embeddings')
     os.makedirs(embeddings_dir, exist_ok=True)
 
-    metadata_path = os.path.join(embeddings_dir, 'metadata.tsv')
-    unique_labels = np.unique(train_labels.cpu().numpy())
-    with open(metadata_path, 'w') as f:
-        for label in unique_labels:
-            f.write(f"{label}\n")
-
     embedding_tensor = torch.tensor(train_features.cpu().numpy())
-    config = projector.ProjectorConfig()
-    embedding = config.embeddings.add()
-    embedding.tensor_name = 'embeddings'
-    embedding.metadata_path = 'metadata.tsv'
 
     torch.save({'embeddings': embedding_tensor}, embeddings_dir + '/embeddings.pt')
+    print(f"Saved embeddings at {embeddings_dir + '/embeddings.pt'}")
 
     if save_images:
         max_sprite_images = 256
@@ -410,7 +402,7 @@ def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, tr
             class_sprite_images = max(1, int(max_sprite_images * class_proportion))
             sampling_ratios[label] = min(class_sprite_images, count)
 
-        for label, count in sampling_ratios.items():
+        for label, count in tqdm(sampling_ratios.items()):
             label_indices = torch.where(train_labels == label)[0]
             
             if len(label_indices) > count:
@@ -449,6 +441,22 @@ def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, tr
         print("sprite_images shape:", sprite_images.shape)
         print("sprite_indices:", len(sprite_indices))
 
+
+    # get metadata header
+    meta_string = train_meta[0]
+    fixed_json = re.sub(r'(\w+):', r'"\1":', meta_string) # quick fix because I messed up the json ^^
+    meta_json = json.loads(fixed_json)
+    meta_header = ['label'] + list(meta_json.keys())
+
+    meta_values = []
+    cpu_labels = train_labels.cpu().numpy()
+    for i in sprite_indices:
+        label = cpu_labels[i]
+        meta_string = train_meta[i]
+        fixed_json = re.sub(r'(\w+):', r'"\1":', meta_string) # quick fix because I messed up the json ^^
+        meta_json = json.loads(fixed_json)
+        meta_values += [[label] + list(meta_json.values())]
+
     # Prepare embedding configuration
     config = projector.ProjectorConfig()
     embedding = config.embeddings.add()
@@ -458,7 +466,6 @@ def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, tr
     embedding.sprite.single_image_dim.extend([224, 224])
 
 
-    writer = SummaryWriter(log_dir=embeddings_dir)
     selected_embedding_tensor = embedding_tensor[sprite_indices]
 
     # Log embeddings to TensorBoard
@@ -466,7 +473,9 @@ def tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, tr
     writer.add_embedding(
         mat=selected_embedding_tensor,  # Use only embeddings for sprite images
         label_img=sprite_images if save_images else None,
-        metadata=train_labels[sprite_indices].cpu().tolist() if save_images else train_labels.cpu.tolist(),  # Corresponding labels
+        metadata=meta_values,  # Corresponding labels
+        metadata_header=meta_header,
+        tag='knn_projection',
         global_step=0
     )
     writer.close()
@@ -501,7 +510,7 @@ def eval_knn(
     model = ModelWithNormalize(model)
 
     logger.info("Extracting features for train set...")
-    train_features, train_labels = extract_features(
+    train_features, train_labels, train_meta = extract_features(
         model,
         train_dataset,
         batch_size,
@@ -513,7 +522,7 @@ def eval_knn(
     print(train_features[1])
 
     if tensorboard_log_dir is not None:
-        tensorboard_embeddings(train_features, train_labels, tensorboard_log_dir, train_dataset, save_images)
+        tensorboard_embeddings(train_features, train_labels, train_meta, tensorboard_log_dir, train_dataset, save_images)
 
     logger.info(f"Train features created, shape {train_features.shape}.")
     #plotting(train_features, train_labels) #broken
@@ -623,12 +632,14 @@ def eval_knn_with_model(
     train_dataset = make_dataset(
         dataset_str=train_dataset_str,
         transform=transform,
-        with_targets=True
+        with_targets=True,
+        with_metadata=True
     )
     val_dataset = make_dataset(
         dataset_str=val_dataset_str,
         transform=transform,
-        with_targets=True
+        with_targets=True,
+        with_metadata=True
     )
 
     with torch.cuda.amp.autocast(dtype=autocast_dtype):
@@ -701,10 +712,10 @@ def main(args):
 
     model, autocast_dtype = setup_and_build_model(args, do_eval=True , model_type=args.model_type)
 
-    print("args.output_dir", args.output_dir)
+    print("args.knn_output_dir", args.knn_output_dir)
     eval_knn_with_model(
         model=model,
-        output_dir=args.output_dir,
+        output_dir=args.knn_output_dir,
         train_dataset_str=args.train_dataset_str,
         val_dataset_str=args.val_dataset_str,
         nb_knn=args.nb_knn,

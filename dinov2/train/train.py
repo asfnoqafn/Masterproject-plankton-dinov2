@@ -619,6 +619,7 @@ def do_train(cfg, model, resume=False):
                     "mom": mom,
                     "ll_lr": last_layer_lr,
                     "total_loss": losses_reduced,
+                    "iter_time": iter_time,
                     **loss_dict_reduced,
                 },step=iteration
             )
