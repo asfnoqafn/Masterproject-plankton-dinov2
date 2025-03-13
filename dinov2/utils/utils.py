@@ -185,8 +185,11 @@ def load_pretrained_weights(
                     print("Initialized proj layer with Kaiming")
             else:
                 print("training from grayscale checkpoint")
+                
+            
         else:
             print("training from fb checkpoint in RBG")
+
 
 
     if do_eval:
