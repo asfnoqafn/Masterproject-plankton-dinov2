@@ -1,5 +1,6 @@
 import glob
 import os
+import pickle
 import time
 from typing import Optional
 
@@ -66,6 +67,7 @@ class LMDBDataset(ImageNet):
         return self._class_ids
 
     def _load_extra(self, extra_path: str):
+        total_time = time.time()
         extra_full_path = self._get_extra_full_path(extra_path)
         print("extra_full_path", extra_full_path)
         file_list = glob.glob(extra_full_path, recursive=True)
@@ -88,11 +90,13 @@ class LMDBDataset(ImageNet):
             file_list_imgs = file_list_imgs[:1]
 
         for iter_obj in zip_longest(file_list_imgs, file_list_labels, file_list_meta):
+            entries = []
             start = time.time()
 
             lmdb_path_imgs, lmdb_path_labels, lmdb_path_meta = iter_obj
             use_labels = self.with_targets and lmdb_path_labels is not None
             use_metadata = self.with_metadata and lmdb_path_meta is not None
+            cache_path = f"{lmdb_path_imgs}.cache"
             
             lmdb_env_imgs = lmdb.open(
                 lmdb_path_imgs,
@@ -136,33 +140,54 @@ class LMDBDataset(ImageNet):
             # save img tcxn from which to get labels later
             self._lmdb_txns[lmdb_path_imgs] = lmdb_txn_imgs
 
-            if use_metadata:
-                self._lmdb_txns[lmdb_path_meta] = lmdb_txn_meta
-
-            if use_labels:
-                lmdb_cursor: lmdb.Cursor = lmdb_txn_labels.cursor()
+            if self.is_cached and os.path.exists(cache_path):
+                print(f"Loading cache from {cache_path}")
+                start = time.time()
+                with open(cache_path, "rb") as f:
+                    keys: list[bytes] = pickle.load(f)
+                entries = [{"index": key, "lmdb_imgs_file": lmdb_path_imgs} for key in keys]
+                accumulated.extend(entries)
+                print("time to load cache", time.time() - start)
+                if use_metadata or use_labels:
+                    raise NotImplementedError("ERROR: Caching not implemented for metadata or labels")
             else:
-                lmdb_cursor: lmdb.Cursor = lmdb_txn_imgs.cursor()
-                
-            for key, value in lmdb_cursor:
-                entry = dict()
-                if use_labels:
-                    entry["class_id"] = int.from_bytes(value, byteorder="little")
-            
-                entry["index"] = key
-                entry["lmdb_imgs_file"] = lmdb_path_imgs
-
                 if use_metadata:
-                    entry["lmdb_meta_file"] = lmdb_path_meta
+                    self._lmdb_txns[lmdb_path_meta] = lmdb_txn_meta
 
-                accumulated.append(entry)
-                global_idx += 1
-            lmdb_cursor.close()
+                if use_labels:
+                    lmdb_cursor: lmdb.Cursor = lmdb_txn_labels.cursor()
+                else:
+                    lmdb_cursor: lmdb.Cursor = lmdb_txn_imgs.cursor()
+                    
+                for key, value in lmdb_cursor:
+                    entry = dict()
+                    if use_labels:
+                        entry["class_id"] = int.from_bytes(value, byteorder="little")
+                
+                    entry["index"] = key
+                    entry["lmdb_imgs_file"] = lmdb_path_imgs
 
-            end = time.time() - start
-            print("looped over lmdb", end)
+                    if use_metadata:
+                        entry["lmdb_meta_file"] = lmdb_path_meta
+
+                    entries.append(entry)
+                    global_idx += 1
+                lmdb_cursor.close()
+
+                accumulated.extend(entries)
+                end = time.time() - start
+                print("looped over lmdb", end)
+
+                if self.is_cached: # save cache
+                    start = time.time()
+                    print("Saving cache to", cache_path)
+                    keys = [entry["index"] for entry in entries]
+                    with open(cache_path, "wb") as f:
+                        pickle.dump(keys, f)
+                    print("time to save cache", time.time() - start)
 
         self._entries = accumulated
+        print("Total time to load all entries", time.time() - total_time)
 
     def __len__(self) -> int:
         entries = self._get_entries()
