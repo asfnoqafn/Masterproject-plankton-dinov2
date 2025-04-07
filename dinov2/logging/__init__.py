@@ -156,6 +156,7 @@ def setup_logging_sweep(
             for key, value in sweep_params.items():
                 setattr(args, key, value) 
             if wandb.run is not None:
-                args.output_dir = f"{output}/{wandb.run.name}"  # Dynamically set attributes in args
+                args.output_dir = f"{output}/{wandb.run.name}" 
+                args.linear_output_dir =  f"{output}/{wandb.run.name}"
         print("Output Dir: ", args.output_dir)
         return args

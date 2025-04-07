@@ -84,7 +84,7 @@ def make_normalize_transform(
 
 # This roughly matches torchvision's preset for classification training:
 #   https://github.com/pytorch/vision/blob/main/references/classification/presets.py#L6-L44
-def make_classification_train_transform_deprecated(
+def make_classification_train_transform(
     *,
     crop_size: int = 224,
     interpolation=v2.InterpolationMode.BICUBIC,
@@ -107,26 +107,6 @@ def make_classification_train_transform_deprecated(
             make_normalize_transform(mean=mean, std=std),
         ]
     )
-    return v2.Compose(transforms_list)
-
-
-# This roughly matches torchvision's preset for classification training:
-#   https://github.com/pytorch/vision/blob/main/references/classification/presets.py#L6-L44
-def make_classification_train_transform(
-    *,
-    crop_size: int = 224,
-    interpolation=v2.InterpolationMode.BICUBIC,
-    hflip_prob: float = 0.5,
-    mean: Sequence[float] = [WHOI_DEFAULT_MEAN],
-    std: Sequence[float] = [WHOI_DEFAULT_STD],
-)-> v2.Compose:
-    transforms_list = [
-        v2.Resize(223,max_size= 224, antialias=True),
-        v2.Pad(112, fill=255, padding_mode='constant'),
-        v2.CenterCrop(crop_size),
-        MaybeToTensor(),
-        make_normalize_transform(mean=mean, std=std),
-    ]
     return v2.Compose(transforms_list)
 
 
