@@ -20,7 +20,7 @@ from skimage.segmentation import (
 )
 from torchvision.ops import masks_to_boxes
 from torchvision.transforms import v2
-
+from .new_resize import RandomResizedCropForeground
 from .transforms import (
     GaussianBlur,
     KorniaGaussianBlur,
@@ -184,30 +184,63 @@ class DataAugmentationDINO(object):
 
         ######## TORCHVISION
         else:
-            # random resized crop and flip
-            self.geometric_augmentation_global = v2.Compose(
-                [
-                    v2.RandomResizedCrop(
-                        global_crops_size,
-                        scale=global_crops_scale,
-                        interpolation=v2.InterpolationMode.BICUBIC,
-                        antialias=True,
-                    ),
-                    v2.RandomHorizontalFlip(p=0.5),
-                ]
-            )
+            print("Using torchvision augmentations")
+            print("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
 
-            self.geometric_augmentation_local = v2.Compose(
-                [
-                    v2.RandomResizedCrop(
-                        local_crops_size,
+
+
+            if True:
+                print("Using foreground crops")
+                print(global_crops_scale)
+                print(local_crops_scale)
+                self.geometric_augmentation_global = v2.Compose(
+                    [
+                        RandomResizedCropForeground(
+                            size=global_crops_size,
+                            scale=global_crops_scale,
+                            #ratio=self.global_crop_ratio,
+                            antialias=True),
+
+                        v2.RandomHorizontalFlip(p=0.5),
+                    ]
+                )
+
+                self.geometric_augmentation_local = v2.Compose(
+                    [
+                        RandomResizedCropForeground(
+                        size=local_crops_size,
                         scale=local_crops_scale,
-                        interpolation=v2.InterpolationMode.BICUBIC,
-                        antialias=True,
-                    ),
-                    v2.RandomHorizontalFlip(p=0.5),
-                ]
-            )
+                        #ratio=self.local_crop_ratio,
+                        antialias=True),
+                        v2.RandomHorizontalFlip(p=0.5),
+                    ]
+                )
+            
+            else:
+                # random resized crop and flip
+                self.geometric_augmentation_global = v2.Compose(
+                    [
+                        v2.RandomResizedCrop(
+                            global_crops_size,
+                            scale=global_crops_scale,
+                            interpolation=v2.InterpolationMode.BICUBIC,
+                            antialias=True,
+                        ),
+                        v2.RandomHorizontalFlip(p=0.5),
+                    ]
+                )
+
+                self.geometric_augmentation_local = v2.Compose(
+                    [
+                        v2.RandomResizedCrop(
+                            local_crops_size,
+                            scale=local_crops_scale,
+                            interpolation=v2.InterpolationMode.BICUBIC,
+                            antialias=True,
+                        ),
+                        v2.RandomHorizontalFlip(p=0.5),
+                    ]
+                )
 
             # color distorsions / blurring
             color_jittering = v2.Compose(
@@ -247,27 +280,51 @@ class DataAugmentationDINO(object):
                 ]
             )
 
-            self.global_transfo1 = v2.Compose(
-                [
-                    color_jittering,
-                    global_transfo1_extra,
-                    self.normalize,
-                ]
-            )
-            self.global_transfo2 = v2.Compose(
-                [
-                    color_jittering,
-                    global_transfo2_extra,
-                    self.normalize,
-                ]
-            )
-            self.local_transfo = v2.Compose(
-                [
-                    color_jittering,
-                    local_transfo_extra,
-                    self.normalize,
-                ]
-            )
+            if self.gray_scale == 0:
+                self.global_transfo1 = v2.Compose(
+                    [
+                        color_jittering,
+                        global_transfo1_extra,
+                        self.normalize,
+                    ]
+                )
+                self.global_transfo2 = v2.Compose(
+                    [
+                        color_jittering,
+                        global_transfo2_extra,
+                        self.normalize,
+                    ]
+                )
+                self.local_transfo = v2.Compose(
+                    [
+                        color_jittering,
+                        local_transfo_extra,
+                        self.normalize,
+                    ]
+                )
+            else:
+
+                self.global_transfo1 = v2.Compose(
+                    [
+                        #color_jittering,
+                        global_transfo1_extra,
+                        self.normalize,
+                    ]
+                )
+                self.global_transfo2 = v2.Compose(
+                    [
+                        #color_jittering,
+                        global_transfo2_extra,
+                        self.normalize,
+                    ]
+                )
+                self.local_transfo = v2.Compose(
+                    [
+                        #color_jittering,
+                        local_transfo_extra,
+                        self.normalize,
+                    ]
+                )
 
     def round_up_patch_size(self, crop_len: int):
         if crop_len % self.patch_size == 0:
