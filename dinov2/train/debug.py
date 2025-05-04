@@ -16,7 +16,7 @@ def debug_nan_losses(loss_dict, data, cfg, iteration, output_dir):
             nan_detected = True
             nan_losses.append(loss_name)
     
-    if nan_detected:
+    if True:
         debug_dir = os.path.join(output_dir, f'nan_debug_iter_{iteration}')
         os.makedirs(debug_dir, exist_ok=True)
         
@@ -50,7 +50,7 @@ def debug_nan_losses(loss_dict, data, cfg, iteration, output_dir):
                 plt.savefig(os.path.join(debug_dir, f'{prefix}_batch_{i}.png'))
                 plt.close()
         
-
+        
         if 'collated_local_crops' in data:
             print('saving local crops')
             save_patches(data['collated_local_crops'], 'local_crops')

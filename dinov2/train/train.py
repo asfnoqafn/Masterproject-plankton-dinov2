@@ -389,7 +389,6 @@ def do_train(cfg, model, resume=False):
         verbose=distributed.is_main_process(),
     )
     header = "Training"
-
     if cfg.train.do_profiling:
         print("------- STARTING PROFILER -------")
         activities = [
@@ -406,19 +405,21 @@ def do_train(cfg, model, resume=False):
         profiler.start()
 
     end = time.time()
+
+    print(data_loader)
     for data in metric_logger.log_every(
         data_loader,
         20,
         header,
         max_iter,
-        start_iter,
-    ):
+        start_iter,):
+        print("asdasdasdasd")
+
         if cfg.train.do_profiling:
             profiler.step()
         if (
             data_transform_gpu is not None
-            or cfg.train.augmentations == AugmentationType.KORNIA_CPU.value
-        ):
+            or cfg.train.augmentations == AugmentationType.TORCHV_CPU.value):
             # current_device_nb = model.student.backbone.device
             if isinstance(data, list):
                 data = data[0]
@@ -427,7 +428,6 @@ def do_train(cfg, model, resume=False):
             if exists(data_transform_gpu):
                 # collate_fn collates crops and computes masks tensors
                 data = collate_fn_gpu(data)
-
             data = utils.data_to_cuda(data)
 
         if cfg.crops.use_variable_channels:
@@ -445,12 +445,14 @@ def do_train(cfg, model, resume=False):
             )
         else:
             current_batch_size = data["collated_global_crops"].shape[0] / 2
+
+        
         tot_nb_seen_samples += (
             current_batch_size * distributed.get_global_size()
         )  # to get effective batch size
         if iteration > max_iter:
             return
-
+        print("asdasdasdasd")
         # apply schedules
         lr = lr_schedule[iteration]
         wd = wd_schedule[iteration]
@@ -458,7 +460,7 @@ def do_train(cfg, model, resume=False):
         teacher_temp = teacher_temp_schedule[iteration]
         last_layer_lr = last_layer_lr_schedule[iteration]
         apply_optim_scheduler(optimizer, lr, wd, last_layer_lr)
-
+        print("asdasdasdasd")
         # compute losses
         optimizer.zero_grad(set_to_none=True)
         # TODO iter for each el if data['collated_global_crops'] is a list in forward backward
@@ -499,8 +501,10 @@ def do_train(cfg, model, resume=False):
             loss_dict = {k: v / nb_diff_ch_nbs for k, v in loss_dict.items()}
 
         # torch.distributed.all_reduce(loss_accumulator)
-        # Think it should be here, but cause hang
+        # Think it should be here, but cause hang^
+        print("going to backward")
         model.backward(loss_accumulator)
+        print("backward done")
 
         if iteration % (OFFICIAL_EPOCH_LENGTH // 10) == 0 and iteration > 0:
             if distributed.is_main_process():
@@ -572,10 +576,12 @@ def do_train(cfg, model, resume=False):
         #     first_loss_key = next(iter(loss_dict_reduced))
         #     loss_dict_reduced[first_loss_key] = float('nan')
         #     loss_dict[first_loss_key] = torch.tensor(float('nan')).cuda()
-
+        from dinov2.train.debug import debug_nan_losses
+        debug_nan_losses(loss_dict, data, cfg, iteration, cfg.train.output_dir)
+        raise AssertionError 
         if quick_nan_check(loss_dict_reduced):
     
-            from dinov2.train.debug import debug_nan_losses
+            
             
             logger.info("NaN detected")
             debug_nan_losses(loss_dict, data, cfg, iteration, cfg.train.output_dir)

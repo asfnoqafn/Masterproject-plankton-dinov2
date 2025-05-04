@@ -189,7 +189,7 @@ class DataAugmentationDINO(object):
 
 
 
-            if True:
+            if False:
                 print("Using foreground crops")
                 print(global_crops_scale)
                 print(local_crops_scale)
@@ -325,6 +325,7 @@ class DataAugmentationDINO(object):
                         self.normalize,
                     ]
                 )
+            print("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
 
     def round_up_patch_size(self, crop_len: int):
         if crop_len % self.patch_size == 0:

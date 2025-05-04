@@ -89,7 +89,7 @@ class MetricLogger(object):
         end = time.time()
         iter_time = SmoothedValue(fmt="{avg:.6f}")
         data_time = SmoothedValue(fmt="{avg:.6f}")
-
+        print("agrmgmrog,l,")
         if n_iterations is None:
             n_iterations = len(iterable)
 
