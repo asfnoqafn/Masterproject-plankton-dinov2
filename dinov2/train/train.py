@@ -417,7 +417,7 @@ def do_train(cfg, model, resume=False):
             profiler.step()
         if (
             data_transform_gpu is not None
-            or cfg.train.augmentations == AugmentationType.KORNIA_CPU.value
+            or cfg.train.augmentations == AugmentationType.TORCHV_CPU.value
         ):
             # current_device_nb = model.student.backbone.device
             if isinstance(data, list):
@@ -567,11 +567,6 @@ def do_train(cfg, model, resume=False):
             k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()
         }
 
-        # if iteration == 24:
-        #     logger.info("Artificially injecting NaN for testing...")
-        #     first_loss_key = next(iter(loss_dict_reduced))
-        #     loss_dict_reduced[first_loss_key] = float('nan')
-        #     loss_dict[first_loss_key] = torch.tensor(float('nan')).cuda()
 
         if quick_nan_check(loss_dict_reduced):
     
