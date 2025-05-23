@@ -34,6 +34,7 @@ from dinov2.data import (
 )
 from dinov2.data.transforms import (
     make_classification_eval_transform,
+    make_classification_train_transform
 )
 from dinov2.eval.metrics import (
     AccuracyAveraging,
@@ -162,7 +163,7 @@ def get_args_parser(
         val_dataset_str="ImageNet:split=VAL",
         nb_knn=[10, 20, 100, 200],
         temperature=0.07,
-        batch_size=256,
+        batch_size=24,
         n_per_class_list=[-1],
         n_tries=1,
     )
@@ -510,6 +511,7 @@ def eval_knn(
     model = ModelWithNormalize(model)
 
     logger.info("Extracting features for train set...")
+    print("Batch size", batch_size)
     train_features, train_labels, train_meta = extract_features(
         model,
         train_dataset,
@@ -620,26 +622,26 @@ def eval_knn_with_model(
     accuracy_averaging=AccuracyAveraging.MEAN_ACCURACY,
     transform=None,
     gather_on_cpu=False,
-    batch_size=256,
+    batch_size=100,
     num_workers=5,
     n_per_class_list=[-1],
     n_tries=1,
     tensorboard_log_dir=None,
     save_images=False,
 ):
-    transform = transform or make_classification_eval_transform()
+    transform = transform or make_classification_train_transform()
 
     train_dataset = make_dataset(
         dataset_str=train_dataset_str,
         transform=transform,
         with_targets=True,
-        with_metadata=True
+        with_metadata=False
     )
     val_dataset = make_dataset(
         dataset_str=val_dataset_str,
         transform=transform,
         with_targets=True,
-        with_metadata=True
+        with_metadata=False
     )
 
     with torch.cuda.amp.autocast(dtype=autocast_dtype):

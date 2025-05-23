@@ -86,16 +86,15 @@ def make_normalize_transform(
 #   https://github.com/pytorch/vision/blob/main/references/classification/presets.py#L6-L44
 def make_classification_train_transform(
     *,
-    crop_size: int = 224,
+    crop_size = (224,224),
     interpolation=v2.InterpolationMode.BICUBIC,
     hflip_prob: float = 0.5,
     mean: Sequence[float] = [WHOI_DEFAULT_MEAN],
     std: Sequence[float] = [WHOI_DEFAULT_STD],
 ):
     transforms_list = [
-        v2.RandomResizedCrop(
+        v2.Resize(
             crop_size,
-            interpolation=interpolation,
             antialias=True,
         )
     ]

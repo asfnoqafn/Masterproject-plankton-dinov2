@@ -65,7 +65,7 @@ train:
   output_dir: '/home/hk-project-p0021769/hgf_grc7525/output/'
   saveckp_freq: 10
   seed: 0
-  num_workers: 8
+  num_workers: 1
   OFFICIAL_EPOCH_LENGTH: 1250
   centering: "sinkhorn_knopp" # or "centering"
   cache_dataset: false

@@ -23,7 +23,7 @@ OMP_NUM_THREADS=20 PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/repo/Masterp
 	student.pretrained_weights=" "\
 	train.output_dir='/home/hk-project-p0021769/hgf_grc7525/output/'\
 	train.use_torch_compile=true \
-	train.dataset_path=LMDBDataset:split=ALL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/plankton/:extra=* \
+	train.dataset_path=LMDBDataset:split=ALL:root=/home/hk-project-p0021769/hgf_grc7525/workspaces/hkfswork/hgf_grc7525-hiwi/plankton/:extra=* \
 	train.num_workers=$N_CPUS \
 	train.batch_size_per_gpu=$BATCH_S \
 	crops.use_ch_patch_embed=false train.in_chans=3 

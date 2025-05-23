@@ -32,7 +32,7 @@ class LMDBDataset(ImageNet):
     
     def get_metadata(self, index: int) -> dict:
         if not self.with_metadata:
-            return None
+            return "None"
         entry = self._entries[index]
         lmdb_txn = self._lmdb_txns[entry["lmdb_meta_file"]]
         metadata = lmdb_txn.get(entry["index"]).decode("utf-8")
