@@ -41,7 +41,7 @@ def get_cfg_from_args(args):
     # args.opts += [f"train.output_dir={args.output_dir}"]
     default_cfg = OmegaConf.create(dinov2_default_config)
     cfg = OmegaConf.load(args.config_file)
-    cfg = OmegaConf.merge(default_cfg, cfg, OmegaConf.from_cli(args.opts))
+    #cfg = OmegaConf.merge(default_cfg, cfg, OmegaConf.from_cli(args.opts))
     return cfg
 
 

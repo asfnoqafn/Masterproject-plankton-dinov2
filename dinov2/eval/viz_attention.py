@@ -1,16 +1,3 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
-# 
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# 
-#     http://www.apache.org/licenses/LICENSE-2.0
-# 
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 import os
 import sys
 import argparse
@@ -119,6 +106,7 @@ if __name__ == '__main__':
         default=1,
         help="Set number of nodes used.",
     )
+    parser.add_argument("--output_dir2", default=".", type=str, help="Path to output directory.")
     args = parser.parse_args()
 
 
@@ -172,20 +160,27 @@ if __name__ == '__main__':
     w, h = img.shape[1] - img.shape[1] % args.patch_size, img.shape[2] - img.shape[2] % args.patch_size
     img = img[:, :w, :h].unsqueeze(0)
 
-    w_featmap = img.shape[-2] // args.patch_size
-    h_featmap = img.shape[-1] // args.patch_size
+    # Correct calculation for w_featmap and h_featmap based on patch tokens
+    w_featmap = img.shape[-2] // 14
+    h_featmap = img.shape[-1] // 14
 
     attentions = model.get_last_self_attention(img.to(device))
 
     nh = attentions.shape[1] # number of head
 
-    # we keep only the output patch attention
+    num_non_patch_tokens = 1  # CLS token + 4 register tokens
+
     print(f"Shape of attentions: {attentions.shape}")
-    attentions = attentions[0, :, 0, 1:].reshape(nh, -1)
+
+    # Extract attention from CLS token to patch tokens
+    # `num_non_patch_tokens:` skips CLS and register tokens
+    attentions = attentions[0, :, 0, num_non_patch_tokens:].reshape(nh, w_featmap, h_featmap)
+
 
     if args.threshold is not None:
         # we keep only a certain percentage of the mass
-        val, idx = torch.sort(attentions)
+        # The thresholding should also operate on the correctly reshaped attention
+        val, idx = torch.sort(attentions.reshape(nh, -1)) # Reshape to flatten for sorting
         val /= torch.sum(val, dim=1, keepdim=True)
         cumval = torch.cumsum(val, dim=1)
         th_attn = cumval > (1 - args.threshold)
@@ -196,14 +191,17 @@ if __name__ == '__main__':
         # interpolate
         th_attn = nn.functional.interpolate(th_attn.unsqueeze(0), scale_factor=args.patch_size, mode="nearest")[0].cpu().numpy()
 
-    attentions = attentions.reshape(nh, w_featmap, h_featmap)
+    # The attention maps are already in the correct shape (nh, w_featmap, h_featmap)
+    # after the previous line: attentions = attentions[0, :, 0, num_non_patch_tokens:].reshape(nh, w_featmap, h_featmap)
+    # So, no need to reshape again here.
     attentions = nn.functional.interpolate(attentions.unsqueeze(0), scale_factor=args.patch_size, mode="nearest")[0].cpu().numpy()
 
     # save attentions heatmaps
     os.makedirs(args.output_dir, exist_ok=True)
     torchvision.utils.save_image(torchvision.utils.make_grid(img, normalize=True, scale_each=True), os.path.join(args.output_dir, "img.png"))
     for j in range(nh):
-        fname = os.path.join(args.output_dir, "attn-head" + str(j) + ".png")
+        os.makedirs(args.output_dir2, exist_ok=True)
+        fname = os.path.join(args.output_dir2, "attn-head" + str(j) + ".png")
         plt.imsave(fname=fname, arr=attentions[j], format='png')
         print(f"{fname} saved.")
 

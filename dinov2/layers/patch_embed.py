@@ -38,11 +38,11 @@ class PatchEmbed(nn.Module):
         self,
         img_size: Union[int, Tuple[int, int]] = 224,
         patch_size: Union[int, Tuple[int, int]] = 16,
-        in_chans: int = 3,
+        in_chans: int = 1,
         embed_dim: int = 768,
         norm_layer: Optional[Callable] = None,
         flatten_embedding: bool = True,
-        gray_scale: int = 0,
+        gray_scale: int = 2,
     ) -> None:
         super().__init__()
 

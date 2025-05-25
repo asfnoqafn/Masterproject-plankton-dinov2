@@ -21,6 +21,7 @@ logger = logging.getLogger("dinov2")
 
 
 XFORMERS_ENABLED = os.environ.get("XFORMERS_DISABLED") is None
+XFORMERS_ENABLED = False  # Uncomment this line to force disable xFormers
 try:
     if XFORMERS_ENABLED:
         from xformers.ops import (
@@ -61,32 +62,25 @@ class Attention(nn.Module):
         self.proj_drop = nn.Dropout(proj_drop)
         self.use_pytorch_attn = use_pytorch_attn
 
-    def forward(self, x: Tensor) -> Tensor:
-        B, N, D = x.shape
-        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, D // self.num_heads).permute(2, 0, 3, 1, 4)  # 3 b h n d
-        q, k, v = qkv[0] * self.scale, qkv[1], qkv[2]
+    def forward(self, x: Tensor, return_attn=False) -> Tensor:
+            B, N, C = x.shape
+            qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
 
-        if self.use_pytorch_attn:  # TODO: implement attn mask AND args to use pytorch attn
-            x = torch.nn.functional.scaled_dot_product_attention(
-                q,
-                k,
-                v,
-                attn_mask=None,  # TODO: implement attn mask
-                dropout_p=self.attn_drop_p,
-            )
-        else:
+            q, k, v = qkv[0] * self.scale, qkv[1], qkv[2]
             attn = q @ k.transpose(-2, -1)
-            # b h n n
 
             attn = attn.softmax(dim=-1)
             attn = self.attn_drop(attn)
-            # b h n n
 
-            x = (attn @ v).transpose(1, 2).reshape(B, N, D)
+            x = (attn @ v).transpose(1, 2).reshape(B, N, C)
             x = self.proj(x)
-        x = self.proj_drop(x)
-        # b n d
-        return x
+            x = self.proj_drop(x)
+            print(return_attn)
+            # Add those 2 lines
+            if return_attn:
+                print("Attention shape:", attn.shape)
+                return attn
+            return x
 
 
 class MemEffAttention(Attention):
@@ -118,36 +112,23 @@ class MemEffAttention(Attention):
         # attn = F.dropout(attn, p) # p = 0.0 per default
         return attn @ value
 
-    def forward(self, x: Tensor, attn_bias=None, attn_mask=None) -> Tensor:
+    def forward(self, x: Tensor, attn_bias=None, return_attn=False) -> Tensor:
         if not XFORMERS_AVAILABLE:
-            if attn_bias is not None:
-                raise AssertionError("xFormers is required for using nested tensors")
-            return super().forward(x)
-
+            assert attn_bias is None, "xFormers is required for nested tensors usage"
+            # Change this line
+            # return super().forward(x)
+            return super().forward(x, return_attn)
+        print("Using memory efficient attention with xFormers")
+        print("return_attn:", return_attn)
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads)
 
         q, k, v = unbind(qkv, 2)
 
-        if exists(attn_mask):
-            q, k, v = (
-                q.transpose(1, 2),
-                k.transpose(1, 2),
-                v.transpose(1, 2),
-            )
-            # b n h d -> b h n d, h=self.heads, for our own impl of masked attention
-            x = self.masked_mem_eff_attn(
-                q,
-                k,
-                v,
-                attn_bias=attn_bias,
-                attn_mask=attn_mask,
-                mask=None,
-            )
-        else:
-            x = memory_efficient_attention(q, k, v, attn_bias=attn_bias)
+        x = memory_efficient_attention(q, k, v, attn_bias=attn_bias)
         x = x.reshape([B, N, C])
 
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
+

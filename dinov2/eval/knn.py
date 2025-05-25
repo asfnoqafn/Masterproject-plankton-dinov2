@@ -14,7 +14,7 @@ from tqdm import tqdm
 from functools import partial
 from typing import List, Optional
 import matplotlib.pyplot as plt
-from utils import PCA, IncrementalPCAWrapper, visualize_embeddings, save_embeddings
+from utils import visualize_embeddings, save_embeddings
 import wandb
 import numpy as np
 import torch
@@ -519,6 +519,10 @@ def eval_knn(
         num_workers,
         gather_on_cpu=gather_on_cpu,
     )
+
+    print(train_dataset)
+
+
     print(train_features[0])
     print("---------------------------------")
     print(train_features[1])
