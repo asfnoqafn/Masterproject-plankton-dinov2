@@ -19,8 +19,8 @@ PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/repo/Masterproject-plankton-din
  --rdzv-backend=c10d \
  --rdzv-endpoint=localhost:0 \
  --standalone --nnodes=1 --nproc_per_node=$N_GPUS \
- 	/home/hk-project-p0021769/hgf_grc7525/repo/Masterproject-plankton-dinov2/dinov2/eval/folder_attentionmaps.py \
- 	--pretrained_weights="/home/hk-project-p0021769/hgf_grc7525/checkpoints/modelgray12h.rank_0.pth" \
+ 	/home/hk-project-p0021769/hgf_grc7525/repo/Masterproject-plankton-dinov2/dinov2/eval/rgb_folder_attentionmaps.py \
+ 	--pretrained_weights="/home/hk-project-p0021769/hgf_grc7525/checkpoints/model_rgb_50h.rank_0.pth" \
 	--image_path="/home/hk-project-p0021769/hgf_grc7525/data/ecotaxa/pngs/" \
-	--config_file="repo/Masterproject-plankton-dinov2/dinov2/configs/eval/vits14_pretrain_grayscale2.yaml" \
-	--output_dir2="/home/hk-project-p0021769/hgf_grc7525/attention_visualizations/test/" \
+	--config_file="/home/hk-project-p0021769/hgf_grc7525/repo/Masterproject-plankton-dinov2/dinov2/configs/eval/vits14_reg4_rgb.yaml" \
+	--output_dir2="/home/hk-project-p0021769/hgf_grc7525/attention_visualizations/zooscann_rgb_reg/" \

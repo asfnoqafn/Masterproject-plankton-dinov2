@@ -29,9 +29,6 @@ def apply_mask(image, mask, color, alpha=0.5):
 
 
 def random_colors(N, bright=True):
-    """
-    Generate random colors.
-    """
     brightness = 1.0 if bright else 0.7
     hsv = [(i / N, 1, brightness) for i in range(N)]
     colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
@@ -48,10 +45,7 @@ def display_instances(image, mask, fname="test", figsize=(5, 5), blur=False, con
 
     N = 1
     mask = mask[None, :, :]
-    # Generate random colors
     colors = random_colors(N)
-
-    # Show area outside image boundaries.
     height, width = image.shape[:2]
     margin = 0
     ax.set_ylim(height + margin, -margin)
@@ -62,17 +56,13 @@ def display_instances(image, mask, fname="test", figsize=(5, 5), blur=False, con
         color = colors[i]
         _mask = mask[i]
         if blur:
-            _mask = cv2.blur(_mask,(10,10))
-        # Mask
+            _mask = cv2.blur(_mask, (10, 10))
         masked_image = apply_mask(masked_image, _mask, color, alpha)
-        # Mask Polygon
-        # Pad to ensure proper polygons for masks that touch image edges.
         if contour:
             padded_mask = np.zeros((_mask.shape[0] + 2, _mask.shape[1] + 2))
             padded_mask[1:-1, 1:-1] = _mask
             contours = find_contours(padded_mask, 0.5)
             for verts in contours:
-                # Subtract the padding and flip (y, x) to (x, y)
                 verts = np.fliplr(verts) - 1
                 p = Polygon(verts, facecolor="none", edgecolor=color)
                 ax.add_patch(p)
@@ -82,49 +72,91 @@ def display_instances(image, mask, fname="test", figsize=(5, 5), blur=False, con
     return
 
 
+def process_image(img_path, args, model, device, autocast_dtype):
+    img = Image.open(img_path)
+
+    transform = pth_transforms.Compose([
+        pth_transforms.Resize(args.image_size),
+        pth_transforms.ToTensor(),
+    ])
+    img_tensor = transform(img)
+    w, h = img_tensor.shape[1] - img_tensor.shape[1] % args.patch_size, img_tensor.shape[2] - img_tensor.shape[2] % args.patch_size
+    img_tensor = img_tensor[:, :w, :h].unsqueeze(0).to(device)
+
+    w_featmap = img_tensor.shape[-2] // 14
+    h_featmap = img_tensor.shape[-1] // 14
+
+    attentions = model.get_last_self_attention(img_tensor)
+
+    nh = attentions.shape[1]
+    num_non_patch_tokens = 1 + 4
+
+    cls_to_all = attentions[0, :, 0, :]
+    patch_indices = list(range(num_non_patch_tokens, cls_to_all.shape[-1]))
+
+
+    # Compute attention mass
+    cls_to_cls = cls_to_all[:, 0]  # (num_heads,)
+    
+    cls_to_patches = cls_to_all[:, patch_indices].sum(dim=1)  # (num_heads,)
+
+    # Print per-head breakdown
+    print("CLS token attention distribution:")
+    for h in range(cls_to_all.shape[0]):
+        print(f"Head {h}: CLS→CLS: {cls_to_cls[h].item():.4f}, CLS→Patches: {cls_to_patches[h].item():.4f}")
+
+    print("\nAverage over heads:")
+    print(f"CLS→CLS: {cls_to_cls.mean().item():.4f}")
+    print(f"CLS→Patches: {cls_to_patches.mean().item():.4f}")
+
+    cls_to_patch_attn = cls_to_all[:, patch_indices].reshape(nh, h_featmap, w_featmap)
+    cls_to_patch_attn = nn.functional.interpolate(cls_to_patch_attn.unsqueeze(0), scale_factor=args.patch_size, mode="nearest")[0].cpu().numpy()
+
+    img_name = os.path.splitext(os.path.basename(img_path))[0]
+    os.makedirs(args.output_dir2, exist_ok=True)
+
+    for j in range(nh):
+        fname = os.path.join(args.output_dir2, f"{img_name}_cls_attn_to_patch_head{j}.png")
+        plt.imsave(fname=fname, arr=cls_to_patch_attn[j], format='png')
+        print(f"{fname} saved.")
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Visualize Self-Attention maps')
     parser.add_argument('--arch', default='vit_small', type=str,
         choices=['vit_tiny', 'vit_small', 'vit_base'], help='Architecture (support only ViT atm).')
-    parser.add_argument('--patch_size', default=8, type=int, help='Patch resolution of the model.')
+    parser.add_argument('--patch_size', default=14, type=int, help='Patch resolution of the model.')
     parser.add_argument('--pretrained_weights', default='', type=str,
         help="Path to pretrained weights to load.")
     parser.add_argument("--checkpoint_key", default="teacher", type=str,
         help='Key to use in the checkpoint (example: "teacher")')
-    parser.add_argument("--image_path", default=None, type=str, help="Path of the image to load.")
+    parser.add_argument("--image_path", default=None, type=str, help="Path to folder of images to load.")
     parser.add_argument("--image_size", default=(224, 224), type=int, nargs="+", help="Resize image.")
     parser.add_argument('--output_dir', default='.', help='Path where to save visualizations.')
-    parser.add_argument("--threshold", type=float, default=None, help="""We visualize masks
-        obtained by thresholding the self-attention maps to keep xx% of the mass.""")
+    parser.add_argument("--threshold", type=float, default=None, help="Threshold for attention mask visualization.")
     parser.add_argument('--model_type', default='dinov2', type=str, choices=['dinov2', 'torchvision'],
                         help='Type of model to use for evaluation.')
     parser.add_argument("--config_file", default=None, type=str, help="Path to config file.")
     parser.add_argument("--run_name", default="asd", type=str, help="Name of the run for logging purposes.")
-    parser.add_argument(
-        "--num_nodes",
-        type=int,
-        default=1,
-        help="Set number of nodes used.",
-    )
+    parser.add_argument("--num_nodes", type=int, default=1, help="Set number of nodes used.")
     parser.add_argument("--output_dir2", default=".", type=str, help="Path to output directory.")
     args = parser.parse_args()
 
-
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
     # build model
     model, autocast_dtype = setup_and_build_model(args, do_eval=True , model_type=args.model_type)
     for p in model.parameters():
         p.requires_grad = False
     model.eval()
     model.to(device)
+
     if os.path.isfile(args.pretrained_weights):
         state_dict = torch.load(args.pretrained_weights, map_location="cpu")
         if args.checkpoint_key is not None and args.checkpoint_key in state_dict:
             print(f"Take key {args.checkpoint_key} in provided checkpoint dict")
             state_dict = state_dict[args.checkpoint_key]
-        # remove `module.` prefix
         state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
-        # remove `backbone.` prefix induced by multicrop wrapper
         state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
         msg = model.load_state_dict(state_dict, strict=False)
         print('Pretrained weights found at {} and loaded with msg: {}'.format(args.pretrained_weights, msg))
@@ -134,7 +166,7 @@ if __name__ == '__main__':
         if args.arch == "vit_small" and args.patch_size == 16:
             url = "dino_deitsmall16_pretrain/dino_deitsmall16_pretrain.pth"
         elif args.arch == "vit_small" and args.patch_size == 8:
-            url = "dino_deitsmall8_300ep_pretrain/dino_deitsmall8_300ep_pretrain.pth"  # model used for visualizations in our paper
+            url = "dino_deitsmall8_300ep_pretrain/dino_deitsmall8_300ep_pretrain.pth"
         elif args.arch == "vit_base" and args.patch_size == 16:
             url = "dino_vitbase16_pretrain/dino_vitbase16_pretrain.pth"
         elif args.arch == "vit_base" and args.patch_size == 8:
@@ -146,101 +178,13 @@ if __name__ == '__main__':
         else:
             print("There is no reference weights available for this model => We use random weights.")
 
+    # Process all images in folder
+    image_folder = args.image_path
+    valid_exts = ('.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff')
+    image_files = [os.path.join(image_folder, f) for f in os.listdir(image_folder) if f.lower().endswith(valid_exts)]
 
-    img = Image.open(args.image_path)
+    print(f"Found {len(image_files)} images in {image_folder}")
 
-    transform = pth_transforms.Compose([
-        pth_transforms.Resize(args.image_size),
-        pth_transforms.ToTensor(),
-        #pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
-    img = transform(img)
-
-    # make the image divisible by the patch size
-    w, h = img.shape[1] - img.shape[1] % args.patch_size, img.shape[2] - img.shape[2] % args.patch_size
-    img = img[:, :w, :h].unsqueeze(0)
-
-    # Correct calculation for w_featmap and h_featmap based on patch tokens
-    w_featmap = img.shape[-2] // 14
-    h_featmap = img.shape[-1] // 14
-
-    attentions = model.get_last_self_attention(img.to(device))
-
-    nh = attentions.shape[1] # number of head
-
-    num_non_patch_tokens = 1 + 4 # CLS token + 4 register tokens
-
-
-    cls_attn = attentions[0, :, 0, :]
-    cls_to_all = cls_attn
-    patch_indices = list(range(1, cls_to_all.shape[-1]))
-    if num_non_patch_tokens > 1:
-        register_indices = list(range(1, 5))
-        cls_to_registers = cls_to_all[:, register_indices].sum(dim=1)  # (num_heads,)
-        for h in range(cls_attn.shape[0]):
-            print(cls_to_registers[h].item())
-        print(f"CLS→Regs: {cls_to_registers.mean().item():.4f}")
-        patch_indices = list(range(5, cls_to_all.shape[-1]))
-    cls_index = 0
-    
-    
-
-    # Compute attention mass
-    cls_to_cls = cls_to_all[:, cls_index]  # (num_heads,)
-    
-    cls_to_patches = cls_to_all[:, patch_indices].sum(dim=1)  # (num_heads,)
-
-    # Print per-head breakdown
-    print("CLS token attention distribution:")
-    for h in range(cls_attn.shape[0]):
-        print(f"Head {h}: CLS→CLS: {cls_to_cls[h].item():.4f}, CLS→Patches: {cls_to_patches[h].item():.4f}")
-
-    print("\nAverage over heads:")
-    print(f"CLS→CLS: {cls_to_cls.mean().item():.4f}")
-    print(f"CLS→Patches: {cls_to_patches.mean().item():.4f}")
-
-    cls_to_patch_attn = cls_to_all[:, patch_indices]  # (num_heads, num_patches)
-    cls_to_patch_attn = cls_to_patch_attn.reshape(nh, h_featmap, w_featmap)
-
-    # Upsample to image size
-    cls_to_patch_attn = nn.functional.interpolate(cls_to_patch_attn.unsqueeze(0), scale_factor=args.patch_size, mode="nearest")[0].cpu().numpy()
-
-    # Save per-head visualization
-    for j in range(nh):
-        fname = os.path.join(args.output_dir2, f"cls_attn_to_patch_head{j}.png")
-        plt.imsave(fname=fname, arr=cls_to_patch_attn[j], format='png')
-        print(f"{fname} saved.")
-
-
-    print(f"Shape of attentions: {attentions.shape}")
-
-
-    attentions = attentions[0, :, 0, num_non_patch_tokens:].reshape(nh, w_featmap, h_featmap)
-    print(f"Shape of attentions after reshaping: {attentions.shape}")
-    
-    if args.threshold is not None:
-        val, idx = torch.sort(attentions.reshape(nh, -1))
-        val /= torch.sum(val, dim=1, keepdim=True)
-        cumval = torch.cumsum(val, dim=1)
-        th_attn = cumval > (1 - args.threshold)
-        idx2 = torch.argsort(idx)
-        for head in range(nh):
-            th_attn[head] = th_attn[head][idx2[head]]
-        th_attn = th_attn.reshape(nh, w_featmap, h_featmap).float()
-        # interpolate
-        th_attn = nn.functional.interpolate(th_attn.unsqueeze(0), scale_factor=args.patch_size, mode="nearest")[0].cpu().numpy()
-
-    attentions = nn.functional.interpolate(attentions.unsqueeze(0), scale_factor=args.patch_size, mode="nearest")[0].cpu().numpy()
-
-    os.makedirs(args.output_dir, exist_ok=True)
-    torchvision.utils.save_image(torchvision.utils.make_grid(img, normalize=True, scale_each=True), os.path.join(args.output_dir, "img.png"))
-    for j in range(nh):
-        os.makedirs(args.output_dir2, exist_ok=True)
-        fname = os.path.join(args.output_dir2, "attn-head" + str(j) + ".png")
-        plt.imsave(fname=fname, arr=attentions[j], format='png')
-        print(f"{fname} saved.")
-
-    if args.threshold is not None:
-        image = skimage.io.imread(os.path.join(args.output_dir, "img.png"))
-        for j in range(nh):
-            display_instances(image, th_attn[j], fname=os.path.join(args.output_dir, "mask_th" + str(args.threshold) + "_head" + str(j) +".png"), blur=False)
+    for img_path in image_files:
+        print(f"Processing {img_path}")
+        process_image(img_path, args, model, device, autocast_dtype)

@@ -42,7 +42,7 @@ class PatchEmbed(nn.Module):
         embed_dim: int = 768,
         norm_layer: Optional[Callable] = None,
         flatten_embedding: bool = True,
-        gray_scale: int = 2,
+        gray_scale: int = 0,
     ) -> None:
         super().__init__()
 

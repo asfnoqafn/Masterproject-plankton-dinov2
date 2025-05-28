@@ -75,10 +75,8 @@ class Attention(nn.Module):
             x = (attn @ v).transpose(1, 2).reshape(B, N, C)
             x = self.proj(x)
             x = self.proj_drop(x)
-            print(return_attn)
             # Add those 2 lines
             if return_attn:
-                print("Attention shape:", attn.shape)
                 return attn
             return x
 
@@ -118,8 +116,6 @@ class MemEffAttention(Attention):
             # Change this line
             # return super().forward(x)
             return super().forward(x, return_attn)
-        print("Using memory efficient attention with xFormers")
-        print("return_attn:", return_attn)
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads)
 
