@@ -753,13 +753,26 @@ class DinoVisionTransformer(nn.Module):
             
         x = self.prepare_tokens_with_masks(x, masks)
         
-        # Run through model, at the last block just return the attention.
+        # Run  hrough model, at the last block just return the attention.
         for i, blk in enumerate(self.blocks):
             if i < len(self.blocks) - 1:
                 x = blk(x)
 
             else: 
                 return blk(x, return_attention=True)
+
+    def get_all_self_attention(self, x, masks=None):
+        if isinstance(x, list):
+            return self.forward_features_list(x, masks)
+
+        x = self.prepare_tokens_with_masks(x, masks)
+        all_attentions = []
+        # Run through model, at each block just return the attention.
+        for i, blk in enumerate(self.blocks):
+            x, attn = blk(x, return_attention=True)
+            all_attentions.append(attn)
+
+        return all_attentions
 
 
 

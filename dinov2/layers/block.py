@@ -92,34 +92,31 @@ class Block(nn.Module):
         self.sample_drop_ratio = drop_path
 
     def forward(self, x: Tensor, return_attention=False) -> Tensor:
-        def attn_residual_func(x: Tensor) -> Tensor:
-            return self.ls1(self.attn(self.norm1(x)))
+        attn_map = None
+
+        if return_attention:
+            attention_output, attn_map = self.attn(self.norm1(x), return_attn=True)
+            x = x + self.ls1(attention_output)
+        else:
+            x = x + self.ls1(self.attn(self.norm1(x)))
+
 
         def ffn_residual_func(x: Tensor) -> Tensor:
             return self.ls2(self.mlp(self.norm2(x)))
-        
-        # Add this 2 lines
-        if return_attention:
-            return self.attn(self.norm1(x), return_attn=True)
-            
+
         if self.training and self.sample_drop_ratio > 0.1:
-            # the overhead is compensated only for a drop path rate larger than 0.1
-            x = drop_add_residual_stochastic_depth(
-                x,
-                residual_func=attn_residual_func,
-                sample_drop_ratio=self.sample_drop_ratio,
-            )
             x = drop_add_residual_stochastic_depth(
                 x,
                 residual_func=ffn_residual_func,
                 sample_drop_ratio=self.sample_drop_ratio,
             )
         elif self.training and self.sample_drop_ratio > 0.0:
-            x = x + self.drop_path1(attn_residual_func(x))
-            x = x + self.drop_path1(ffn_residual_func(x))  # FIXME: drop_path2
+            x = x + self.drop_path2(ffn_residual_func(x)) # Fixed to drop_path2
         else:
-            x = x + attn_residual_func(x)
-            x = x + ffn_residual_func(x)
+            x = x + ffn_residual_func(x) # Normal forward path for FFN
+
+        if return_attention:
+            return x, attn_map # Return both output and attention map
         return x
 
 

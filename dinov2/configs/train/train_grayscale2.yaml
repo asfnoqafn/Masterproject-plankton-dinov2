@@ -61,7 +61,7 @@ ibot:
   head_hidden_dim: 2048
 train:
   batch_size_per_gpu: 64 #256
-  dataset_path: " "
+  dataset_path: "LMDBDataset:split=ALL:root=/home/hk-project-p0021769/hgf_grc7525/workspaces/hkfswork/hgf_grc7525-hiwi/data/lmdb_with_labels/:extra=*"
   output_dir: '/home/hk-project-p0021769/hgf_grc7525/repo/output/'
   saveckp_freq: 10
   seed: 0
@@ -87,7 +87,7 @@ student:
   qkv_bias: true
   proj_bias: true
   ffn_bias: true
-  num_register_tokens: 4
+  num_register_tokens: 0
   interpolate_antialias: false
   interpolate_offset: 0.1
   gray_scale: 2

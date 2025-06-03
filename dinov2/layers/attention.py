@@ -75,9 +75,8 @@ class Attention(nn.Module):
             x = (attn @ v).transpose(1, 2).reshape(B, N, C)
             x = self.proj(x)
             x = self.proj_drop(x)
-            # Add those 2 lines
             if return_attn:
-                return attn
+                return x, attn
             return x
 
 

@@ -5,7 +5,7 @@
 #SBATCH -e /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_grc7525/repo/output/log_%j.out
 #SBATCH --time 00:03:00
-#SBATCH --partition=accelerated
+#SBATCH --partition=accelerated-h100
 
 BATCH_S=128
 N_GPUS=1
@@ -23,4 +23,4 @@ PYTHONPATH=/home/hk-project-p0021769/hgf_grc7525/repo/Masterproject-plankton-din
  	--pretrained_weights="/home/hk-project-p0021769/hgf_grc7525/checkpoints/modelgray12h.rank_0.pth" \
 	--image_path="/home/hk-project-p0021769/hgf_grc7525/data/ecotaxa/pngs/" \
 	--config_file="repo/Masterproject-plankton-dinov2/dinov2/configs/eval/vits14_pretrain_grayscale2.yaml" \
-	--output_dir2="/home/hk-project-p0021769/hgf_grc7525/attention_visualizations/test/" \
+	--output_dir2="/home/hk-project-p0021769/hgf_grc7525/attention_visualizations/test2/" \

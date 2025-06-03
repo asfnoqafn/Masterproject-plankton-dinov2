@@ -86,39 +86,48 @@ def process_image(img_path, args, model, device, autocast_dtype):
     w_featmap = img_tensor.shape[-2] // 14
     h_featmap = img_tensor.shape[-1] // 14
 
-    attentions = model.get_last_self_attention(img_tensor)
-
-    nh = attentions.shape[1]
-    num_non_patch_tokens = 1 + 4
-
-    cls_to_all = attentions[0, :, 0, :]
-    patch_indices = list(range(num_non_patch_tokens, cls_to_all.shape[-1]))
-
-
-    # Compute attention mass
-    cls_to_cls = cls_to_all[:, 0]  # (num_heads,)
-    
-    cls_to_patches = cls_to_all[:, patch_indices].sum(dim=1)  # (num_heads,)
-
-    # Print per-head breakdown
-    print("CLS token attention distribution:")
-    for h in range(cls_to_all.shape[0]):
-        print(f"Head {h}: CLS→CLS: {cls_to_cls[h].item():.4f}, CLS→Patches: {cls_to_patches[h].item():.4f}")
-
-    print("\nAverage over heads:")
-    print(f"CLS→CLS: {cls_to_cls.mean().item():.4f}")
-    print(f"CLS→Patches: {cls_to_patches.mean().item():.4f}")
-
-    cls_to_patch_attn = cls_to_all[:, patch_indices].reshape(nh, h_featmap, w_featmap)
-    cls_to_patch_attn = nn.functional.interpolate(cls_to_patch_attn.unsqueeze(0), scale_factor=args.patch_size, mode="nearest")[0].cpu().numpy()
+    # Get all attention maps
+    all_attentions = model.get_all_self_attention(img_tensor) # Assuming this function exists in your model
 
     img_name = os.path.splitext(os.path.basename(img_path))[0]
     os.makedirs(args.output_dir2, exist_ok=True)
 
-    for j in range(nh):
-        fname = os.path.join(args.output_dir2, f"{img_name}_cls_attn_to_patch_head{j}.png")
-        plt.imsave(fname=fname, arr=cls_to_patch_attn[j], format='png')
-        print(f"{fname} saved.")
+    attention_maps_list = []
+    
+    for layer_idx, attentions in enumerate(all_attentions):
+        print(f"Layer {layer_idx}: attentions shape: {attentions.shape}, attentions sum: {attentions.sum().item():.4f}")
+        nh = attentions.shape[1]
+        num_non_patch_tokens = 1 + 4
+
+        cls_to_all = attentions[0, :, 0, :]
+        patch_indices = list(range(num_non_patch_tokens, cls_to_all.shape[-1]))
+        #print(f"Layer {layer_idx}: CLS token attention shape: {cls_to_all.shape}, Patch indices: {patch_indices}")
+        # Compute attention mass
+        cls_to_cls = cls_to_all[:, 0]  # (num_heads,)
+        cls_to_patches = cls_to_all[:, patch_indices].sum(dim=1)  # (num_heads,)
+
+        print(f"\nLayer {layer_idx}: CLS token attention distribution:")
+        for h in range(cls_to_all.shape[0]):
+            print(f"Head {h}: CLS→CLS: {cls_to_cls[h].item():.4f}, CLS→Patches: {cls_to_patches[h].item():.4f}")
+
+        print(f"Layer {layer_idx}: Average over heads:")
+        print(f"CLS→CLS: {cls_to_cls.mean().item():.4f}")
+        print(f"CLS→Patches: {cls_to_patches.mean().item():.4f}")
+
+        cls_to_patch_attn = cls_to_all[:, patch_indices].reshape(nh, h_featmap, w_featmap)
+        cls_to_patch_attn = nn.functional.interpolate(cls_to_patch_attn.unsqueeze(0), scale_factor=args.patch_size, mode="nearest")[0].cpu().numpy()
+        
+        attention_to_non_red = cls_to_cls.mean().item() + cls_to_patches.mean().item()
+        # Store attention maps for this layer
+        layer_attention_maps = []
+        for j in range(nh):
+            fname = os.path.join(args.output_dir2, f"{img_name}_layer{layer_idx}_head{j}_#####_{1-cls_to_patches[j]}.png")
+            plt.imsave(fname=fname, arr=cls_to_patch_attn[j], format='png')
+            #print(f"{fname} saved.")
+            layer_attention_maps.append(cls_to_patch_attn[j])
+        attention_maps_list.append(layer_attention_maps)
+    
+    return attention_maps_list # Return the list of all attention maps
 
 
 if __name__ == '__main__':
@@ -187,4 +196,5 @@ if __name__ == '__main__':
 
     for img_path in image_files:
         print(f"Processing {img_path}")
-        process_image(img_path, args, model, device, autocast_dtype)
+        # Capture the returned list of attention maps if you need them later
+        all_attention_maps_for_image = process_image(img_path, args, model, device, autocast_dtype)
