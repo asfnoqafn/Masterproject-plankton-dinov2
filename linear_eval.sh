@@ -4,8 +4,8 @@
 #SBATCH --cpus-per-gpu=32
 #SBATCH -e /home/hk-project-p0021769/hgf_rth0695/output/log_%j.err
 #SBATCH --output /home/hk-project-p0021769/hgf_rth0695/output/log_%j.out
-#SBATCH --time 00:10:00
-#SBATCH --partition=dev_accelerated
+#SBATCH --time 03:00:00
+#SBATCH --partition=accelerated
 BATCH_S=128
 N_GPUS=1
 N_CPUS=$((32 * $N_GPUS))
@@ -20,9 +20,9 @@ OMP_NUM_THREADS=64 PYTHONPATH=/home/hk-project-p0021769/hgf_rth0695/Masterprojec
  --config-file dinov2/configs/eval/vits14_reg4_pretrain.yaml \
  --output-dir /home/hk-project-p0021769/hgf_rth0695/output/linear/ZooScanNetDist\
  --linear_output_dir /home/hk-project-p0021769/hgf_rth0695/output/linear/ZooScanNetDist\
- --train_dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet:extra=*" \
- --val_dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet:extra=*" \
- --val_class_mapping_fpath="/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/TrainTestSplits/ZooScanNet/VAL_label_map.json" \
+ --train_dataset="LMDBDataset:split=TRAIN:root=/home/hk-project-p0021769/hgf_grc7525/workspaces/hkfswork/hgf_grc7525-hiwi/data/TrainTestSplits/ZooScanNet:extra=*" \
+ --val_dataset="LMDBDataset:split=VAL:root=/home/hk-project-p0021769/hgf_grc7525/workspaces/hkfswork/hgf_grc7525-hiwi/data/TrainTestSplits/ZooScanNet:extra=*" \
+ --val_class_mapping_fpath="/home/hk-project-p0021769/hgf_grc7525/workspaces/hkfswork/hgf_grc7525-hiwi/data/TrainTestSplits/ZooScanNet/VAL_label_map.json" \
  --pretrained-weights 'checkpoints/dinov2_vits14_reg4_pretrain.pth' \
  --run_name 'linear_eval_vits14_ZooScanNetDist' \
  --hierarchy_file_path="/home/hk-project-p0021769/hgf_rth0695/Masterproject-plankton-dinov2/hierarchy_zoo_scan.json" \
