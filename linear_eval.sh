@@ -26,4 +26,4 @@ OMP_NUM_THREADS=64 PYTHONPATH=/home/hk-project-p0021769/hgf_rth0695/Masterprojec
  --pretrained-weights 'checkpoints/dinov2_vits14_reg4_pretrain.pth' \
  --run_name 'linear_eval_vits14_ZooScanNetDist' \
  --hierarchy_file_path="/home/hk-project-p0021769/hgf_rth0695/Masterproject-plankton-dinov2/hierarchy_zoo_scan.json" \
- --loss_function="hierarchical" \
+ --loss_function="cross_entropy" \
