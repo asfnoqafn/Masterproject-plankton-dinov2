@@ -61,7 +61,10 @@ class ExtendedVisionDataset(VisionDataset):
         if self.transforms is not None:
             image, target = self.transforms(image, target)
 
-        return image, target, metadata
+        if metadata is not None:
+            return image, target, metadata
+        else:
+            return image, target
 
     def __len__(self) -> int:
         raise NotImplementedError

@@ -52,14 +52,6 @@ def default_setup(args, output_dir, do_eval: bool = False):
 
     global logger
 
-    if distributed.is_main_process():
-        setup_logging(
-            args=args,
-            output=output_dir,
-            level=logging.INFO,
-            do_eval=do_eval,
-        )
-
     logger = logging.getLogger("dinov2")
 
     utils.fix_random_seeds(seed + rank)

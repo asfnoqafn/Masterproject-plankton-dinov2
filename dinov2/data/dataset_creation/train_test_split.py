@@ -2,13 +2,14 @@ import os
 import lmdb
 import json
 import sys
-import imageio.v3 as iio
-import numpy as np
 from tqdm import tqdm
 import psutil
 from sklearn.model_selection import train_test_split
 import argparse
-import difflib
+import numpy as np
+from torchvision.io import decode_image, ImageReadMode
+from torchvision.transforms import v2
+import torch
 
 def get_available_memory():
     """Get available memory and return a safe allocation size for LMDB."""
@@ -40,6 +41,12 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, lmdb_path_meta, img_data, lab
     env_labels = lmdb.open(lmdb_path_label, map_size=MAP_SIZE_META)
     env_meta = lmdb.open(lmdb_path_meta, map_size=MAP_SIZE_META)
 
+    transforms_list = [
+        v2.Resize(223,max_size= 224, antialias=True),
+        v2.Pad(112, fill=255, padding_mode='constant'),
+    ]
+    transform = v2.Compose(transforms_list)
+
     with (
         env_imgs.begin(write=True) as txn_imgs,
         env_labels.begin(write=True) as txn_labels,
@@ -49,9 +56,28 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, lmdb_path_meta, img_data, lab
             if img_key != label_key:
                 print(f"Warning: Mismatched keys! img_key: {img_key}, label_key: {label_key}")
                 continue  # Skip if keys don't match
+            # check if image encoded is too small after using the resize function
+            image = torch.frombuffer(np.copy(img_encoded), dtype=torch.uint8)
+            image = decode_image(image, ImageReadMode.RGB)
+            image = (image / 255.0).to(torch.float32)
+            try:
+                resized_image = transform(image)
+            except:
+                print(f"Warning: Image too small! img_key: {img_key}, label_key: {label_key}")
+                print("Image shape: ", image.shape)
+                continue
+            if resized_image.shape[-1] == 0 or resized_image.shape[-2] == 0:
+                print(f"Warning: Image too small! img_key: {img_key}, label_key: {label_key}")
+                print("Resized image shape: ", resized_image.shape)
+                continue
 
             # Convert label to integer ID using the provided label map
             label_str: str = label.decode("utf-8").lower()  # Assuming label is bytes
+            label_str = label_str.lower()
+            label_str = label_str.replace(" ", "")
+            label_str = label_str.replace("_", "")
+            label_str = label_str.replace("-", "")
+            label_str = label_str.replace("'", "") # TODO ugly
             if label_str not in label_map:
                 #print(f"Warning: Label {label_str} not found in label_map.")
                 continue
@@ -69,6 +95,8 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, lmdb_path_meta, img_data, lab
 
     # Save label map to a JSON file, if required
     if label_map_path:
+        os.makedirs(os.path.dirname(label_map_path), exist_ok=True)
+        
         with open(label_map_path, "w") as f:
             json.dump(label_map, f)
 
@@ -76,7 +104,7 @@ def save_lmdb_data(lmdb_path_img, lmdb_path_label, lmdb_path_meta, img_data, lab
     env_labels.close()
     env_meta.close()
 
-def load_all_datasets(main_folder):
+def load_all_datasets(main_folder, multiple_folders=False):
     """
     Load all datasets in the given folder and return combined image and label data.
     """
@@ -85,13 +113,24 @@ def load_all_datasets(main_folder):
     meta_data = []
     print(f"Loading datasets from {main_folder}")
     for dataset in sorted(os.listdir(main_folder)):
+        if(dataset == "ISIISNet_subset_lmdb"):
+            continue
         print(f"Loading dataset: {dataset}")
-        dataset_path = os.path.join(main_folder, dataset)
-        for subdir in sorted(os.listdir(dataset_path)):
-            print(f"Loading dataset: {subdir}")
-            datasetpath_lmdb = os.path.join(dataset_path, subdir)
+        if(multiple_folders):
+            print("Loading multiple folders")
+            for dataset_sub in sorted(os.listdir(os.path.join(main_folder, dataset))):
+                datasetpath_lmdb = os.path.join(main_folder, dataset, dataset_sub)
+                print("dataset path: ", datasetpath_lmdb) 
+                if datasetpath_lmdb.endswith("_imgs") or datasetpath_lmdb.endswith('images'):
+                    img_data.extend(load_lmdb_data(datasetpath_lmdb))
+                elif datasetpath_lmdb.endswith("_labels") or datasetpath_lmdb.endswith('labels'):
+                    label_data.extend(load_lmdb_data(datasetpath_lmdb))
+                else:
+                    print(f"Skipping {datasetpath_lmdb}")
+                print(f"Loaded dataset: {dataset}")
+        else:
+            datasetpath_lmdb = os.path.join(main_folder, dataset)
             print("dataset path: ", datasetpath_lmdb) 
-            
             if datasetpath_lmdb.endswith("_imgs") or datasetpath_lmdb.endswith('images'):
                 img_data.extend(load_lmdb_data(datasetpath_lmdb))
             elif datasetpath_lmdb.endswith("_labels") or datasetpath_lmdb.endswith('labels'):
@@ -111,6 +150,9 @@ def is_in_blacklist(label, blacklist):
             return True
     return False
 
+
+def calculate_label_map(label_data, blacklist):
+    blacklist = []
 
 def split_and_save_data(main_folder, output_folder, test_size=0.2):
     """
@@ -146,9 +188,38 @@ def split_and_save_data(main_folder, output_folder, test_size=0.2):
                 next_id += 1
 
     print(f"Generated label map with {len(label_map)} classes.")
+    return label_map
 
+
+def split_and_save_data(main_folder, output_folder, test_size=0.2, multiple_folders=False):
+    """
+    Loads all datasets, splits the data into train and test, and saves them in the output folder.
+    """
+    os.makedirs(output_folder, exist_ok=True)
+
+    print("Multiple folders: ", multiple_folders)
+    img_data, label_data = load_all_datasets(main_folder, multiple_folders=multiple_folders)
+
+    print(f"Total data loaded: {len(img_data)} images and {len(label_data)} labels.")
+
+    # blacklist = ['artifacts', 'artifacts_edge', 'unknown_blobs_and_smudges', 'unknown_sticks', 'unknown_unclassified', 
+    #              'artefact', 'badfocus', 'dark', 'light', 'streak', 'vertical line', 'artefact']
+    
+    # when having to use empty blacklist
+    
     train_imgs, test_imgs = train_test_split(img_data, test_size=test_size, shuffle=True, random_state=43)
     train_labels, test_labels = train_test_split(label_data, test_size=test_size, shuffle=True, random_state=43)
+    intermediate_label_map = calculate_label_map(train_labels, [])
+    test_label_map = calculate_label_map(test_labels, [])
+    train_label_map = {key: value for key, value in test_label_map.items() if key in intermediate_label_map.keys()} 
+    highest_val = max(train_label_map.values())
+    for key, _ in test_label_map.items(): 
+        if key not in train_label_map.keys():
+            train_label_map[key] = highest_val + 1
+            highest_val += 1
+
+    print(f"Train label map: {train_label_map}")
+    print(f"Test label map: {test_label_map}")
     train_meta, test_meta = train_test_split(meta_data, test_size=test_size, shuffle=True, random_state=43)
 
     # Save the split data to LMDB
@@ -158,8 +229,8 @@ def split_and_save_data(main_folder, output_folder, test_size=0.2):
         os.path.join(output_folder, "-TRAIN_meta"),
         train_imgs,
         train_labels,
+        train_label_map,
         train_meta,
-        label_map,
         os.path.join(output_folder, "TRAIN_label_map.json")
     )
     save_lmdb_data(
@@ -168,13 +239,12 @@ def split_and_save_data(main_folder, output_folder, test_size=0.2):
         os.path.join(output_folder, "-VAL_meta"),
         test_imgs,
         test_labels,
+        test_label_map,
         test_meta,
-        label_map,
         os.path.join(output_folder, "VAL_label_map.json")
     )
 
     print(f"Finished processing and saving datasets to {output_folder}")
-
 
 def get_args_parser():
     parser = argparse.ArgumentParser()
@@ -189,11 +259,14 @@ def get_args_parser():
     parser.add_argument(
         "--min_size", type=int, help="Minimum image size (width and height)", default=0.0
     )
+    parser.add_argument(
+        "--multiple-folders", type=bool, help="Should be true if multiple datasets should be combined for one train test split", default=False
+    )
 
     return parser
 
 def main(args):
-    split_and_save_data(main_folder=args.dataset_path , output_folder=args.lmdb_dir_name, test_size=0.2)
+    split_and_save_data(main_folder=args.dataset_path , output_folder=args.lmdb_dir_name, test_size=0.2, multiple_folders=args.multiple_folders)
 
 if __name__ == "__main__":
     #split_and_save_data(main_folder="data/seaone_raw", output_folder="data/seaone_raw_lmdb", test_size=0.00001)

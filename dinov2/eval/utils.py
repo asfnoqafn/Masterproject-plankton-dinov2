@@ -14,6 +14,8 @@ from torchmetrics import MetricCollection
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import wandb
+import json
+
 
 
 import dinov2.distributed as distributed
@@ -206,7 +208,7 @@ class ModelWithIntermediateLayers(nn.Module):
 def evaluate(
     model: nn.Module,
     data_loader,
-    postprocessors: Dict[str, nn.Module],
+    postprocessor: nn.Module,
     metrics: Dict[str, MetricCollection],
     device: torch.device,
     criterion: Optional[nn.Module] = None,
@@ -222,6 +224,9 @@ def evaluate(
         delimiter="  ",
         verbose=distributed.is_main_process(),
     )
+    logger.info(f"Metrics inputs: {metrics.keys()}")
+    for k, metric in metrics.items():
+        logger.info(f"{k}: {metric}")
     header = "Test:"
 
     for samples, targets, *_ in metric_logger.log_every(data_loader, 10, header):
@@ -233,7 +238,7 @@ def evaluate(
             metric_logger.update(loss=loss.item())
 
         for k, metric in metrics.items():
-            metric_inputs = postprocessors[k](outputs, targets)
+            metric_inputs = postprocessor(outputs, targets)
             metric.update(**metric_inputs)
 
     metric_logger.synchronize_between_processes()
@@ -433,3 +438,45 @@ class IncrementalPCAWrapper:
         self.fit(data)
         return self.transform(data)
 
+class HierarchyNode:
+    def __init__(self, name):
+        self.name = name
+        self.children = []
+        self.parent = None
+
+    def add_child(self, child):
+        child.parent = self
+        self.children.append(child)
+
+    def is_descendant(self, node_name):
+        """Check if a given node name is a descendant."""
+        for child in self.children:
+            if child.name == node_name or child.is_descendant(node_name):
+                return True
+        return False
+
+def deserialize_hierarchy(data):
+    """Reconstruct the hierarchy tree from a dictionary."""
+    node = HierarchyNode(data["name"])
+    for child_data in data["children"]:
+        child_node = deserialize_hierarchy(child_data)
+        node.add_child(child_node)
+    return node
+
+def load_hierarchy_from_file(file_path):
+    """Load the hierarchy tree from a JSON file."""
+    with open(file_path, "r") as file:
+        data = json.load(file)
+    return deserialize_hierarchy(data)
+
+def serialize_hierarchy(node):
+    """Convert the hierarchy tree to a dictionary for JSON serialization."""
+    return {
+        "name": node.name,
+        "children": [serialize_hierarchy(child) for child in node.children]
+    }
+
+def save_hierarchy_to_file(hierarchy_root, file_path):
+    """Save the hierarchy tree to a JSON file."""
+    with open(file_path, "w") as file:
+        json.dump(serialize_hierarchy(hierarchy_root), file, indent=4)
