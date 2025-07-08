@@ -208,7 +208,7 @@ class ModelWithIntermediateLayers(nn.Module):
 def evaluate(
     model: nn.Module,
     data_loader,
-    postprocessors: Dict[str, nn.Module],
+    postprocessor: nn.Module,
     metrics: Dict[str, MetricCollection],
     device: torch.device,
     criterion: Optional[nn.Module] = None,
@@ -224,6 +224,9 @@ def evaluate(
         delimiter="  ",
         verbose=distributed.is_main_process(),
     )
+    logger.info(f"Metrics inputs: {metrics.keys()}")
+    for k, metric in metrics.items():
+        logger.info(f"{k}: {metric}")
     header = "Test:"
 
     for samples, targets, *_ in metric_logger.log_every(data_loader, 10, header):
@@ -235,7 +238,7 @@ def evaluate(
             metric_logger.update(loss=loss.item())
 
         for k, metric in metrics.items():
-            metric_inputs = postprocessors[k](outputs, targets)
+            metric_inputs = postprocessor(outputs, targets)
             metric.update(**metric_inputs)
 
     metric_logger.synchronize_between_processes()
