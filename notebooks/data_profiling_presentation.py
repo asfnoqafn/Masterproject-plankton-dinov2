@@ -12,6 +12,9 @@ import sys
 import json
 from matplotlib.colors import LogNorm
 import struct
+import sys
+import numpy
+numpy.set_printoptions(threshold=sys.maxsize)
 
 def get_png_dimensions(data):
     # PNG files start with an 8-byte signature
@@ -38,7 +41,11 @@ def open_and_measure_lmdbs(data_paths: list, max_size, optimized=False):
     for data_path in data_paths:
         minmax_dict_tmp: dict[str, int] = {"min_width": sys.maxsize, "max_width": -1, "min_height": sys.maxsize, "max_height": -1, "n_images": 0}
         try:
+            print(f"start processing lmdb{data_path}")
             n_images_too_large, minmax_dict_tmp = process_lmdb(data_path, n_imgs_per_bin, max_size, minmax_dict_tmp, bin_channels=bin_channels, optimized=optimized)
+            # print("sizes array:------------------------------")
+            # print(n_imgs_per_bin)
+            # print("------------------------------------------")
             n_images_too_large_glob += n_images_too_large
             print(f"Profiling done for: {data_path}")
             print(minmax_dict_tmp)
@@ -53,41 +60,41 @@ def open_and_measure_lmdbs(data_paths: list, max_size, optimized=False):
             continue
         
 
-    calculate_channel_overview(bin_channels)
+    # calculate_channel_overview(bin_channels)
 
-    heights = n_imgs_per_bin.sum(axis=0)
-    widths = n_imgs_per_bin.sum(axis=1)
-    n_images = np.sum(heights) # minmax_dict_global["n_images"]
-    if not (n_images - n_images_too_large_glob  == np.sum(heights) == np.sum(widths)):
-        print(f"Number of images does not match: {n_images} != {np.sum(heights)} != {np.sum(widths)}")
-    else:
-        print(f"Number of images match: {n_images} == {np.sum(heights)} == {np.sum(widths)}")
+    # heights = n_imgs_per_bin.sum(axis=0)
+    # widths = n_imgs_per_bin.sum(axis=1)
+    # n_images = np.sum(heights) # minmax_dict_global["n_images"]
+    # if not (n_images - n_images_too_large_glob  == np.sum(heights) == np.sum(widths)):
+    #     print(f"Number of images does not match: {n_images} != {np.sum(heights)} != {np.sum(widths)}")
+    # else:
+    #     print(f"Number of images match: {n_images} == {np.sum(heights)} == {np.sum(widths)}")
 
-    h_indices = np.arange(len(heights))
-    h_mean = np.sum(h_indices * heights) / n_images
-    h_variance = np.sum(((h_indices - h_mean) ** 2) * heights) / n_images
-    h_std = np.sqrt(h_variance)
+    # h_indices = np.arange(len(heights))
+    # h_mean = np.sum(h_indices * heights) / n_images
+    # h_variance = np.sum(((h_indices - h_mean) ** 2) * heights) / n_images
+    # h_std = np.sqrt(h_variance)
 
-    w_indices = np.arange(len(widths))
-    w_mean = np.sum(w_indices * widths) / n_images
-    w_variance = np.sum(((w_indices - w_mean) ** 2) * widths) / n_images
-    w_std = np.sqrt(w_variance)
+    # w_indices = np.arange(len(widths))
+    # w_mean = np.sum(w_indices * widths) / n_images
+    # w_variance = np.sum(((w_indices - w_mean) ** 2) * widths) / n_images
+    # w_std = np.sqrt(w_variance)
 
-    height_stats = {
-            'mean': h_mean,
-            # 'mean': np.mean(heights),
-            'std': h_std,
-        }
+    # height_stats = {
+    #         'mean': h_mean,
+    #         # 'mean': np.mean(heights),
+    #         'std': h_std,
+    #     }
 
-    width_stats = {
-            # 'median': , # np.repeat(np.arange(n_imgs_per_bin.shape[0]), n_imgs_per_bin.astype(int))),
-            'mean': w_mean,
-            'std': w_std,
-        }
+    # width_stats = {
+    #         # 'median': , # np.repeat(np.arange(n_imgs_per_bin.shape[0]), n_imgs_per_bin.astype(int))),
+    #         'mean': w_mean,
+    #         'std': w_std,
+    #     }
     
-    print(f"Height stats: \n{height_stats}\n")
-    print(f"Width stats: \n{width_stats}\n")
-    print(f"Number of images too large: {n_images_too_large_glob}")
+    # print(f"Height stats: \n{height_stats}\n")
+    # print(f"Width stats: \n{width_stats}\n")
+    # print(f"Number of images too large: {n_images_too_large_glob}")
     
     return n_imgs_per_bin, minmax_dict_global
 
@@ -290,30 +297,140 @@ def create_heatmap_array(n_imgs_per_bin, path=os.path.join(os.getcwd(), "output"
     plt.savefig(path)
     plt.clf()
 
-if __name__ == "__main__":
+def calculate_mean_median_std(array2d):
+    """
+    Calculates the median, mean, and standard deviation for image widths and heights
+    from a 2D heatmap array where array2d[i, j] is the count of images with
+    width i and height j.
 
+    Args:
+        array2d (np.ndarray): A 2D numpy array representing the heatmap of image sizes.
+                              Indices represent size (width, height).
+
+    Returns:
+        tuple: A tuple containing two dictionaries: (width_stats, height_stats).
+               Each dictionary contains 'median', 'mean', and 'std'.
+               Returns ({'median': nan, ...}, {'median': nan, ...}) if the array
+               is empty or contains no images.
+    """
+    if not isinstance(array2d, np.ndarray) or array2d.ndim != 2:
+        raise ValueError("Input must be a 2D numpy array.")
+
+    total_images = np.sum(array2d)
+    if total_images == 0:
+        print("Warning: Input array contains no image counts.")
+        nan_stats = {'median': np.nan, 'mean': np.nan, 'std': np.nan}
+        return nan_stats, nan_stats
+
+    max_width, max_height = array2d.shape
+
+    # Calculate marginal distributions
+    # widths_distribution[i] = count of images with width i
+    widths_distribution = array2d.sum(axis=1)
+    # heights_distribution[j] = count of images with height j
+    heights_distribution = array2d.sum(axis=0)
+
+    # Helper function to calculate median from counts
+    def _calculate_median_from_counts(counts, total_count):
+        cumsum = np.cumsum(counts)
+        # Find the index where the cumulative sum first reaches or exceeds half the total count
+        median_index = np.searchsorted(cumsum, total_count / 2.0, side='left')
+
+        # If total count is odd, the median is simply the value at median_index
+        if total_count % 2 == 1:
+            return float(median_index)
+        else:
+            # If total count is even, check if N/2 falls exactly on a cumulative boundary
+            # This means the median is the average of the current index and the next index with a non-zero count
+            if median_index > 0 and cumsum[median_index -1] == total_count / 2.0:
+                 # Find the previous index with non-zero count (which is median_index -1 if counts[median_index-1]>0)
+                 # The median is average of this index and median_index
+                 # However, searchsorted gives the *first* index >= N/2.
+                 # Let's re-evaluate: we need the value such that 50% are <= and 50% are >=
+                 median_index_low = np.searchsorted(cumsum, total_count / 2.0, side='left')
+                 median_index_high = np.searchsorted(cumsum, total_count / 2.0 + 1, side='left') # Find index for (N/2 + 1)-th item
+
+                 # If the count at median_index_low itself covers the middle two items
+                 if cumsum[median_index_low] >= total_count / 2.0 + 1 :
+                     return float(median_index_low)
+                 else:
+                     # The median is the average of the values at the two middle indices
+                     return (median_index_low + median_index_high) / 2.0
+
+            else:
+                 # N/2 falls within the counts of median_index, so this index is the median value
+                 return float(median_index)
+
+
+    # --- Width Statistics ---
+    width_indices = np.arange(max_width)
+    # Mean
+    w_mean = np.sum(width_indices * widths_distribution) / total_images
+    # Variance and Standard Deviation
+    w_variance = np.sum(((width_indices - w_mean) ** 2) * widths_distribution) / total_images
+    w_std = np.sqrt(w_variance)
+    # Median
+    w_median = _calculate_median_from_counts(widths_distribution, total_images)
+
+
+    # --- Height Statistics ---
+    height_indices = np.arange(max_height)
+    # Mean
+    h_mean = np.sum(height_indices * heights_distribution) / total_images
+    # Variance and Standard Deviation
+    h_variance = np.sum(((height_indices - h_mean) ** 2) * heights_distribution) / total_images
+    h_std = np.sqrt(h_variance)
+    # Median
+    h_median = _calculate_median_from_counts(heights_distribution, total_images)
+
+
+    width_stats = {
+        'median': w_median,
+        'mean': w_mean,
+        'std': w_std,
+    }
+
+    height_stats = {
+        'median': h_median,
+        'mean': h_mean,
+        'std': h_std,
+    }
+
+    return width_stats, height_stats
+
+if __name__ == "__main__":
+    print("Starting data profiling")
     # lmdb_path_channel_means = [
-    #     # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ZooScanNet/images", 
+    #     # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ZooScanNet/images",
     #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/IFCB_downloader/171_images",
     #                            ]
     # open_and_measure_lmdbs(lmdb_path_channel_means, max_size=20000, optimized=False)
 
-    lmdb_paths_unlabeled:list[str] = [
-        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/datasciencebowl/images",
-        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/pisco/images",
-        # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/IFCB_downloader/images",
-        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/seanoe_uvp_unlabeled/images",
-        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5SD/images",
-        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5HD/images",
-        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP6/images",
-        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Zooscan/images",
-        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Other scanner/images",
-    ]
+    # lmdb_paths_unlabeled:list[str] = [
+    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/datasciencebowl/images",
+    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/pisco/images",
+    #     # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/IFCB_downloader/images",
+    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/seanoe_uvp_unlabeled/images",
+    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5SD/images",
+    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5HD/images",
+    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP6/images",
+    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Zooscan/images",
+    #     "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Other scanner/images",
+    # ]
+
+    # for image_path in lmdb_paths_unlabeled:
+    #     print(image_path)
+    #     array_unlabeled, dict_unlabeled = open_and_measure_lmdbs([image_path], max_size=2000, optimized=True)
+    #     path_heatmap_unlabeled = os.path.join(os.getcwd(), "output", f"heatmap_unlabeled_{image_path.split('/')[-2]}.png")
+    #     create_heatmap_array(array_unlabeled, path_heatmap_unlabeled, label=f"Size Distribution of unlabeled Images (Log Scale, {dict_unlabeled['n_images']} images)")
+
+    #     path_unlabeled_zoomed = os.path.join(os.getcwd(), "output", f"heatmap_unlabeled_zoomed_{image_path.split('/')[-2]}.png")
+    #     create_heatmap_array(array_unlabeled[:300, :300], path_unlabeled_zoomed, label=f"Zoomed Size Distribution of unlabeled Images (Log Scale, {dict_unlabeled['n_images']} images)")
 
     # test_path = ["/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/datasciencebowl/images"]
     # print(os.getcwd())
 
-    array_unlabeled, dict_unlabeled = open_and_measure_lmdbs(lmdb_paths_unlabeled, max_size=2000)
+    # array_unlabeled, dict_unlabeled = open_and_measure_lmdbs(lmdb_paths_unlabeled, max_size=2000)
     # path_heatmap_unlabeled = "/home/hk-project-p0021769/hgf_col5747/output/heatmap_unlabeled.png"
     # create_heatmap_array(array_unlabeled, path_heatmap_unlabeled, label=f"Size Distribution of unlabeled Images (Log Scale, {dict_unlabeled['n_images']} images)")
 
@@ -324,22 +441,22 @@ if __name__ == "__main__":
 
 
 
-    lmdb_paths_labeled:list[str] = [
-        "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/CPICS/images",
-            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/datasciencebowl/images",
-            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/FlowCamNet/images",
-            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ISIISNet/images",
-            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/seanoe_uvp_labeled/images",
-            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/UVPEC/images",
-            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ZooCamNet/images",
-            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ZooScanNet/images",
-            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5SD/images-labeled",
-            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5HD/images-labeled",
-            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Zooscan/images-labeled",
-            "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Other scanner/images-labeled",
-        ]
+    # lmdb_paths_labeled:list[str] = [
+    #     # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/CPICS/images",
+    #         "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/datasciencebowl/images",
+    #         "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/FlowCamNet/images",
+    #         "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ISIISNet/images",
+    #         "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/seanoe_uvp_labeled/images",
+    #         "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/UVPEC/images",
+    #         "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ZooCamNet/images",
+    #         "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_with_labels/ZooScanNet/images",
+    #         # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5SD/images-labeled",
+    #         # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/UVP5HD/images-labeled",
+    #         # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Zooscan/images-labeled",
+    #         # "/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/ecotaxa_lmdb/Other scanner/images-labeled",
+    #     ]
     
-    array_labeled, dict_labeled = open_and_measure_lmdbs(lmdb_paths_labeled, max_size=2000)
+    # array_labeled, dict_labeled = open_and_measure_lmdbs(lmdb_paths_labeled, max_size=2000)
     # path_heatmap_labeled: str = "/home/hk-project-p0021769/hgf_col5747/output/heatmap_labeled.png"
     # create_heatmap_array(array_labeled, path_heatmap_labeled, label=f"Size Distribution of Labeled Images (Log Scale, {dict_labeled['n_images']} images)")
 
@@ -368,3 +485,19 @@ if __name__ == "__main__":
 
     # array_ankita, dict_ankita = open_and_measure_tars(path_ankita, max_size=20000, optimized=False)
     # create_heatmap_array(array_ankita, path=os.path.join(os.getcwd(), "output", "ankita_heatmap.png"), label="Size Distribution of Ankita's Images (Log Scale)")
+
+
+    ifcb_lmdb_paths = []
+    for i in range(1,2):
+        ifcb_lmdb_paths.append(f"/home/hk-project-p0021769/hgf_grc7525/workspace/hkfswork/hgf_grc7525-nick/data/lmdb_without_labels/IFCB_with_metadata/{i:04d}_images")
+
+    print(ifcb_lmdb_paths)
+
+    for path in ifcb_lmdb_paths:
+        print(path)
+        array_ifcb, dict_ifcb = open_and_measure_lmdbs([path], max_size=2000, optimized=True)
+        print()
+        print(array_ifcb)
+        calculate_mean_median_std(array_ifcb)
+
+      
